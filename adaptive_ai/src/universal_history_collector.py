@@ -251,7 +251,7 @@ class HistoricalTrainingCollector(threading.Thread):
         """Only the WS producer may attest receipt continuity through this clock."""
         return self._submit('barrier',float(self.clock() if at is None else at))
 
-    def decision(self, intent, agent, state, *, required, affected=None, receipt=None):
+    def decision(self, intent, agent, state, *, required, affected=None, receipt=None, predecision=None):
         # Detached bounded decision payload; no DeviceAgent call, policy evaluation,
         # registry lookup or DB read here. Missing causal mask stays explicit.
         try:
@@ -267,6 +267,7 @@ class HistoricalTrainingCollector(threading.Thread):
                         affected_sensor_ids=None if affected is None else tuple(affected),
                         affected_sensor_proof='unavailable' if affected is None else 'explicit_receipt',
                         receipt=asdict(receipt) if receipt is not None else None,
+                        predecision=predecision,
                         missing_proof=None if receipt is not None else 'no_predecision_legal_mask',
                         execution_evidence='native_provenance_only')
             body,size=bounded_copy(body)
@@ -312,6 +313,7 @@ class HistoricalTrainingCollector(threading.Thread):
                 metadata.append((kind,payload))
         self._journal_rows(observations)
         with self.store.conn() as c, c.storage_batch():
+            c.execute('BEGIN IMMEDIATE')
             if gap:
                 self._close(c,gap)
                 if reset_registries:
@@ -375,6 +377,28 @@ class HistoricalTrainingCollector(threading.Thread):
                     # A gap arriving during writes defeats advancement of this proof.
                     advances[self.segment]=max(payload,advances.get(self.segment,payload))
                 elif kind=='decision':
+                    evidence=payload.get('predecision')
+                    if evidence is not None:
+                        from universal_predecision import verify_for_write
+                        try:
+                            if evidence['epoch']!=self.epoch or evidence['topology']!=self.topology:
+                                raise ValueError('predecision topology changed')
+                            payload['predecision']=verify_for_write(c,evidence,payload['intent'],payload['agent'],payload['state'])
+                            payload['missing_proof']='affected_sensor_evidence_unavailable' if payload['affected_sensor_ids'] is None else None
+                            if payload['affected_sensor_ids'] is not None and self.topology:
+                                from universal_training_data import HistoricalDecision
+                                topology_at=c.execute('SELECT at FROM universal_collection_topology WHERE id=?',(self.topology,)).fetchone()[0]
+                                payload['receipt']=asdict(HistoricalDecision.capture(
+                                    decision_ts=payload['intent']['created_at'],event_ts=evidence['created_ts'],
+                                    received_ts=evidence['available_ts'],registry_information_ts=topology_at,
+                                    registry_revision=self.topology,agent=payload['agent'],descriptor=evidence['descriptor'],
+                                    legal_mask=evidence['legal_mask'],state=payload['state'],
+                                    required_sensor_ids=payload['required_sensor_ids'],affected_sensor_ids=payload['affected_sensor_ids'],
+                                    predecision_evidence=payload['predecision']))
+                        except (ValueError,KeyError,TypeError):
+                            payload['predecision']=None
+                            payload['receipt']=None
+                            payload['missing_proof']='stale_or_invalid_predecision_evidence'
                     body=encoded(payload);intent=payload['intent']
                     c.execute('INSERT OR IGNORE INTO universal_collection_decisions VALUES(?,?,?,?,?,?)',
                               (intent['intent_id'],intent['agent_id'],intent['created_at'],self.topology,body,digest(body)))
@@ -454,6 +478,13 @@ class HistoricalTrainingCollector(threading.Thread):
                 self.halt.wait(.05)
             else:
                 self.drain()
+                evidence=getattr(self,'predecision',None)
+                if evidence is not None and not self.stopping and self.idle_ready():
+                    try:
+                        with background_sqlite(self.store):
+                            evidence.prepare_one()
+                    except Exception:
+                        evidence.stats['errors']+=1
         with self.store.conn() as c:
             self._close(c,'clean_shutdown')
             c.execute("UPDATE universal_collection_sessions SET ended=?,reason='clean_shutdown' WHERE id=?",(self.clock(),self.session))
@@ -471,6 +502,9 @@ class HistoricalTrainingCollector(threading.Thread):
                         epoch=self.epoch,session=self.session,worker_alive=self.is_alive())
         latencies.sort()
         result['write_latency_p95_ms']=latencies[int(.95*(len(latencies)-1))] if latencies else None
+        evidence=getattr(self,'predecision',None)
+        if evidence is not None:
+            result['predecision']=dict(evidence.stats,prepared_bytes=evidence.prepared_bytes)
         return result
 
 
@@ -487,6 +521,9 @@ def install(engine, store):
                     time.perf_counter()-float(getattr(engine,'last_event_received',0.) or 0.) >=
                     float(OPTIONS.get('training_realtime_event_priority_seconds',.3)))
         collector=HistoricalTrainingCollector(store,engine.feature_journal,idle_ready=idle_ready)
+        if service is not None:
+            from universal_predecision import PredecisionEvidence
+            collector.predecision=PredecisionEvidence(engine,store,collector)
         engine.universal_training_collector=collector
         if service is not None:service.universal_training_collector=collector
         collector.start()
@@ -576,14 +613,24 @@ def source_from_collection(conn, agent_ids, *, start, through, max_decisions=204
         if retained>16*1024*1024:raise ValueError('decision byte read cap')
         if digest(item[3])!=item[4]:raise ValueError('corrupt historical decision')
         body=json.loads(item[3]);receipt=body.get('receipt')
+        evidence=body.get('predecision')
+        if evidence is not None:
+            from universal_predecision import validate_binding
+            validate_binding(evidence,body['intent'],body['agent'],body['state'])
+            if evidence.get('verified_revision')!=evidence['arbiter_revision']:
+                raise ValueError('unverified predecision evidence')
         if receipt is None:continue  # U05a returns explicit missing_receipt rejection.
-        native=conn.execute('SELECT agent_id,created_time,model_version,model_revision FROM provenance_decisions WHERE decision_id=?',
+        native=conn.execute('SELECT agent_id,created_time,model_version,model_revision,generation_id FROM provenance_decisions WHERE decision_id=?',
                             (item[0],)).fetchone()
         if native is None:continue
         intent=body['intent']
-        if tuple(native)!=(item[1],item[2],intent['policy_version'],intent['model_revision']):
+        if tuple(native[:4])!=(item[1],item[2],intent['policy_version'],intent['model_revision']):
             raise ValueError('native provenance binding mismatch')
+        if evidence is not None and native[4]!=evidence['generation_id']:
+            raise ValueError('native generation binding mismatch')
         receipt=HistoricalDecision(**receipt)
+        if evidence is not None and json.loads(receipt.payload_json).get('predecision_evidence')!=evidence:
+            raise ValueError('predecision receipt binding mismatch')
         if receipt.decision_ts!=item[2] or receipt.registry_revision!=row[3]:
             raise ValueError('historical decision binding mismatch')
         key=(item[1],item[2])

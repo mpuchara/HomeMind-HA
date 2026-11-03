@@ -1,0 +1,150 @@
+{
+  "scope": "host component measurements; no composed event-to-intent, Pi4 or physical HA acceptance",
+  "cases": [
+    {
+      "sensors": 5,
+      "devices": 1,
+      "cpu_seconds": 0.0027324099999999907,
+      "wall_seconds": 0.002735002999999736,
+      "rss_before_mb": 31.375,
+      "rss_after_mb": 31.375,
+      "prepare": {
+        "p50_ms": 1.9922689999996024,
+        "p95_ms": 1.9922689999996024,
+        "p99_ms": 1.9922689999996024
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.0964080000001033,
+        "p95_ms": 0.14844000000024948,
+        "p99_ms": 0.14844000000024948
+      },
+      "native_sql_statements": 13,
+      "native_selects": 12,
+      "prepared": 1,
+      "bound": 5,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 1,
+        "prepared": 1,
+        "consumed": 5,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0
+      },
+      "prepared_bytes": 22340
+    },
+    {
+      "sensors": 50,
+      "devices": 10,
+      "cpu_seconds": 0.024242040999999992,
+      "wall_seconds": 0.4335461579999995,
+      "rss_before_mb": 31.4140625,
+      "rss_after_mb": 31.5234375,
+      "prepare": {
+        "p50_ms": 2.0043229999995305,
+        "p95_ms": 2.227658999999882,
+        "p99_ms": 2.227658999999882
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.06295800000000185,
+        "p95_ms": 0.13076399999967236,
+        "p99_ms": 0.14265099999999364
+      },
+      "native_sql_statements": 130,
+      "native_selects": 120,
+      "prepared": 10,
+      "bound": 50,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 10,
+        "prepared": 10,
+        "consumed": 50,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0
+      },
+      "prepared_bytes": 260480
+    },
+    {
+      "sensors": 200,
+      "devices": 30,
+      "cpu_seconds": 0.10973031899999997,
+      "wall_seconds": 1.4275936470000001,
+      "rss_before_mb": 31.7421875,
+      "rss_after_mb": 32.18359375,
+      "prepare": {
+        "p50_ms": 3.0030490000001464,
+        "p95_ms": 5.117357999999683,
+        "p99_ms": 238.16411199999976
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.06901300000006216,
+        "p95_ms": 0.14255399999996143,
+        "p99_ms": 0.1809640000001167
+      },
+      "native_sql_statements": 390,
+      "native_selects": 360,
+      "prepared": 30,
+      "bound": 150,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 30,
+        "prepared": 30,
+        "consumed": 150,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0
+      },
+      "prepared_bytes": 1048160
+    },
+    {
+      "sensors": 1000,
+      "devices": 200,
+      "cpu_seconds": 2.366706259,
+      "wall_seconds": 11.227434121,
+      "rss_before_mb": 33.01171875,
+      "rss_after_mb": 37.46484375,
+      "prepare": {
+        "p50_ms": 11.043167000000409,
+        "p95_ms": 262.0323970000022,
+        "p99_ms": 272.03335399999776
+      },
+      "ram_boundary_including_assertion_mock": {
+        "p50_ms": 0.09286899999949583,
+        "p95_ms": 0.22886700000057658,
+        "p99_ms": 0.2975019999986728
+      },
+      "native_sql_statements": 2600,
+      "native_selects": 2400,
+      "prepared": 200,
+      "bound": 1000,
+      "training_eligible": 0,
+      "reason": "affected sensor set deliberately unknown; no synthetic causal claims",
+      "ha_calls": 0,
+      "extra_intents": 0,
+      "evidence": {
+        "requested": 200,
+        "prepared": 200,
+        "consumed": 1000,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0
+      },
+      "prepared_bytes": 8285400
+    }
+  ],
+  "measurement_metadata": {
+    "measured_commit": "357cec3baf5e0176e3836a312435ef7f37496c53",
+    "environment": "WSL Ubuntu / Python 3.12.3 / NumPy 2.3.3",
+    "limitation": "RAM boundary includes unittest assertion-mock setup. Prepare latency includes TRAINING_BUDGET waiting. No event-to-intent or production-data qualification claim."
+  }
+}

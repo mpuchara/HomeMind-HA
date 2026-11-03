@@ -2178,6 +2178,14 @@ class Engine(threading.Thread):
         teaching_revision = self.teaching.revision(aid)
         predict_started = time.perf_counter()
         stage_started_ns = time.perf_counter_ns()
+        evidence_ticket = None
+        collector = getattr(self, 'universal_training_collector', None)
+        evidence = getattr(collector, 'predecision', None)
+        if evidence is not None:
+            try:
+                evidence_ticket = evidence.begin(agent, target_state, policy.actions)
+            except Exception:
+                evidence.stats['errors'] += 1
         chosen, confidence, arms, horizon, support, novelty = policy.predict(features)
         observe_elapsed(self, "ridge_predict", stage_started_ns)
         trace_stage("policy_predict", predict_started, arm_count=len(arms))
@@ -2497,8 +2505,14 @@ class Engine(threading.Thread):
         executor_started = time.perf_counter()
         collector=getattr(self,'universal_training_collector',None)
         if collector is not None:
+            predecision = None
+            if evidence is not None:
+                try:
+                    predecision = evidence.bind(evidence_ticket, intent, agent, target_state, policy.actions)
+                except Exception:
+                    evidence.stats['errors'] += 1
             collector.notify('decision',intent,agent,state_map.get(agent['target_entity']),
-                             required=tuple(policy.schema.entities),affected=None)
+                             required=tuple(policy.schema.entities),affected=None,predecision=predecision)
             collector.tls.decision_id=intent.intent_id
         try:
             result = self.executor.submit(

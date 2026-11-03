@@ -116,10 +116,13 @@ class HistoricalDecision:
     @classmethod
     def capture(cls, *, decision_ts, event_ts, received_ts,
                 registry_information_ts, registry_revision, agent, descriptor,
-                legal_mask, state, required_sensor_ids, affected_sensor_ids):
+                legal_mask, state, required_sensor_ids, affected_sensor_ids,
+                predecision_evidence=None):
         payload = dict(agent=agent, descriptor=descriptor, legal_mask=legal_mask,
                        state=state, required_sensor_ids=sorted(set(required_sensor_ids)),
                        affected_sensor_ids=sorted(set(affected_sensor_ids)))
+        if predecision_evidence is not None:
+            payload['predecision_evidence']=predecision_evidence
         encoded = json.dumps(payload, sort_keys=True, allow_nan=False)
         if len(encoded.encode()) > 262144:
             raise ValueError('historical decision receipt too large')
@@ -229,6 +232,19 @@ def _eligible_sample(label, receipt, replay, coverage):
     if len(receipt.payload_json.encode()) > 262144:
         raise ValueError('decision_receipt_too_large')
     data = json.loads(receipt.payload_json)
+    evidence=data.get('predecision_evidence')
+    if evidence is not None:
+        from universal_predecision import validate_binding
+        intent=dict(intent_id=evidence['decision_id'],created_at=at,agent_id=label.agent_id,
+                    target_entity=data['agent']['target_entity'],target_property=data['agent']['target_property'],
+                    policy_version=evidence['policy_version'],model_revision=evidence['model_revision'])
+        validate_binding(evidence,intent,data['agent'],data['state'])
+        if (evidence.get('verified_revision')!=evidence['arbiter_revision']
+                or evidence['created_ts']!=receipt.event_ts or evidence['available_ts']!=receipt.received_ts
+                or evidence['topology']!=receipt.registry_revision
+                or evidence['descriptor']!=data['descriptor'] or evidence['legal_mask']!=data['legal_mask']
+                or (label.generation_id is not None and label.generation_id!=evidence['generation_id'])):
+            raise ValueError('invalid_predecision_training_evidence')
     required = set(data['required_sensor_ids'])
     affected = set(data['affected_sensor_ids'])
     if not required or len(required) > 10000:
