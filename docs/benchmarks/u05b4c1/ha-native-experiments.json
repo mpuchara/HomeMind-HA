@@ -1,0 +1,477 @@
+{
+  "scope": "Offline synthetic HA-native audit, not HA server/network/Recorder/Pi measurements",
+  "transport": [
+    {
+      "repeat": 0,
+      "sensors": 5,
+      "devices": 1,
+      "events": 400,
+      "synthetic_selected_entities": 2,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 258277,
+        "cpu_ms": 1.6680359999999976,
+        "wall_ms": 1.6711819999954969,
+        "processed_entity_updates": 406
+      },
+      "variant_b_filtered_compact": {
+        "messages": 81,
+        "bytes": 8467,
+        "cpu_ms": 0.8790709999999952,
+        "wall_ms": 0.8797589999858246,
+        "processed_entity_updates": 82
+      },
+      "variant_c_dual_stream": {
+        "messages": 482,
+        "bytes": 266744,
+        "decode_cpu_sum_ms": 2.547106999999993,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "9e624ca7726d4e07b7b5a33acff60e66598df086027bb9953e212686e5df2fb9",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 1,
+      "sensors": 5,
+      "devices": 1,
+      "events": 400,
+      "synthetic_selected_entities": 2,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 258277,
+        "cpu_ms": 1.786751000000003,
+        "wall_ms": 1.790700000015022,
+        "processed_entity_updates": 406
+      },
+      "variant_b_filtered_compact": {
+        "messages": 81,
+        "bytes": 8467,
+        "cpu_ms": 1.019403000000002,
+        "wall_ms": 1.0203519999549826,
+        "processed_entity_updates": 82
+      },
+      "variant_c_dual_stream": {
+        "messages": 482,
+        "bytes": 266744,
+        "decode_cpu_sum_ms": 2.806154000000005,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "9e624ca7726d4e07b7b5a33acff60e66598df086027bb9953e212686e5df2fb9",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 0,
+      "sensors": 50,
+      "devices": 10,
+      "events": 400,
+      "synthetic_selected_entities": 11,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 270195,
+        "cpu_ms": 1.779720999999998,
+        "wall_ms": 1.7830809999850317,
+        "processed_entity_updates": 460
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 5813,
+        "cpu_ms": 0.5909600000000015,
+        "wall_ms": 0.5915880000202378,
+        "processed_entity_updates": 51
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 276008,
+        "decode_cpu_sum_ms": 2.3706809999999994,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "7b19748403b70c9a3b5eeafde96d2e0155b4c5453332e09ad45fdf978bdb9948",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 1,
+      "sensors": 50,
+      "devices": 10,
+      "events": 400,
+      "synthetic_selected_entities": 11,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 270195,
+        "cpu_ms": 1.6592609999999952,
+        "wall_ms": 1.6616690001001189,
+        "processed_entity_updates": 460
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 5813,
+        "cpu_ms": 0.5481209999999986,
+        "wall_ms": 0.5489849999094076,
+        "processed_entity_updates": 51
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 276008,
+        "decode_cpu_sum_ms": 2.2073819999999937,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "7b19748403b70c9a3b5eeafde96d2e0155b4c5453332e09ad45fdf978bdb9948",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 0,
+      "sensors": 200,
+      "devices": 30,
+      "events": 400,
+      "synthetic_selected_entities": 31,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 305817,
+        "cpu_ms": 2.6131320000000042,
+        "wall_ms": 2.622457000029499,
+        "processed_entity_updates": 630
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 8953,
+        "cpu_ms": 0.7200019999999974,
+        "wall_ms": 0.7217749999881562,
+        "processed_entity_updates": 71
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 314770,
+        "decode_cpu_sum_ms": 3.3331340000000016,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "ee4c96b442cd3a31152d8f1cd025e625054b241068ab3d95e1d3d16ba2732dc9",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 1,
+      "sensors": 200,
+      "devices": 30,
+      "events": 400,
+      "synthetic_selected_entities": 31,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 305817,
+        "cpu_ms": 1.9472070000000063,
+        "wall_ms": 1.9521140000051673,
+        "processed_entity_updates": 630
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 8953,
+        "cpu_ms": 0.6474649999999998,
+        "wall_ms": 0.6481400000666326,
+        "processed_entity_updates": 71
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 314770,
+        "decode_cpu_sum_ms": 2.5946720000000063,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "ee4c96b442cd3a31152d8f1cd025e625054b241068ab3d95e1d3d16ba2732dc9",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 0,
+      "sensors": 1000,
+      "devices": 200,
+      "events": 400,
+      "synthetic_selected_entities": 201,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 508250,
+        "cpu_ms": 3.7765489999999904,
+        "wall_ms": 3.783424999937779,
+        "processed_entity_updates": 1600
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 35743,
+        "cpu_ms": 2.080941000000003,
+        "wall_ms": 2.082369999925504,
+        "processed_entity_updates": 241
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 543993,
+        "decode_cpu_sum_ms": 5.857489999999993,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "3e7dfa9360022404e4c5a971f567a43aa161c91be63243b6bb20285d8395aa4f",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    },
+    {
+      "repeat": 1,
+      "sensors": 1000,
+      "devices": 200,
+      "events": 400,
+      "synthetic_selected_entities": 201,
+      "variant_a_events": {
+        "messages": 401,
+        "bytes": 508250,
+        "cpu_ms": 2.875928,
+        "wall_ms": 2.87935500000458,
+        "processed_entity_updates": 1600
+      },
+      "variant_b_filtered_compact": {
+        "messages": 41,
+        "bytes": 35743,
+        "cpu_ms": 2.0435360000000125,
+        "wall_ms": 2.045959999918523,
+        "processed_entity_updates": 241
+      },
+      "variant_c_dual_stream": {
+        "messages": 442,
+        "bytes": 543993,
+        "decode_cpu_sum_ms": 4.919464000000012,
+        "note": "logical dual subscription, not two sockets; summed decoder costs only"
+      },
+      "equivalent_selected_runtime_state": true,
+      "state_sha256": "3e7dfa9360022404e4c5a971f567a43aa161c91be63243b6bb20285d8395aa4f",
+      "original_event_envelope_preserved_by_compact": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "ha_server_cpu_ms": null,
+      "network_ms": null,
+      "event_to_intent_ms": null,
+      "rest_resync_ms": null,
+      "recorder_io_ms": null,
+      "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+    }
+  ],
+  "journal": [
+    {
+      "sensors": 5,
+      "rows": 20,
+      "per_sensor": 4,
+      "batch_size": 128,
+      "timing": {
+        "wall_ms": 4.657248000057734,
+        "cpu_ms": 1.9681959999999776
+      },
+      "write_sql_api_calls": {
+        "execute": 11
+      },
+      "sqlite_objects_bytes": {
+        "feature_observation_events": 4096,
+        "feature_window_entities": 4096,
+        "feature_windows": 4096
+      },
+      "sqlite_files_bytes": {
+        "journal.db": 167936
+      },
+      "recorder_rows": null,
+      "actual_duplicate_rows": null,
+      "coverage_witness": false,
+      "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+    },
+    {
+      "sensors": 50,
+      "rows": 200,
+      "per_sensor": 4,
+      "batch_size": 128,
+      "timing": {
+        "wall_ms": 20.836149000047044,
+        "cpu_ms": 11.85205100000003
+      },
+      "write_sql_api_calls": {
+        "execute": 37
+      },
+      "sqlite_objects_bytes": {
+        "feature_observation_events": 32768,
+        "feature_window_entities": 4096,
+        "feature_windows": 4096
+      },
+      "sqlite_files_bytes": {
+        "journal.db": 237568
+      },
+      "recorder_rows": null,
+      "actual_duplicate_rows": null,
+      "coverage_witness": false,
+      "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+    },
+    {
+      "sensors": 200,
+      "rows": 800,
+      "per_sensor": 4,
+      "batch_size": 128,
+      "timing": {
+        "wall_ms": 76.27488299999641,
+        "cpu_ms": 44.256762
+      },
+      "write_sql_api_calls": {
+        "execute": 167
+      },
+      "sqlite_objects_bytes": {
+        "feature_observation_events": 110592,
+        "feature_window_entities": 4096,
+        "feature_windows": 4096
+      },
+      "sqlite_files_bytes": {
+        "journal.db": 446464
+      },
+      "recorder_rows": null,
+      "actual_duplicate_rows": null,
+      "coverage_witness": false,
+      "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+    },
+    {
+      "sensors": 1000,
+      "rows": 4000,
+      "per_sensor": 4,
+      "batch_size": 128,
+      "timing": {
+        "wall_ms": 405.47143399999186,
+        "cpu_ms": 248.639736
+      },
+      "write_sql_api_calls": {
+        "execute": 817
+      },
+      "sqlite_objects_bytes": {
+        "feature_observation_events": 532480,
+        "feature_window_entities": 4096,
+        "feature_windows": 4096
+      },
+      "sqlite_files_bytes": {
+        "journal.db": 1540096
+      },
+      "recorder_rows": null,
+      "actual_duplicate_rows": null,
+      "coverage_witness": false,
+      "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+    }
+  ],
+  "recorder_inspection": [
+    {
+      "rows": 0,
+      "entities": [],
+      "missing_requested_entities": [
+        "sensor.example"
+      ],
+      "rows_with_attributes": 0,
+      "rows_with_context": 0,
+      "rows_with_both_state_clocks": 0,
+      "original_local_received_times": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+    },
+    {
+      "rows": 0,
+      "entities": [],
+      "missing_requested_entities": [
+        "sensor.example"
+      ],
+      "rows_with_attributes": 0,
+      "rows_with_context": 0,
+      "rows_with_both_state_clocks": 0,
+      "original_local_received_times": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+    },
+    {
+      "rows": 1,
+      "entities": [
+        "sensor.example"
+      ],
+      "missing_requested_entities": [],
+      "rows_with_attributes": 1,
+      "rows_with_context": 1,
+      "rows_with_both_state_clocks": 1,
+      "original_local_received_times": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+    },
+    {
+      "rows": 1,
+      "entities": [],
+      "missing_requested_entities": [
+        "sensor.example"
+      ],
+      "rows_with_attributes": 0,
+      "rows_with_context": 0,
+      "rows_with_both_state_clocks": 0,
+      "original_local_received_times": false,
+      "history_complete": false,
+      "evidence_eligible": false,
+      "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+    }
+  ],
+  "architecture_decision": {
+    "filtered_compact": "research only, runtime cache only; no evidence qualification",
+    "dual_stream": "not adopted: measured additive wire cost; no measured end-to-end benefit",
+    "recorder_replacement": "rejected: API responses lack original local receipt/coverage/AI authority",
+    "recorder_auxiliary": "existing HAClient/HistoryManager retained; no hot-path history query"
+  },
+  "actual_ha_version": null,
+  "production_configuration_changed": false
+}
