@@ -305,15 +305,20 @@ def _metrics(model, rows, *, cancel=None):
 
 
 def train_scorer(parent, encoder, dataset, *, train_until, holdout_from, holdout_until,
-                 config=TrainingConfig(), cancel=None):
+                 config=TrainingConfig(), cancel=None, evaluate_holdout=True):
     """U05b.1: bounded Adam on an isolated child. Always non-promotable.
 
     Early stopping monitors training loss only. Future holdout is measured before
     and after optimization and never drives epoch/normalization selection. Formal
     acceptance versus baseline and publication-time undo gates belong to U05b.2/3.
+    U05b.3 builds use evaluate_holdout=False: no holdout scores are disclosed
+    before the durable validation reservation. Legacy diagnostic calls retain
+    before/after holdout metrics and cannot qualify through that lifecycle.
     Cancellation discards the child; a restart deterministically rebuilds it.
     """
     config.validate()
+    if type(evaluate_holdout) is not bool:
+        raise ValueError('evaluate_holdout must be boolean')
     if not _ADMISSION.acquire(blocking=False):
         return {'status': 'busy', 'checkpoint': None}
     started = time.perf_counter()
@@ -350,7 +355,8 @@ def train_scorer(parent, encoder, dataset, *, train_until, holdout_from, holdout
         model = CoreScorer(child, frozen, mean, np.maximum(np.sqrt(variance), 1e-3))
         rows = [model.normalize(row) for row in prepared]
         training, testing = rows[:len(train)], rows[len(train):]
-        before = {'train': _metrics(model, training, cancel=cancel), 'holdout': _metrics(model, testing, cancel=cancel)}
+        before = {'train': _metrics(model, training, cancel=cancel),
+                  'holdout': _metrics(model, testing, cancel=cancel) if evaluate_holdout else {'status': 'withheld', 'samples': len(testing)}}
         moments = {k: [np.zeros_like(a, dtype=np.float64) for a in pair] for k, pair in child.layers.items()}
         variances = {k: [a.copy() for a in pair] for k, pair in moments.items()}
         rng = np.random.default_rng(config.seed)
@@ -389,10 +395,12 @@ def train_scorer(parent, encoder, dataset, *, train_until, holdout_from, holdout
         child.layers = best_layers
         _yield(cancel)
         validation_started = time.perf_counter()
-        after = {'train': _metrics(model, training, cancel=cancel), 'holdout': _metrics(model, testing, cancel=cancel)}
+        after = {'train': _metrics(model, training, cancel=cancel),
+                 'holdout': _metrics(model, testing, cancel=cancel) if evaluate_holdout else {'status': 'withheld', 'samples': len(testing)}}
         checkpoint = {
             'core_version': CORE_VERSION, 'stage': 'U05b.1', 'trained': False,
             'optimization_complete': True, 'validation_status': 'not_validated',
+            'holdout_evaluated': evaluate_holdout,
             'control_eligible': False, 'promotion_eligible': False,
             'data_contract_version': DATA_VERSION, 'observation_contract_version': OBSERVATION_VERSION,
             'action_contract_version': ACTION_CONTRACT_VERSION, 'scorer_contract_version': SCORER_CONTRACT_VERSION,

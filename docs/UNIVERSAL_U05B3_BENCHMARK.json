@@ -1,0 +1,38 @@
+{
+  "scope": "synthetic native Store; host only; no HA/Pi/control acceptance",
+  "passed": true,
+  "timings": {
+    "synthetic_native_setup": {
+      "wall_seconds": 3.7888172999955714,
+      "cpu_seconds": 2.484375
+    },
+    "clean_child_training": {
+      "wall_seconds": 2.3833847999922,
+      "cpu_seconds": 0.140625
+    },
+    "validation_atomic_publication": {
+      "wall_seconds": 0.5671792000066489,
+      "cpu_seconds": 0.078125
+    },
+    "restart_restore": {
+      "wall_seconds": 0.07076209998922423,
+      "cpu_seconds": 0.078125
+    },
+    "guarded_offline_projection": {
+      "wall_seconds": 0.3597095999866724,
+      "cpu_seconds": 0.125
+    },
+    "reproduce_same_evidence": {
+      "wall_seconds": 0.32256739999866113,
+      "cpu_seconds": 0.09375
+    }
+  },
+  "artifact_bytes": 178599,
+  "holdout_claims": 172,
+  "database_bytes": {
+    "offline.db": 778240
+  },
+  "feature_bytes": 125952,
+  "control_eligible": false,
+  "promotion_eligible": false
+}
