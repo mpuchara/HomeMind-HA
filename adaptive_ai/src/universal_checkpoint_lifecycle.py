@@ -108,6 +108,26 @@ class NativeDatasetSource:
                                as_of_ts=doc['as_of_ts'], coverage=ReplayCoverage(**proof),
                                supervision_as_of_ts=1e300)
 
+    def is_granular(self):
+        return _decode(self.raw,MAX_SOURCE_BYTES)['coverage'].get('version')==3
+
+    def guard(self,conn,data):
+        """Bounded V3 publication CAS: verify retained scope and current labels.
+
+        Native triggers prohibit an unnoticed change of required historical
+        values. Unrelated writes need not revoke an unchanged scoped dataset.
+        Caller owns the writer transaction; no concurrent COMMIT can pass it.
+        """
+        from universal_history_collector import verify_collection_coverage
+        from universal_training_data import read_supervision
+        doc=_decode(self.raw,MAX_SOURCE_BYTES)
+        proof=doc['coverage'];proof['entity_ids']=frozenset(proof['entity_ids'])
+        verify_collection_coverage(conn,ReplayCoverage(**proof))
+        labels=read_supervision(conn,doc['agent_ids'],as_of_ts=1e300)
+        revision=_digest(sorted((asdict(row) for row in labels),key=lambda row:json.dumps(row,sort_keys=True)))
+        if revision!=data.supervision_revision:
+            raise ValueError('native supervision changed before scoped acceptance')
+
 
 @contextmanager
 def _connection(store):
@@ -140,7 +160,7 @@ def _snapshot(conn, source):
     except BaseException:
         conn.rollback()
         raise
-    if _epoch(conn) != before:
+    if _epoch(conn) != before and not source.is_granular():
         raise ValueError('native evidence changed during snapshot; retry explicitly')
     return data, before
 
@@ -233,7 +253,9 @@ class CheckpointLifecycle:
             report = validate_core_artifact(core, data, policy=policy, cancel=cancel)
             _yield(cancel)
             c.execute('BEGIN IMMEDIATE')
-            if _epoch(c) != epoch:
+            if source.is_granular():
+                source.guard(c,data)
+            elif _epoch(c) != epoch:
                 raise ValueError('native evidence changed before publication')
             if repeat:
                 row = c.execute('SELECT artifact,status FROM universal_validated_checkpoints WHERE attempt_id=?', (attempt,)).fetchone()
@@ -303,7 +325,9 @@ class CheckpointLifecycle:
         with _connection(self.store) as c:
             data, epoch = _snapshot(c, source)
             c.execute('BEGIN IMMEDIATE')
-            if _epoch(c) != epoch:
+            if source.is_granular():
+                source.guard(c,data)
+            elif _epoch(c) != epoch:
                 raise ValueError('native evidence changed during recovery')
             row = c.execute('SELECT artifact,status FROM universal_validated_checkpoints WHERE id=?', (artifact_id,)).fetchone()
             if row is None or row[1] != 'qualified':

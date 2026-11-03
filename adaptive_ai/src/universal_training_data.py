@@ -91,9 +91,17 @@ class ReplayCoverage:
     version: int = CONTRACT_VERSION
     seed_receipts: tuple[tuple[str, float, float], ...] = ()
     collector_retention_epoch: int | None = None
+    topology_revision: str | None = None
+    historical_sensor_universe_revision: str | None = None
+    historical_sensor_universe_count: int | None = None
+    retention_tracker: str | None = None
+    retention_origin_revision: int | None = None
+    seed_event_keys: tuple = ()
+    granular_witness_json: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, 'seed_receipts', tuple(tuple(r) for r in self.seed_receipts))
+        object.__setattr__(self, 'seed_event_keys', tuple(tuple(r) for r in self.seed_event_keys))
 
 
 @dataclass(frozen=True)
@@ -251,8 +259,10 @@ def _eligible_sample(label, receipt, replay, coverage):
         if evidence.get('affected_contract_version')!=AFFECTED_VERSION or data.get('affected_sensor_evidence')!=evidence.get('affected_sensor_evidence'):
             raise ValueError('affected_predecision_binding_mismatch')
         ids=validate(data.get('affected_sensor_evidence'),evidence,
-                     sensor_universe=None if coverage is None else coverage.entity_ids,
-                     topology_information_ts=receipt.registry_information_ts)
+                     sensor_universe=None if coverage is None or coverage.version==3 else coverage.entity_ids,
+                     topology_information_ts=receipt.registry_information_ts,
+                     universe_revision=None if coverage is None or coverage.version!=3 else coverage.historical_sensor_universe_revision,
+                     universe_count=None if coverage is None or coverage.version!=3 else coverage.historical_sensor_universe_count)
         if data.get('affected_sensor_ids') is None or list(ids)!=data['affected_sensor_ids']:
             raise ValueError('affected_sensor_set_mismatch')
     if evidence is not None:
@@ -271,7 +281,7 @@ def _eligible_sample(label, receipt, replay, coverage):
     affected = set(data['affected_sensor_ids'])
     if not required or len(required) > 10000:
         raise ValueError('missing_or_oversized_historical_dependency_set')
-    if (coverage is None or coverage.version not in (CONTRACT_VERSION, 2)
+    if (coverage is None or coverage.version not in (CONTRACT_VERSION, 2, 3)
             or coverage.complete is not True or not coverage.source_revision
             or not isinstance(coverage.entity_ids, frozenset)
             or not required <= coverage.entity_ids
@@ -280,6 +290,9 @@ def _eligible_sample(label, receipt, replay, coverage):
     snapshot = replay.snapshot(at)
     if snapshot['registry_revision'] == 'unregistered' or receipt.registry_revision != snapshot['registry_revision']:
         raise ValueError('missing_or_mismatched_historical_registry')
+    if coverage.version==3 and (not coverage.granular_witness_json or coverage.topology_revision!=receipt.registry_revision
+                               or not coverage.historical_sensor_universe_revision):
+        raise ValueError('missing_granular_topology_metadata')
     tokens = {token.entity_id: token for token in snapshot['tokens']}
     if not required <= tokens.keys():
         raise ValueError('incomplete_history')
@@ -289,7 +302,7 @@ def _eligible_sample(label, receipt, replay, coverage):
         raise ValueError('no_usable_causal_context')
     if any(t.event_ts > at or t.received_ts > at for t in selected):
         raise ValueError('future_observation')
-    seeds = set(coverage.seed_receipts) if coverage.version == 2 else set()
+    seeds = set(coverage.seed_receipts) if coverage.version in (2,3) else set()
     if any(t.event_ts < coverage.start_ts and (t.entity_id,t.event_ts,t.received_ts) not in seeds for t in selected):
         raise ValueError('seed_outside_verified_history_coverage')
     agent = data['agent']
@@ -441,7 +454,7 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
     if len(entities) > 10000 or not 1 <= max_observations <= 100000:
         raise ValueError('observation resource bounds exceeded')
     since = coverage.start_ts
-    if coverage.version == 2:
+    if coverage.version in (2,3):
         from universal_history_collector import verify_collection_coverage
         verify_collection_coverage(conn,coverage)
         seeds = coverage.seed_receipts
@@ -454,12 +467,13 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
         conn, entities, at_ts=as_of_ts, max_records=max_observations,
         max_bytes=MAX_SOURCE_BYTES,
         since_ts=since,
+        received_since_ts=coverage.start_ts if coverage.version==3 else None,
         checkpoint=lambda: TRAINING_BUDGET.checkpoint('universal_feature_read', thread_name=BUDGET_THREAD),
     )
     # V2 attests the native FeatureJournal stream. Archive/import receipts must
     # not silently repair a missing collector event or enrich its exact payload.
     # Legacy V1 keeps its established strict journal/archive merge unchanged.
-    archive = (() if coverage.version == 2 else read_archive_observations(
+    archive = (() if coverage.version in (2,3) else read_archive_observations(
         conn, entities, at_ts=as_of_ts, max_records=max_observations, since_ts=since))
     # Do not mix later enriched attributes into an earlier receipt. Deduplicate
     # only exact-clock equivalents; inconsistent facts at identical clocks fail.
@@ -473,7 +487,7 @@ def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
         if len(observations) > max_observations:
             raise ValueError('combined observation row cap exceeded')
         TRAINING_BUDGET.checkpoint('universal_observation_merge', thread_name=BUDGET_THREAD)
-    if coverage.version == 2 and not set(r for r in coverage.seed_receipts if r[0] in entities) <= observations.keys():
+    if coverage.version in (2,3) and not set(r for r in coverage.seed_receipts if r[0] in entities) <= observations.keys():
         raise ValueError('collection seeds expired or missing')
     replay = CausalObservationReplay(observations.values(), registry_timeline=registry_timeline)
     return build_dataset(labels, decisions, replay, coverage=coverage, max_samples=max_samples)

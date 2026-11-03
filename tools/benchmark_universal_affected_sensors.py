@@ -20,7 +20,7 @@ def quantiles(rows):
     return {f'p{p}_ms':rows[int((len(rows)-1)*p/100)] if rows else None for p in (50,95,99)}
 
 
-def case(root,sensors,devices):
+def case(root,sensors,devices,retention_probe=None):
     sys.path[:0]=[str(root/'tools'),str(root/'tests'),str(root/'adaptive_ai/src')]
     from test_universal_predecision import PredecisionTests
     from test_device_agents import _agent
@@ -117,6 +117,8 @@ def case(root,sensors,devices):
             collector=f.collector.diagnostics(),ha_calls=0,extra_intents=0,
             note='explicit synthetic operator declarations; source-native clocks; no physical causal truth/Pi4 acceptance')
         assert len(dataset.samples)==(devices if supported else 0),result
+        if retention_probe is not None:
+            result['retention']=retention_probe(f,source,dataset,effects)
         return result
     finally:f.doCleanups()
 

@@ -54,10 +54,11 @@ class CollectorTests(unittest.TestCase):
     def test_cardinality_and_actual_old_seed_clocks(self):
         for sensors,devices in [(5,1),(50,10),(200,30),(1000,200)]:
             with self.subTest(sensors=sensors,devices=devices):
+                self.setUp()  # Independent collection, never backdate into a sealed prior segment.
                 self.seed(sensors,devices)
                 source=self.source()
                 proof=json.loads(source.raw)['coverage']
-                self.assertEqual(proof['version'],2)
+                self.assertEqual(proof['version'],3)
                 self.assertEqual(len(proof['entity_ids']),sensors)
                 self.assertTrue(all(r[1:]==[10.,20.] for r in proof['seed_receipts']))
 

@@ -18,6 +18,7 @@ def quantiles(rows):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline-source',type=Path,required=True)
+    parser.add_argument('--baseline-label',default='PR #361 / 1b298554490a629cbc00d024c3879659bbfeb253')
     parser.add_argument('--current-source',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--cases',default='5:1,50:10,200:30,1000:200')
     parser.add_argument('--events',type=int,default=40)
@@ -30,8 +31,8 @@ def main():
         sensors,devices=map(int,item.split(':'))
         if not 1<=devices<sensors<=1000 or devices>200:parser.error('bounded cardinality required')
         cases=[]
-        for name,root,enabled in [('pr361-on-A',args.baseline_source,True),('current-off',args.current_source,False),
-                                 ('current-on-A',args.current_source,True),('pr361-on-B',args.baseline_source,True),
+        for name,root,enabled in [('baseline-on-A',args.baseline_source,True),('current-off',args.current_source,False),
+                                 ('current-on-A',args.current_source,True),('baseline-on-B',args.baseline_source,True),
                                  ('current-on-B',args.current_source,True)]:
             print(f'RUN {sensors}/{devices} {name}',flush=True)
             command=[sys.executable,str(args.current_source/'tools/benchmark_runtime_scaling.py'),
@@ -60,7 +61,7 @@ def main():
             equal_decisions=len({r['decisions_sha256'] for r in cases})==1,
             zero_ha_calls=all(r['ha_calls']==0 for r in cases)))
         report=dict(scope='WSL/Linux host composed runtime with equal instrumentation; not Pi4/bare runtime acceptance',
-            baseline='PR #361 / 1b298554490a629cbc00d024c3879659bbfeb253',events=args.events,warmup=args.warmup,
+            baseline=args.baseline_label,events=args.events,warmup=args.warmup,
             results=results,completed=False,
             limits='40 events are not a production p99 certificate. Busy runs measure missing declarations; complete native evidence is measured separately. A/A and adverse cases retained.')
         args.output.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
