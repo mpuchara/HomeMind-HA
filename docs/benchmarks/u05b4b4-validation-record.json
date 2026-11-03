@@ -80,6 +80,33 @@
       "seconds": null,
       "footer_ok": false,
       "command": "python tools/benchmark_universal_affected_impact.py --baseline-source ../base-363 --baseline-label 'PR #363 / e797439989dba56ca2ccf3d37cf1b3521c501b1c' --cases 1000:200 --candidates --training --correct --output ../results/runtime-1000-control-aa.json --log-dir ../results/runtime-1000-control-logs"
+    },
+    "fullsuite-final": {
+      "exit_code": 0,
+      "log_sha256": "bc69ad0607e36d4456f4eadef5f690de026ac4ff2bac9d8746881abd4b6cc30c",
+      "bytes": 642090,
+      "tests": 3100,
+      "seconds": 427.301,
+      "footer_ok": true,
+      "command": "python -m unittest discover -s tests -v"
+    },
+    "runtime-expanded-smoke": {
+      "exit_code": 0,
+      "log_sha256": "9933bcdf4fceb3fd87bf5764d7f625479c75347f1de66a0ef00010b1905a9d42",
+      "bytes": 115,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "command": "python tools/benchmark_universal_affected_impact.py --baseline-source ../base-363 --cases 5:1 --events 12 --warmup 4 --event-timeout 120 --candidates --training --correct --output ../results/runtime-expanded-smoke-aa.json --log-dir ../results/runtime-expanded-smoke-logs"
+    },
+    "runtime-1000-expanded": {
+      "exit_code": 0,
+      "log_sha256": "040bf33b76fe0c9ce2a77107a020f42fa9702fc2a03895086897ec68bcd6d512",
+      "bytes": 140,
+      "tests": null,
+      "seconds": null,
+      "footer_ok": false,
+      "command": "python tools/benchmark_universal_affected_impact.py --baseline-source ../base-363 --cases 1000:200 --event-timeout 120 --candidates --training --correct --output ../results/runtime-1000-expanded-aa.json --log-dir ../results/runtime-1000-expanded-logs"
     }
   },
   "limits": "Repeatable synthetic fixtures are not new independent statistical evidence or Pi/HA acceptance.",
@@ -87,5 +114,13 @@
     "file": "BENCHMARK_PRODUCT_F24.md",
     "sha256": "e7ca81fd4071f29da4b0287b4bb0a2d82e24fd60e735df558f7dd8cba18f0412",
     "reason": "Initial copied snapshot omitted this root documentation input; 3099 passed and one FileNotFoundError. No code change."
+  },
+  "expanded_source": {
+    "commit": "1a3a79abec6b8ec18bb1452ea6830d3ff8be87d3",
+    "snapshot": "expanded",
+    "files": 720,
+    "git_blob_manifest_sha256": "3dc8294374806868091f9ff8fa857bbf3da7fca99f2f482d5ec9bd0dbba78c3b",
+    "normalized_crlf": true,
+    "all_snapshot_files_match_commit": true
   }
 }
