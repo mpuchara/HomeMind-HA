@@ -295,5 +295,16 @@ class PredecisionTests(unittest.TestCase):
                 if worker is not None:worker.shutdown(wait=True,cancel_futures=True)
             runtime.tearDown()
 
+    def test_generic_review_global_inputs_fail_closed_without_live_mask_reads(self):
+        created=_agent(self.store,'number.limit','value',maximum=10)
+        agent=self.store.get_agent_config(created['id'])
+        self.engine.agent_configs[agent['id']]=agent
+        self.engine.state_map['number.limit']=support.state('number.limit','1',min=0,max=10,step=1)
+        self.evidence.request(agent['id'])
+        with patch('device_agents.legal_value',side_effect=AssertionError('live global review input')):
+            self.evidence.prepare_one()
+        self.assertNotIn(agent['id'],self.evidence.prepared)
+        self.assertEqual(self.evidence.stats['unsupported'],1)
+
 
 if __name__=='__main__': unittest.main()

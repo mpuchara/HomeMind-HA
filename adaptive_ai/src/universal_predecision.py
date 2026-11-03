@@ -72,7 +72,7 @@ class PredecisionEvidence:
         self.prepared = OrderedDict()
         self.lock = threading.Lock()
         self.prepared_bytes = 0
-        self.stats = dict(requested=0, prepared=0, consumed=0, rejected=0, errors=0)
+        self.stats = dict(requested=0, prepared=0, consumed=0, rejected=0, errors=0, unsupported=0)
         with store.conn() as c:
             initialize(c)
 
@@ -164,6 +164,13 @@ class PredecisionEvidence:
                 context_lock.release()
             engine.lock.release()
         agent = snapshot['agent']
+        from control import REVIEW_REQUIRED_DOMAINS
+        if str(agent['target_entity']).partition('.')[0] in REVIEW_REQUIRED_DOMAINS:
+            # legal_value's generic-target review reads global storage.STORE.
+            # Until it has a detached-input contract, never let that live read
+            # masquerade as an immutable original-arbiter evaluation.
+            self.stats['unsupported'] += 1
+            return
         if agent.get('target_property') == 'option_index' and float(agent['max_value'])-float(agent['min_value']) > MAX_ACTIONS-1:
             return
         values = action_values(agent)
@@ -256,6 +263,9 @@ class PredecisionEvidence:
 
 
 def validate_binding(evidence, intent, agent, state):
+    from control import REVIEW_REQUIRED_DOMAINS
+    if str(agent['target_entity']).partition('.')[0] in REVIEW_REQUIRED_DOMAINS:
+        raise ValueError('generic target review lacks detached evidence contract')
     if evidence['version'] != VERSION:
         raise ValueError('unsupported predecision contract')
     if not (evidence['created_ts'] <= evidence['available_ts'] <=

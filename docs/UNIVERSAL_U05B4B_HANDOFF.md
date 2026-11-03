@@ -61,6 +61,13 @@ subsampling); 10,000 rows/table; 4 MiB total copied SQL inputs and engine snapsh
 262 KiB/evidence; 8 MiB prepared cache. Overflow or unsupported scale means no
 evidence. Sensor history remains exclusively FeatureJournal.
 
+Generic number/input_number/select/input_select targets explicitly remain
+unsupported for detached evidence: their original legal_value review reads
+global storage.STORE rather than the service's store. Such targets are rejected
+before mask evaluation, never evaluated against later live review metadata or
+enabled by patching the production singleton. Their control path is unchanged.
+Extending that original review's immutable-input contract is follow-up work.
+
 U05a validates the optional embedded evidence, mask completeness and exact
 identity/config/generation binding. The collection adapter checks native
 provenance and generation and binds the embedded receipt to the persisted
@@ -72,7 +79,7 @@ exclusions and global retention witnesses are unchanged.
 ## Validation status at implementation commit
 
 Implementation commit and final CI/performance results will be recorded in the
-validation follow-up. Focused predecision tests: 13 passing on Windows Python
+validation follow-up. Focused predecision tests: 14 passing on Windows Python
 3.11; existing collector tests: 26 passing. Native integration uses actual wall
 clock order, original mask, original ActionIntent, original FeatureJournal seeds, native Correct and
 provenance, NativeDatasetSource/U05a, plus Undo. Explicit affected-set input in
