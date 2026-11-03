@@ -229,5 +229,19 @@ class PredecisionTests(unittest.TestCase):
         self.evidence.request(self.agent['id'])
         with self.assertRaisesRegex(ValueError,'revision contract'):self.evidence.prepare_one()
 
+    def test_ram_first_manual_metadata_is_an_original_mask_input(self):
+        peer=_agent(self.store,'light.kitchen','brightness_pct',maximum=100)
+        key='manual_hold_source:'+peer['id']
+        with self.store.conn() as c:
+            c.execute('INSERT OR REPLACE INTO app_meta VALUES(?,?)',(key,'explicit_user_v8'))
+            c.execute('INSERT OR REPLACE INTO app_meta VALUES(?,?)',('manual_hold:'+peer['id'],str(time.time()+60)))
+        # Direct durable SQL does not refresh Store.meta_get in this process.
+        self.prepare()
+        prepared=self.evidence.prepared[self.agent['id']]
+        original=self.service.legal_action_mask(self.agent,self.state,[0.,1.],now=prepared['created_ts'])
+        self.assertEqual(prepared['legal_mask'],original)
+        self.store._meta_cache[key]='explicit_user_v8'
+        self.assertIsNone(self.evidence.begin(self.agent,self.state,[0.,1.]))
+
 
 if __name__=='__main__': unittest.main()

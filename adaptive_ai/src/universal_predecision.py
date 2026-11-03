@@ -91,6 +91,8 @@ class PredecisionEvidence:
                 and evidence['registry_revision'] == engine.context.registry_revision
                 and evidence['holds'] == holds(engine)
                 and evidence['epoch'] == self.collector.epoch
+                and all(self.store._meta_cache.get(key) == value
+                        for key, value in evidence['manual_metadata'].items())
                 and all(engine.state_map.get(eid) == st
                         for eid, st in evidence['related_states'].items()))
 
@@ -140,6 +142,11 @@ class PredecisionEvidence:
         if not engine.lock.acquire(blocking=False):
             self.request(aid)
             return
+        context_lock = getattr(engine.context, 'lock', None)
+        if context_lock is not None and not context_lock.acquire(blocking=False):
+            engine.lock.release()
+            self.request(aid)
+            return
         try:
             agent = engine.agent_configs.get(aid)
             if not agent:
@@ -153,6 +160,8 @@ class PredecisionEvidence:
             if topology is None:
                 return
         finally:
+            if context_lock is not None:
+                context_lock.release()
             engine.lock.release()
         agent = snapshot['agent']
         if agent.get('target_property') == 'option_index' and float(agent['max_value'])-float(agent['min_value']) > MAX_ACTIONS-1:
@@ -196,7 +205,12 @@ class PredecisionEvidence:
                 config = next((a for a in configs if a['id'] == aid), None)
                 if config is None or any(agent.get(k) != v for k, v in config.items()):
                     raise ValueError('RAM/durable config mismatch')
-            metadata = dict(db.execute('SELECT key,value FROM app_meta'))
+            # The original service reads Store's RAM-first metadata, not a fresh
+            # SQL value. Preserve those exact inputs even if another process has
+            # changed durable metadata without refreshing this process's cache.
+            with self.store._meta_lock:
+                metadata = {prefix + str(a['id']): self.store._meta_cache.get(prefix + str(a['id']))
+                            for a in configs for prefix in ('manual_hold:', 'manual_hold_source:')}
             store = SnapshotStore(db, configs, metadata)
             context = SimpleNamespace(resolved_registry=lambda: snapshot['entities'], devices=snapshot['devices'])
             service = DeviceAgentService.__new__(DeviceAgentService)
@@ -222,6 +236,7 @@ class PredecisionEvidence:
                 config_revision=digest(encoded(agent)), arbiter_revision=rev,
                 registry_revision=registry_revision, epoch=epoch, topology=topology,
                 related_states={eid: snapshot['states'].get(eid) for eid in desc['entities']},
+                manual_metadata=metadata,
                 holds=snapshot['holds'], created_ts=at, available_ts=time.time(), valid_until_ts=min(deadlines),
                 mask_contract='DeviceAgent.legal_action_mask/0.14.232')
             evidence, size = bounded_copy(evidence)

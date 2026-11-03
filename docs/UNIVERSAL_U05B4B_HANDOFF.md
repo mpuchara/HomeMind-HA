@@ -38,7 +38,10 @@ available before inference; clocks are never backdated.
 
 RAM matching checks agent configuration, exact policy action values, target and
 descriptor-related states, registry revision, manual holds and collector epoch
-at both boundaries. Validity also ends at the earliest pending lease/hold/dwell
+at both boundaries. Original RAM-first Store manual-hold metadata is detached
+and compared too: fresh SQL metadata must not silently replace a different
+process-local cache input. Engine/context snapshot locks are acquired without
+waiting behind foreground work. Validity also ends at the earliest pending lease/hold/dwell
 transition, with a maximum five-second cache age. A timestamp alone never proves
 arbiter freshness.
 
@@ -69,7 +72,7 @@ exclusions and global retention witnesses are unchanged.
 ## Validation status at implementation commit
 
 Implementation commit and final CI/performance results will be recorded in the
-validation follow-up. Focused predecision tests: 11 passing on Windows Python
+validation follow-up. Focused predecision tests: 12 passing on Windows Python
 3.11; existing collector tests: 26 passing. Native integration uses actual wall
 clock order, original mask, original FeatureJournal seeds, native Correct and
 provenance, NativeDatasetSource/U05a, plus Undo. Explicit affected-set input in
