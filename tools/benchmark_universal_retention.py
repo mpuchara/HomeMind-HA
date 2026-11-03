@@ -5,7 +5,7 @@ An explicit dependent effect sensor is unrelated to the required motion history;
 removing it must not shrink the historical universe or invalidate that history.
 """
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager,nullcontext
 import json
 import os
 from pathlib import Path
@@ -19,20 +19,23 @@ def probe(f,source,data,effects):
     from observation_contract import FeatureJournal
     from telemetry import rss_mb
     rows=[]
-    def measure(name,action):
-        statements=[];original=f.store.conn
+    def measure(name,action,instrument=True):
+        counts=[0,0,0];original=f.store.conn
+        def trace(sql):
+            counts[0]+=1;counts[1]+=sql.lstrip()[:6].upper()=='SELECT';counts[2]+=len(sql)
         @contextmanager
         def conn():
             with original() as c:
-                c.set_trace_callback(statements.append)
+                c.set_trace_callback(trace)
                 try:yield c
                 finally:c.set_trace_callback(None)
         cpu=time.process_time();start=time.perf_counter();rss=rss_mb()
-        with patch.object(f.store,'conn',conn):result=action()
+        with (patch.object(f.store,'conn',conn) if instrument else nullcontext()):result=action()
         rows.append(dict(name=name,wall_ms=(time.perf_counter()-start)*1000,
             cpu_ms=(time.process_time()-cpu)*1000,rss_mb=rss_mb(),rss_before_mb=rss,
-            sqlite_trace_statements=len(statements),
-            sqlite_selects=sum(s.lstrip().upper().startswith('SELECT') for s in statements),result=result))
+            sqlite_trace_statements=counts[0] if instrument else None,
+            sqlite_selects=counts[1] if instrument else None,
+            sqlite_trace_rendered_characters=counts[2] if instrument else None,result=result))
         return result
     def verify():
         try:
@@ -51,6 +54,39 @@ def probe(f,source,data,effects):
     unrelated=measure('verify_after_unrelated',verify)
     measure('prune_required',lambda:prune('binary_sensor.motion'))
     required=measure('verify_after_required',verify)
+    granular=json.loads(source.raw)['coverage']['version']==3
+    assert unrelated['eligible']==(len(data.samples) if granular else 0),unrelated
+    assert required['eligible']==0,required
+    if granular:assert unrelated['same_dataset'],unrelated
+    # Real protected hard-cap stress crosses multiple 512-row candidate chunks.
+    # Future receipt clocks are a separate disposable load, never used to repair
+    # or qualify the original source. Count trace calls without retaining SQL.
+    burst=2048;base=time.time()+10
+    journal=FeatureJournal(f.store,retention_hours=1000000,max_events_per_entity=100000)
+    def append():
+        journal.record_batch([dict(entity_id=effects[0],state=dict(entity_id=effects[0],state=str(i),attributes={}),
+            event_time=base+i*.001,received_time=base+i*.001,source='synthetic-retention-stress') for i in range(burst)])
+        with f.store.conn() as c:
+            c.execute('UPDATE feature_observation_events SET protected_until=?',(base+10000,))
+        return dict(appended=burst)
+    measure('append_protected_stress',append)
+    def hard_cap():
+        with f.store.conn() as c:before=c.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0]
+        journal.global_event_limit=16;journal.prune()
+        with f.store.conn() as c:
+            actual=c.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0]
+            if granular:assert c.execute('SELECT live_count FROM universal_retention_meta').fetchone()[0]==actual
+        assert actual==16,actual
+        assert before-actual>=burst-16,(before,actual)
+        return dict(deleted=before-actual,remaining=actual,protected_hard_cap=True,candidate_batch_limit=512 if granular else None)
+    measure('protected_global_hard_cap_stress',hard_cap)
+    # Trigger trace callbacks re-render bulk INSERT SQL many times. Measure a
+    # distinct second future load without tracing too; never confuse observer
+    # overhead with an uninstrumented production throughput claim.
+    base+=100
+    journal.global_event_limit=100000
+    measure('append_protected_stress_no_trace',append,instrument=False)
+    measure('protected_global_hard_cap_stress_no_trace',hard_cap,instrument=False)
     with f.store.conn() as c:
         names={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         meta_count=c.execute('SELECT COUNT(*) FROM universal_retention_entities').fetchone()[0] if 'universal_retention_entities' in names else 0

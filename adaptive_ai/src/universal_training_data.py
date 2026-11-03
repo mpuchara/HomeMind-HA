@@ -258,8 +258,15 @@ def _eligible_sample(label, receipt, replay, coverage):
             raise ValueError(data.get('affected_sensor_status') or 'affected_declaration_missing')
         if evidence.get('affected_contract_version')!=AFFECTED_VERSION or data.get('affected_sensor_evidence')!=evidence.get('affected_sensor_evidence'):
             raise ValueError('affected_predecision_binding_mismatch')
+        universe=None if coverage is None else coverage.entity_ids
+        if coverage is not None and coverage.version==3:
+            # Retention narrows history, never the historical declaration scope.
+            # Hash/count alone cannot prove membership of a declared sensor.
+            registry=replay.registry_timeline.as_of(at)
+            universe=[eid for eid,row in registry.entities.items()
+                      if eid.partition('.')[0] in ('sensor','binary_sensor') and not row.get('disabled_by')]
         ids=validate(data.get('affected_sensor_evidence'),evidence,
-                     sensor_universe=None if coverage is None or coverage.version==3 else coverage.entity_ids,
+                     sensor_universe=universe,
                      topology_information_ts=receipt.registry_information_ts,
                      universe_revision=None if coverage is None or coverage.version!=3 else coverage.historical_sensor_universe_revision,
                      universe_count=None if coverage is None or coverage.version!=3 else coverage.historical_sensor_universe_count)

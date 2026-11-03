@@ -81,6 +81,30 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(x.coverage.version,3)
         self.assertEqual(x.coverage.entity_ids,frozenset((x.required,)))
         self.assertEqual(x.coverage.historical_sensor_universe_count,3)
+
+    def test_full_universe_membership_is_not_replaced_by_hash_count_only(self):
+        x=self.x;doc=json.loads(x.source.raw)
+        payload=json.loads(doc['decisions'][0]['receipt']['payload_json'])
+        evidence=payload['affected_sensor_evidence']
+        declaration=json.loads(evidence['declaration_json'])
+        declaration['affected_sensor_ids']=['sensor.not_in_historical_topology']
+        evidence['declaration_json']=encoded(declaration)
+        evidence['declaration_checksum']=digest(evidence['declaration_json'])
+        evidence['declaration_revision']=evidence['declaration_checksum']
+        evidence['affected_sensor_ids']=declaration['affected_sensor_ids']
+        payload['predecision_evidence']['affected_sensor_evidence']=evidence
+        payload['affected_sensor_ids']=evidence['affected_sensor_ids']
+        doc['decisions'][0]['receipt']['payload_json']=encoded(payload)
+        data=x.dataset(NativeDatasetSource(encoded(doc).encode()))
+        self.assertFalse(data.samples)
+        self.assertIn('affected_unknown_sensors',str(data.rejected))
+
+    def test_exported_registry_cannot_shrink_full_historical_universe(self):
+        x=self.x;doc=json.loads(x.source.raw)
+        del doc['epochs'][0]['registry']['entities']['sensor.outdoor_temperature']
+        data=x.dataset(NativeDatasetSource(encoded(doc).encode()))
+        self.assertFalse(data.samples)
+        self.assertIn('affected_historical_sensor_universe_mismatch',str(data.rejected))
         original=json.loads(x.evidence['affected_sensor_evidence']['declaration_json'])
         self.assertEqual(original['sensor_universe_count'],3)
         self.assertEqual(original['sensor_universe_revision'],x.coverage.historical_sensor_universe_revision)
