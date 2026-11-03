@@ -370,16 +370,22 @@ def read_archive_observations(conn, entity_ids, *, at_ts, max_records=50000, sin
 
 
 def prepare_dataset(conn, agent_ids, decisions, registry_timeline, *, as_of_ts,
-                    coverage=None, max_samples=MAX_SAMPLES, max_observations=50000):
+                    coverage=None, max_samples=MAX_SAMPLES, max_observations=50000,
+                    supervision_as_of_ts=None):
     """Bounded supervision, FeatureJournal and archive reads from one transaction.
 
     Missing historical registry/mask coverage is an explicit rejection. Caller
     supplies a stable transaction and the historic registry timeline; there is
     no connection to HA, Engine, runtime options or current device state.
+    Lifecycle callers may read newer native supervision facts/tombstones with
+    supervision_as_of_ts while keeping observation replay pinned to as_of_ts.
+    Late corrections still obey label-availability cutoffs in chronological_split.
     """
     if not conn.in_transaction:
         raise ValueError('caller-owned consistent SQLite read transaction required')
-    labels = read_supervision(conn, agent_ids, as_of_ts=as_of_ts, max_rows=max_samples)
+    labels = read_supervision(conn, agent_ids,
+                              as_of_ts=as_of_ts if supervision_as_of_ts is None else supervision_as_of_ts,
+                              max_rows=max_samples)
     if coverage is None or coverage.complete is not True:
         return build_dataset(labels, decisions, CausalObservationReplay((), registry_timeline=registry_timeline),
                              coverage=coverage, max_samples=max_samples)

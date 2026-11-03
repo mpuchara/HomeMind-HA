@@ -1,0 +1,42 @@
+{
+  "scope": "synthetic native Store; host only; no HA/Pi/control acceptance",
+  "passed": true,
+  "timings": {
+    "synthetic_native_setup": {
+      "wall_seconds": 11.815007812999966,
+      "cpu_seconds": 1.183296817
+    },
+    "clean_child_training": {
+      "wall_seconds": 2.6439635289999615,
+      "cpu_seconds": 0.1930221729999999
+    },
+    "validation_atomic_publication": {
+      "wall_seconds": 0.34233179499995003,
+      "cpu_seconds": 0.10607481300000021
+    },
+    "restart_restore": {
+      "wall_seconds": 0.3512351550000403,
+      "cpu_seconds": 0.07259013699999994
+    },
+    "guarded_offline_projection": {
+      "wall_seconds": 0.3336515050000344,
+      "cpu_seconds": 0.10689624700000011
+    },
+    "reproduce_same_evidence": {
+      "wall_seconds": 0.3522138430000723,
+      "cpu_seconds": 0.0996066229999999
+    },
+    "undo_invalidation": {
+      "wall_seconds": 0.3754975569999033,
+      "cpu_seconds": 0.056700183000000015
+    }
+  },
+  "artifact_bytes": 178599,
+  "holdout_claims": 172,
+  "database_bytes": {
+    "offline.db": 778240
+  },
+  "feature_bytes": 125952,
+  "control_eligible": false,
+  "promotion_eligible": false
+}
