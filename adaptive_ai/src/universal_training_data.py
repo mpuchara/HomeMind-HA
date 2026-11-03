@@ -240,6 +240,8 @@ def _eligible_sample(label, receipt, replay, coverage):
                     policy_version=evidence['policy_version'],model_revision=evidence['model_revision'])
         validate_binding(evidence,intent,data['agent'],data['state'])
         if (evidence.get('verified_revision')!=evidence['arbiter_revision']
+                or evidence['created_ts']!=receipt.event_ts or evidence['available_ts']!=receipt.received_ts
+                or evidence['topology']!=receipt.registry_revision
                 or evidence['descriptor']!=data['descriptor'] or evidence['legal_mask']!=data['legal_mask']
                 or (label.generation_id is not None and label.generation_id!=evidence['generation_id'])):
             raise ValueError('invalid_predecision_training_evidence')

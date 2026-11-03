@@ -266,7 +266,7 @@ def validate_binding(evidence, intent, agent, state):
     from control import REVIEW_REQUIRED_DOMAINS
     if str(agent['target_entity']).partition('.')[0] in REVIEW_REQUIRED_DOMAINS:
         raise ValueError('generic target review lacks detached evidence contract')
-    if evidence['version'] != VERSION:
+    if evidence['version'] != VERSION or evidence['mask_contract'] != 'DeviceAgent.legal_action_mask/0.14.232':
         raise ValueError('unsupported predecision contract')
     if not (evidence['created_ts'] <= evidence['available_ts'] <=
             evidence['inference_started_ts'] <= evidence['decision_ts'] == intent['created_at']

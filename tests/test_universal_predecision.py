@@ -175,13 +175,16 @@ class PredecisionTests(unittest.TestCase):
         self.assertEqual(len(dataset.samples),1,dataset.rejected)
         self.assertEqual(dataset.samples[0].available_actions.count,2)
         from universal_checkpoint_lifecycle import NativeDatasetSource
-        for changed in ('verified_revision','legal_mask','values'):
+        for changed in ('verified_revision','legal_mask','values','event_ts','topology','mask_contract'):
             doc=json.loads(source.raw)
             receipt=doc['decisions'][0]['receipt']
             payload=json.loads(receipt['payload_json'])
             evidence=payload['predecision_evidence']
             if changed=='verified_revision': evidence.pop('verified_revision')
             elif changed=='legal_mask': evidence['legal_mask']['actions']=evidence['legal_mask']['actions'][:1]
+            elif changed=='event_ts': receipt['event_ts']-=.01
+            elif changed=='topology': evidence['topology']='other'
+            elif changed=='mask_contract': evidence['mask_contract']='post_executor_mask'
             else:evidence['values']=[1.]
             receipt['payload_json']=json.dumps(payload)
             malformed=NativeDatasetSource(json.dumps(doc).encode())
