@@ -255,6 +255,16 @@ class HistoricalTrainingCollector(threading.Thread):
         # Detached bounded decision payload; no DeviceAgent call, policy evaluation,
         # registry lookup or DB read here. Missing causal mask stays explicit.
         try:
+            affected_evidence=None
+            affected_status='legacy_explicit_receipt' if affected is not None else 'affected_sensor_evidence_unavailable'
+            if predecision is not None and 'affected_contract_version' in predecision:
+                # Already prepared in the SAME original decision context. RAM
+                # extraction only; never infer from an area or query live SQL.
+                affected_evidence=predecision.get('affected_sensor_evidence')
+                affected_status=predecision.get('affected_sensor_status','affected_declaration_missing')
+                affected=(affected_evidence.get('affected_sensor_ids')
+                          if affected_evidence is not None and affected_evidence.get('complete') is True else None)
+                receipt=None  # A new-contract receipt must be verified by our writer.
             if len(required)>MAX_ENTITIES or (affected is not None and len(affected)>MAX_ENTITIES):
                 raise ValueError('decision dependency cap')
             if receipt is not None and affected is None:
@@ -266,6 +276,7 @@ class HistoricalTrainingCollector(threading.Thread):
                         non_sensor_feature_dependencies=tuple(e for e in required if not sensor(e)),
                         affected_sensor_ids=None if affected is None else tuple(affected),
                         affected_sensor_proof='unavailable' if affected is None else 'explicit_receipt',
+                        affected_sensor_evidence=affected_evidence,affected_sensor_status=affected_status,
                         receipt=asdict(receipt) if receipt is not None else None,
                         predecision=predecision,
                         missing_proof=None if receipt is not None else 'no_predecision_legal_mask',
@@ -301,7 +312,7 @@ class HistoricalTrainingCollector(threading.Thread):
     def _write(self, batch, gap, epoch, reset_registries):
         from settings import parse_ts
         require_storage_available(self.store)
-        observations=[]; metadata=[]; advances={}
+        observations=[]; metadata=[]; advances={}; affected_topologies={}
         for row_epoch,kind,payload,size,queued in batch:
             if row_epoch!=epoch:
                 continue
@@ -385,7 +396,28 @@ class HistoricalTrainingCollector(threading.Thread):
                                 raise ValueError('predecision topology changed')
                             payload['predecision']=verify_for_write(c,evidence,payload['intent'],payload['agent'],payload['state'])
                             payload['missing_proof']='affected_sensor_evidence_unavailable' if payload['affected_sensor_ids'] is None else None
-                            if payload['affected_sensor_ids'] is not None and self.topology:
+                            new_affected='affected_contract_version' in evidence
+                            if new_affected:
+                                from universal_affected_sensors import VERSION as AFFECTED_VERSION, validate, latest, topology as affected_topology
+                                try:
+                                    if evidence['affected_contract_version']!=AFFECTED_VERSION:
+                                        raise ValueError('affected_unsupported_contract')
+                                    proof=payload['affected_sensor_evidence']
+                                    if proof is not None and latest(c,payload['agent']['id'])!=(proof['declaration_revision'],proof['declaration_json'],proof['declaration_checksum']):
+                                        raise ValueError('affected_native_declaration_mismatch')
+                                    if self.topology not in affected_topologies:
+                                        affected_topologies[self.topology]=affected_topology(c,self.topology)
+                                    ids=validate(proof,payload['predecision'],sensor_universe=affected_topologies[self.topology][1],
+                                                 topology_information_ts=affected_topologies[self.topology][0])
+                                    if list(ids)!=list(payload['affected_sensor_ids'] or ()):
+                                        raise ValueError('affected_sensor_set_mismatch')
+                                    payload['affected_sensor_status']='complete'
+                                    payload['missing_proof']=None
+                                except (ValueError,KeyError,TypeError) as exc:
+                                    payload['affected_sensor_ids']=None
+                                    payload['affected_sensor_status']=str(exc)
+                                    payload['missing_proof']=str(exc)
+                            if (new_affected or payload['affected_sensor_ids'] is not None) and self.topology:
                                 from universal_training_data import HistoricalDecision
                                 topology_at=c.execute('SELECT at FROM universal_collection_topology WHERE id=?',(self.topology,)).fetchone()[0]
                                 payload['receipt']=asdict(HistoricalDecision.capture(
@@ -394,7 +426,10 @@ class HistoricalTrainingCollector(threading.Thread):
                                     registry_revision=self.topology,agent=payload['agent'],descriptor=evidence['descriptor'],
                                     legal_mask=evidence['legal_mask'],state=payload['state'],
                                     required_sensor_ids=payload['required_sensor_ids'],affected_sensor_ids=payload['affected_sensor_ids'],
-                                    predecision_evidence=payload['predecision']))
+                                    predecision_evidence=payload['predecision'],
+                                    affected_contract_version=evidence.get('affected_contract_version'),
+                                    affected_sensor_evidence=payload['affected_sensor_evidence'],
+                                    affected_sensor_status=payload['affected_sensor_status']))
                         except (ValueError,KeyError,TypeError):
                             payload['predecision']=None
                             payload['receipt']=None
@@ -631,6 +666,12 @@ def source_from_collection(conn, agent_ids, *, start, through, max_decisions=204
         receipt=HistoricalDecision(**receipt)
         if evidence is not None and json.loads(receipt.payload_json).get('predecision_evidence')!=evidence:
             raise ValueError('predecision receipt binding mismatch')
+        if receipt.version==2:
+            doc=json.loads(receipt.payload_json)
+            if (doc.get('affected_sensor_evidence')!=body.get('affected_sensor_evidence')
+                    or doc.get('affected_sensor_ids')!=body.get('affected_sensor_ids')
+                    or doc.get('affected_sensor_status')!=body.get('affected_sensor_status')):
+                raise ValueError('affected receipt binding mismatch')
         if receipt.decision_ts!=item[2] or receipt.registry_revision!=row[3]:
             raise ValueError('historical decision binding mismatch')
         key=(item[1],item[2])

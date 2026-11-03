@@ -23,7 +23,7 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
-        candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False):
+        candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None):
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
@@ -66,14 +66,18 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         states = {}
         agents = []
         for i in range(count):
-            sensors = [f'binary_sensor.motion_{i if independent else 0}_{j}' for j in range(8)]
+            sensors = [f'binary_sensor.motion_{i if independent else 0}_{j}' for j in range(min(8,sensor_count) if sensor_count is not None else 8)]
             states.update({eid: support.state(eid, 'off', device_class='motion') for eid in sensors})
             target = f'light.target_{i}'
             states[target] = support.state(target, 'off')
             agent = store.create_agent(support.agent(target_entity=target,
                 input_entities=sensors, action_interval=0, mode='shadow'))
             agents.append((agent, sensors))
-        for i in range(max(0, entities-len(states))):
+        existing_sensors=sum(eid.startswith(('sensor.','binary_sensor.')) for eid in states)
+        background_count=max(0,(sensor_count-existing_sensors) if sensor_count is not None else (entities-len(states)))
+        if sensor_count is not None and existing_sensors>sensor_count:
+            raise ValueError('requested sensor count smaller than independent routing fixture')
+        for i in range(background_count):
             states[f'sensor.background_{i}'] = support.state(f'sensor.background_{i}', str(i%100))
         engine.state_map = states
         engine.context = ContextEngine(product.OPTIONS)
@@ -332,6 +336,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             values = sorted(values)
             return {f'p{p}_ms': values[min(len(values)-1,int((len(values)-1)*p/100))] if values else None for p in (50,95,99)}
         return dict(agents=count, events=events, independent=independent, debug=debug,
+            sensor_count=existing_sensors+background_count,entity_count=len(states),
             warmup_events=warmup, warmup_pipeline_samples_ms=cold_samples,
             production_storage_startup=not legacy_storage_startup,
             registered_root_lineage=not legacy_lineage,
@@ -405,12 +410,15 @@ if __name__ == '__main__':
     p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
     p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
     p.add_argument('--collector', action='store_true', help='Opt-in historical collector; no training or HA authority')
+    p.add_argument('--sensor-count',type=int,help='Exact sensor cardinality for the shared-input fixture')
     a = p.parse_args()
-    if not 0 <= a.agents <= 20 or not 2 <= a.events <= 5000 or not 32 <= a.entities <= 4096:
+    if not 0 <= a.agents <= 200 or not 2 <= a.events <= 5000 or not 1 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
+    if a.sensor_count is not None and (not 1<=a.sensor_count<=1000 or a.scheduler):
+        p.error('sensor-count requires a normal runtime case and 1..1000 sensors')
     if not 0 <= a.warmup <= 500:
         p.error('warmup must be 0..500')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
-                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector))
+                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

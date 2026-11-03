@@ -18,13 +18,16 @@ MAX_AGENTS = 256
 MAX_ACTIONS = 256
 TABLES = ('agents', 'device_explicit_mappings', 'device_resource_state',
           'app_meta', 'agent_candidate_generations')
+REVISION_TABLES = TABLES + ('universal_affected_declarations',)
 
 
 def initialize(conn):
+    from universal_affected_sensors import ensure_schema
+    ensure_schema(conn)
     conn.execute('CREATE TABLE IF NOT EXISTS universal_arbiter_revision '
                  '(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL)')
     conn.execute('INSERT OR IGNORE INTO universal_arbiter_revision VALUES(1,0)')
-    for table in TABLES:
+    for table in REVISION_TABLES:
         if not conn.execute('SELECT 1 FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone():
             continue
         for operation in ('INSERT', 'UPDATE', 'DELETE'):
@@ -122,10 +125,14 @@ class PredecisionEvidence:
             self.stats['rejected'] += 1
             return None
         self.stats['consumed'] += 1
-        return dict(evidence, decision_id=intent.intent_id,
+        bound = dict(evidence, decision_id=intent.intent_id,
                     decision_ts=intent.created_at, inference_started_ts=started,
                     policy_version=intent.policy_version, model_revision=intent.model_revision,
                     policy_action_values=list(values))
+        if 'affected_contract_version' in bound:
+            from universal_affected_sensors import bind
+            bound['affected_sensor_evidence']=bind(evidence['affected_sensor_evidence'],bound)
+        return bound
 
     def prepare_one(self):
         """At most one target per idle collector turn; no control locks held."""
@@ -184,10 +191,13 @@ class PredecisionEvidence:
             with self.store.conn() as c:
                 c.execute('BEGIN')
                 rev = revision(c)
-                expected = {f'uc_revision_{table}_{op}' for table in TABLES for op in ('INSERT','UPDATE','DELETE')}
+                expected = {f'uc_revision_{table}_{op}' for table in REVISION_TABLES for op in ('INSERT','UPDATE','DELETE')}
                 installed = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'uc_revision_%'")}
                 if not expected <= installed:
                     raise ValueError('incomplete arbiter revision contract')
+                from universal_affected_sensors import latest, topology as affected_topology
+                declaration=latest(c,aid)
+                affected_scope=affected_topology(c,topology)
                 copied_bytes = 0
                 for table in TABLES:
                     schema = c.execute('SELECT sql FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone()
@@ -246,6 +256,10 @@ class PredecisionEvidence:
                 manual_metadata=metadata,
                 holds=snapshot['holds'], created_ts=at, available_ts=time.time(), valid_until_ts=min(deadlines),
                 mask_contract='DeviceAgent.legal_action_mask/0.14.232')
+            from universal_affected_sensors import prepare
+            affected, affected_status=prepare(declaration,evidence,affected_scope)
+            evidence.update(affected_contract_version=1,affected_sensor_evidence=affected,
+                            affected_sensor_status=affected_status)
             evidence, size = bounded_copy(evidence)
             with self.lock:
                 old = self.prepared.pop(aid, None)

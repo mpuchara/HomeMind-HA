@@ -117,17 +117,23 @@ class HistoricalDecision:
     def capture(cls, *, decision_ts, event_ts, received_ts,
                 registry_information_ts, registry_revision, agent, descriptor,
                 legal_mask, state, required_sensor_ids, affected_sensor_ids,
-                predecision_evidence=None):
+                predecision_evidence=None,affected_contract_version=None,
+                affected_sensor_evidence=None,affected_sensor_status=None):
         payload = dict(agent=agent, descriptor=descriptor, legal_mask=legal_mask,
                        state=state, required_sensor_ids=sorted(set(required_sensor_ids)),
-                       affected_sensor_ids=sorted(set(affected_sensor_ids)))
+                       affected_sensor_ids=(None if affected_sensor_ids is None and affected_contract_version is not None
+                                            else sorted(set(affected_sensor_ids))))
         if predecision_evidence is not None:
             payload['predecision_evidence']=predecision_evidence
+        if affected_contract_version is not None:
+            payload.update(affected_contract_version=affected_contract_version,
+                affected_sensor_evidence=affected_sensor_evidence,affected_sensor_status=affected_sensor_status)
         encoded = json.dumps(payload, sort_keys=True, allow_nan=False)
         if len(encoded.encode()) > 262144:
             raise ValueError('historical decision receipt too large')
         return cls(*map(_number, (decision_ts, event_ts, received_ts,
-                                  registry_information_ts)), str(registry_revision), encoded)
+                                  registry_information_ts)), str(registry_revision), encoded,
+                   version=2 if affected_contract_version is not None else CONTRACT_VERSION)
 
 
 @dataclass(frozen=True)
@@ -221,7 +227,7 @@ def read_supervision(conn, agent_ids, *, as_of_ts, max_rows=MAX_SAMPLES):
 
 
 def _eligible_sample(label, receipt, replay, coverage):
-    if receipt.version != CONTRACT_VERSION:
+    if receipt.version not in (CONTRACT_VERSION,2):
         raise ValueError('unsupported_decision_contract')
     at = _number(label.decision_ts)
     if _number(receipt.decision_ts) != at:
@@ -233,6 +239,22 @@ def _eligible_sample(label, receipt, replay, coverage):
         raise ValueError('decision_receipt_too_large')
     data = json.loads(receipt.payload_json)
     evidence=data.get('predecision_evidence')
+    if receipt.version==CONTRACT_VERSION and ('affected_contract_version' in data
+            or (evidence is not None and 'affected_contract_version' in evidence)):
+        raise ValueError('affected_decision_contract_downgrade')
+    if receipt.version==2:
+        from universal_affected_sensors import VERSION as AFFECTED_VERSION, validate
+        if type(data.get('affected_contract_version')) is not int or data['affected_contract_version']!=AFFECTED_VERSION or evidence is None:
+            raise ValueError('affected_missing_or_unsupported_contract')
+        if data.get('affected_sensor_status')!='complete':
+            raise ValueError(data.get('affected_sensor_status') or 'affected_declaration_missing')
+        if evidence.get('affected_contract_version')!=AFFECTED_VERSION or data.get('affected_sensor_evidence')!=evidence.get('affected_sensor_evidence'):
+            raise ValueError('affected_predecision_binding_mismatch')
+        ids=validate(data.get('affected_sensor_evidence'),evidence,
+                     sensor_universe=None if coverage is None else coverage.entity_ids,
+                     topology_information_ts=receipt.registry_information_ts)
+        if data.get('affected_sensor_ids') is None or list(ids)!=data['affected_sensor_ids']:
+            raise ValueError('affected_sensor_set_mismatch')
     if evidence is not None:
         from universal_predecision import validate_binding
         intent=dict(intent_id=evidence['decision_id'],created_at=at,agent_id=label.agent_id,
