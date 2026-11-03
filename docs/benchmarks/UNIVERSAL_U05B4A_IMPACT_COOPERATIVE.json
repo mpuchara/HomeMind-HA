@@ -1,0 +1,139 @@
+{
+  "scope": "synthetic host Engine ingress; no physical HA/Pi/network acceptance",
+  "baseline": "PR #359 / 3c3ccee8354cc74aab8ac871a010883b7054cbf1",
+  "warmup_events": 20,
+  "events": 120,
+  "agents": 3,
+  "entities": 1000,
+  "equal_inputs": true,
+  "equal_decisions": true,
+  "cases": [
+    {
+      "name": "base-1",
+      "enabled": false,
+      "input_sha256": "13ab5b41dc1caf02263162c67669f037962eb3273179394598fa689002bbae14",
+      "decisions_sha256": "f971df7a6f7528c7ac9b116e17170e2ca3718816c0106c719befd7b65bcbfba5",
+      "ha_calls": 0,
+      "pipeline": {
+        "p50_ms": 4.518129000000037,
+        "p95_ms": 7.563574000000628,
+        "p99_ms": 8.734045999999829
+      },
+      "event_to_intent_p95_ms": 6.756481000000036,
+      "process_cpu_ms": 867.5965779999999,
+      "wall_ms": 789.5944010000004,
+      "rss_mb": 70.296875,
+      "peak_rss_mb": 71.8515625,
+      "collector": null
+    },
+    {
+      "name": "current-off",
+      "enabled": false,
+      "input_sha256": "13ab5b41dc1caf02263162c67669f037962eb3273179394598fa689002bbae14",
+      "decisions_sha256": "f971df7a6f7528c7ac9b116e17170e2ca3718816c0106c719befd7b65bcbfba5",
+      "ha_calls": 0,
+      "pipeline": {
+        "p50_ms": 4.404469000000688,
+        "p95_ms": 7.055247000000264,
+        "p99_ms": 9.411694000000637
+      },
+      "event_to_intent_p95_ms": 6.201813000000556,
+      "process_cpu_ms": 866.5429250000001,
+      "wall_ms": 789.2522369999995,
+      "rss_mb": 72.484375,
+      "peak_rss_mb": 72.8671875,
+      "collector": null
+    },
+    {
+      "name": "current-on-1",
+      "enabled": true,
+      "input_sha256": "13ab5b41dc1caf02263162c67669f037962eb3273179394598fa689002bbae14",
+      "decisions_sha256": "f971df7a6f7528c7ac9b116e17170e2ca3718816c0106c719befd7b65bcbfba5",
+      "ha_calls": 0,
+      "pipeline": {
+        "p50_ms": 5.441716999998292,
+        "p95_ms": 9.277405000000627,
+        "p99_ms": 10.410702999999799
+      },
+      "event_to_intent_p95_ms": 8.179587999999072,
+      "process_cpu_ms": 1051.669391,
+      "wall_ms": 933.4228840000005,
+      "rss_mb": 73.0703125,
+      "peak_rss_mb": 74.15234375,
+      "collector": {
+        "batches": 16,
+        "dropped": 0,
+        "enabled": true,
+        "epoch": 0,
+        "errors": 0,
+        "gaps": 1,
+        "last_error": null,
+        "max_queue": 225,
+        "max_queue_bytes": 2700420,
+        "max_write_latency_ms": 535.4495860000004,
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 560,
+        "session": "9f8a0c1ba67846d9ac726d9295693c5d",
+        "worker_alive": false,
+        "write_latency_p95_ms": 490.2266070000003,
+        "written": 560
+      }
+    },
+    {
+      "name": "base-2",
+      "enabled": false,
+      "input_sha256": "13ab5b41dc1caf02263162c67669f037962eb3273179394598fa689002bbae14",
+      "decisions_sha256": "f971df7a6f7528c7ac9b116e17170e2ca3718816c0106c719befd7b65bcbfba5",
+      "ha_calls": 0,
+      "pipeline": {
+        "p50_ms": 4.889418999999506,
+        "p95_ms": 8.235035000000224,
+        "p99_ms": 10.975098999999489
+      },
+      "event_to_intent_p95_ms": 6.827204000000364,
+      "process_cpu_ms": 934.3075620000001,
+      "wall_ms": 846.821448,
+      "rss_mb": 71.9453125,
+      "peak_rss_mb": 72.44921875,
+      "collector": null
+    },
+    {
+      "name": "current-on-2",
+      "enabled": true,
+      "input_sha256": "13ab5b41dc1caf02263162c67669f037962eb3273179394598fa689002bbae14",
+      "decisions_sha256": "f971df7a6f7528c7ac9b116e17170e2ca3718816c0106c719befd7b65bcbfba5",
+      "ha_calls": 0,
+      "pipeline": {
+        "p50_ms": 5.083886000001314,
+        "p95_ms": 8.917024999998802,
+        "p99_ms": 10.7910320000002
+      },
+      "event_to_intent_p95_ms": 8.054508000000737,
+      "process_cpu_ms": 1061.97288,
+      "wall_ms": 937.1357740000014,
+      "rss_mb": 71.4609375,
+      "peak_rss_mb": 74.1796875,
+      "collector": {
+        "batches": 16,
+        "dropped": 0,
+        "enabled": true,
+        "epoch": 0,
+        "errors": 0,
+        "gaps": 1,
+        "last_error": null,
+        "max_queue": 244,
+        "max_queue_bytes": 2924612,
+        "max_write_latency_ms": 584.7431380000003,
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 560,
+        "session": "ffe68809d6d845d89d25e8c60ee2d910",
+        "worker_alive": false,
+        "write_latency_p95_ms": 553.0678510000016,
+        "written": 560
+      }
+    }
+  ],
+  "interpretation": "A/A spread retained; single-host timing is informational, not proof of production equivalence"
+}

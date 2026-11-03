@@ -816,6 +816,9 @@ def shutdown_runtime():
                     traceback.print_exc()
                     return None
 
+            collector=getattr(ENGINE,'universal_training_collector',None)
+            if collector is not None:
+                shutdown_step('universal_training_collector',collector.stop)
             shutdown_step("context", lambda: ENGINE.context.save(force=True))
             candidate_manager = getattr(ENGINE, "agent_candidates", None)
             if candidate_manager is not None and candidate_manager.is_alive():

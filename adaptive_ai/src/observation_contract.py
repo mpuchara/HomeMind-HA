@@ -958,6 +958,11 @@ class FeatureJournal:
                 CREATE INDEX IF NOT EXISTS idx_feature_window_entity
                     ON feature_window_entities(entity_id,window_id);
             """)
+            # Existing collection proofs must expire on pruning even after the
+            # option is disabled on a later boot. One startup schema lookup only.
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='universal_collection_meta'").fetchone():
+                self.store._universal_training_retention_changed=lambda conn: conn.execute(
+                    'UPDATE universal_collection_meta SET retention_epoch=retention_epoch+1 WHERE id=1')
 
     @staticmethod
     def _compact_attributes(state):
@@ -1265,6 +1270,7 @@ class FeatureJournal:
             c.execute("DELETE FROM feature_window_entities WHERE window_id IN "
                       "(SELECT window_id FROM feature_windows WHERE protected_until<?)", (now,))
             c.execute("DELETE FROM feature_windows WHERE protected_until<?", (now,))
+            observations_before=c.total_changes
             c.execute("DELETE FROM feature_observation_events WHERE received_time<? AND protected_until<?",
                       (cutoff, now))
             if entity_id:
@@ -1289,6 +1295,9 @@ class FeatureJournal:
                         INDEXED BY idx_feature_obs_prune_cover WHERE protected_until>?
                         ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, remaining)).fetchall()
                 c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in doomed])
+            retention_changed=getattr(self.store,'_universal_training_retention_changed',None)
+            if retention_changed is not None and c.total_changes>observations_before:
+                retention_changed(c)
         return True
 
     def stats(self):
