@@ -105,7 +105,8 @@ class NativeDatasetSource:
                                 SemanticRegistry.create(**r['registry'])) for r in doc['epochs']]
         proof = doc['coverage']; proof['entity_ids'] = frozenset(proof['entity_ids'])
         return prepare_dataset(conn, doc['agent_ids'], decisions, RegistryTimeline(epochs),
-                               as_of_ts=doc['as_of_ts'], coverage=ReplayCoverage(**proof))
+                               as_of_ts=doc['as_of_ts'], coverage=ReplayCoverage(**proof),
+                               supervision_as_of_ts=1e300)
 
 
 @contextmanager

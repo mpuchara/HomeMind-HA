@@ -199,6 +199,29 @@ class LifecycleTests(unittest.TestCase):
         ManualFeedbackJournal(self.store).set_status('synthetic-feedback:0','conflict')
         with self.assertRaisesRegex(ValueError,'revoked'):self.service.load(aid,self.source)
 
+    def test_late_generation_tombstone_cannot_hide_behind_historical_as_of(self):
+        aid=self.published()
+        journal=ManualFeedbackJournal(self.store,clock=lambda:999999.)
+        journal.record(agent_id='agent-new',root_agent_id='agent0',selected_ts=100.,source='correct',
+                       correct_action=0.,feedback_id='late-copy',generation_id='new-generation',
+                       episode_id='synthetic-episode:0')
+        with self.store.conn() as c:
+            lid=c.execute('''INSERT INTO teaching_rl_labels
+                (agent_id,created_ts,sample_ts,desired,fingerprint,supervision_event_id)
+                VALUES('agent-new',999999,100,0,'fixture','synthetic-correct:0')''').lastrowid
+        journal.link('late-copy','learning','teach_rl_label',lid)
+        journal.undo('late-copy')
+        with self.assertRaisesRegex(ValueError,'revoked'):self.service.load(aid,self.source)
+        with _connection(self.store) as c:
+            data,_=_snapshot(c,self.source)
+        self.assertNotIn('synthetic-correct:0',[s.supervision_event_id for s in data.samples])
+
+    def test_late_new_correction_changes_revision_before_publication(self):
+        journal=ManualFeedbackJournal(self.store,clock=lambda:999999.)
+        journal.record(agent_id='agent0',selected_ts=101.,source='correct',correct_action=1.,
+                       feedback_id='late-correct',episode_id='late-episode')
+        with self.assertRaisesRegex(ValueError,'revision changed'):self.service.publish(self.core,self.source)
+
     def test_rebuild_withholds_holdout_and_disclosed_legacy_metrics_cannot_publish(self):
         from universal_training_data import _digest
         self.assertFalse(self.core['holdout_evaluated'])
