@@ -104,9 +104,13 @@ class NativeDatasetSource:
         epochs = [RegistryEpoch(r['effective_ts'], r['received_ts'],
                                 SemanticRegistry.create(**r['registry'])) for r in doc['epochs']]
         proof = doc['coverage']; proof['entity_ids'] = frozenset(proof['entity_ids'])
-        return prepare_dataset(conn, doc['agent_ids'], decisions, RegistryTimeline(epochs),
+        data=prepare_dataset(conn, doc['agent_ids'], decisions, RegistryTimeline(epochs),
                                as_of_ts=doc['as_of_ts'], coverage=ReplayCoverage(**proof),
                                supervision_as_of_ts=1e300)
+        if proof.get('version')==3:
+            from universal_history_collector import verify_collected_samples
+            verify_collected_samples(conn,doc,data)
+        return data
 
     def is_granular(self):
         return _decode(self.raw,MAX_SOURCE_BYTES)['coverage'].get('version')==3
@@ -123,6 +127,8 @@ class NativeDatasetSource:
         doc=_decode(self.raw,MAX_SOURCE_BYTES)
         proof=doc['coverage'];proof['entity_ids']=frozenset(proof['entity_ids'])
         verify_collection_coverage(conn,ReplayCoverage(**proof))
+        from universal_history_collector import verify_collected_samples
+        verify_collected_samples(conn,doc,data)
         labels=read_supervision(conn,doc['agent_ids'],as_of_ts=1e300)
         revision=_digest(sorted((asdict(row) for row in labels),key=lambda row:json.dumps(row,sort_keys=True)))
         if revision!=data.supervision_revision:
@@ -257,6 +263,9 @@ class CheckpointLifecycle:
                 source.guard(c,data)
             elif _epoch(c) != epoch:
                 raise ValueError('native evidence changed before publication')
+            status=c.execute('SELECT status FROM universal_checkpoint_attempts WHERE id=?',(attempt,)).fetchone()
+            if status is None or status[0]!=('published' if repeat else 'validating'):
+                raise ValueError('validation attempt no longer active; holdout remains consumed')
             if repeat:
                 row = c.execute('SELECT artifact,status FROM universal_validated_checkpoints WHERE attempt_id=?', (attempt,)).fetchone()
                 if row is None or row[1] != 'qualified':
