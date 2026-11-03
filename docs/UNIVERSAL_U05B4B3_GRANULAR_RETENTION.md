@@ -102,12 +102,21 @@ verifies a scoped witness against the recorded segment, and exports the existing
 `NativeDatasetSource` API. It checks accumulated damage even on FIRST export;
 exporting after retention does not manufacture earlier completeness.
 
+The witness covers the union of original dependencies of the requested agents
+and interval. A joint multi-agent source rejects if any required part is lost;
+an independent unaffected agent can be exported with a narrower `agent_ids`
+request. This does not salvage an already trained joint artifact by silently
+dropping its missing training history.
+
 `prepare_dataset` verifies V3 against native metadata before replay. Only receipt
 times in the attested interval are read; attested original seeds may have old
 event clocks. Deleted seeds cannot be replaced by current HA state, enriched
 archive rows, reinsertion under another key, or a later reconciliation. Required
 loss rejects; unrelated sensor/seed loss preserves the same dataset identity.
 Full historical topology/universe remains available to affected-sensor checks.
+U05a checks membership against that full historical registry as well as the
+native universe hash/count; matching scalar metadata alone does not establish
+membership of a declared sensor or authorize a shrunken replay registry.
 
 Checkpoint lifecycle snapshots use SQLite snapshot isolation. V3 publication and
 guarded load recheck the scoped witness and current supervision revision INSIDE
