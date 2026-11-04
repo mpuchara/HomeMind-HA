@@ -153,3 +153,35 @@ area/device membership must never approve affected-sensor declarations.
 Any history reduction requires a separate equivalence proof for the exact
 consumer. Preserve generic state/evidence boundaries so future non-HA adapters
 can implement explicit contracts without importing HA internals.
+
+## Implemented runtime/collector recovery follow-up (2026-11-04)
+
+The audit's local-cost hypotheses led to implementation
+`8036a2bd64dba32490d784df2029c0818ad3edbf`, stacked on Draft #365. No new HA
+transport or Recorder adapter was adopted. The minimum Core remains the
+user-confirmed **2026.1.2**. Native API adoption still requires its own live
+permission/reconnect and historical-contract acceptance.
+
+* Shadow schema readiness now uses an empty read of the required columns on
+  each call. Ready schemas do not run DDL or acquire the global Store lock;
+  missing optional columns still enter the original serialized migration.
+  This is not the rejected research-only schema-once cache.
+* Scheduler capacity deferrals are published together at the end of a pass,
+  avoiding a lock acquisition for every waiting target. Routing, state/revision
+  snapshots, worker capacity and target retry validation are retained.
+* Collector idle admission tests unfinished futures, rather than an empty
+  dictionary: completed futures remain indexed in the Engine. Under sustained
+  foreground work, a bounded FIFO writer turn uses zero SQLite busy timeout,
+  original receipt batches and native writer snapshots. SQLite atomically
+  protects the lookup plus observation insert; producers do no SQLite.
+* The original pruning operation remains pending if Store admission is busy;
+  cutoffs, protected windows, V3 mutation triggers and disk-budget guards remain.
+  A failed reusable-session open uses the existing native writer retry/reopen
+  lifecycle. Partial snapshot metadata commits still require a conservative gap.
+
+The improvements use the existing storage engine and ownership boundaries.
+They do not reconstruct missing events from Recorder, invent local receipt
+clocks, infer affected-sensor declarations or upgrade Executor-time masks into
+predecision proof. See the [recovery report](UNIVERSAL_U05B4C1_RUNTIME_RECOVERY.md)
+and [final handoff](UNIVERSAL_U05B4C1_FINAL_HANDOFF.md) for separate source identities,
+controlled host results, remaining limits and CI evidence.

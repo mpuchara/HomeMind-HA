@@ -1,0 +1,67 @@
+{
+  "primary_current_default30_complete": true,
+  "primary_current_zero_losses": true,
+  "actual_native_decisions_and_observations": true,
+  "primary_completed_parity_by_scale": {
+    "5": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "50": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "200": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "1000": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    }
+  },
+  "final_unprobed_parity_by_scale": {
+    "5": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "50": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "200": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    },
+    "1000": {
+      "inputs": true,
+      "decisions": true,
+      "ha_calls": [
+        0
+      ]
+    }
+  },
+  "final_unprobed_current_default30_complete": true,
+  "final_largest_probed_zero_loss_and_default30": true
+}

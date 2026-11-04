@@ -1,0 +1,282 @@
+{
+  "scope": "isolated HOST components; original 30s deadline; continuous trainer work is not fixed",
+  "cases": [
+    {
+      "name": "runtime-only-1000-200",
+      "sensors": 1000,
+      "devices": 200,
+      "collector_enabled": true,
+      "exit_code": 0,
+      "observation_timeout_seconds": 30,
+      "events": 40,
+      "warmup_steps": 8,
+      "log_sha256": "c8ddd6f738dafeefd78963a398b23a14991db89e2b43a870dbac7bdb5e2e5c98",
+      "status": "completed",
+      "raw_archive": "components/runtime-only-1000-200.raw.json.gz",
+      "raw_sha256": "f2b55ad79c3f09f73861af4ba517c59847588ad042126b5577b83b3ef32b3c98",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 799.8274070000662,
+        "p95_ms": 1576.602992000062,
+        "p99_ms": 1906.8586220000725,
+        "max_ms": 2493.401972999891
+      },
+      "prediction": {
+        "count": 4096,
+        "p50_ms": 0.17329,
+        "p95_ms": 0.736391,
+        "p99_ms": 2.778391,
+        "max_ms": 8.957566
+      },
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 878.6896980000165,
+        "p95_ms": 18815.907901999934,
+        "p99_ms": 24867.198765000012,
+        "max_ms": 25535.704814999917
+      },
+      "pipeline": {
+        "p50_ms": 806.5037989999837,
+        "p95_ms": 1583.0026539999835,
+        "p99_ms": 1919.6377659998234
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": 51790,
+      "store_lock_wait": {
+        "count": 523,
+        "p50_ms": 241.329729,
+        "p95_ms": 737.207843,
+        "p99_ms": 911.483134,
+        "max_ms": 1376.48335
+      },
+      "executor_queue_wait": {
+        "count": 4096,
+        "p50_ms": 0.675465,
+        "p95_ms": 3.003979,
+        "p99_ms": 5.679931,
+        "max_ms": 166.536054
+      },
+      "process_cpu_ms": 84543.049538,
+      "wall_ms": 72103.78026800003,
+      "rss_mb": 510.21875,
+      "peak_rss_mb": 525.08984375,
+      "collector": {
+        "queued": 9630,
+        "written": 313,
+        "dropped": 9335,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385188,
+        "batches": 6,
+        "max_write_latency_ms": 4747.2249730001295,
+        "last_error": null,
+        "deferred_for_foreground": 2178,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 18,
+        "session": "3db7095d4178447fae6cb981cf0c6d89",
+        "worker_alive": false,
+        "write_latency_p95_ms": 4607.931266999913,
+        "predecision": {
+          "requested": 9600,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "native_rows": {
+        "observations": 48,
+        "decisions": 312,
+        "masks": 0,
+        "gaps": 2,
+        "segments": 0,
+        "object_page_bytes": {
+          "collector": 1409024,
+          "retention": 12288,
+          "native_observations": 36864,
+          "protection_windows": 22061056
+        },
+        "rss_after_stop_mb": 510.02734375,
+        "sqlite_files": {
+          "benchmark.sqlite-wal": 253520112,
+          "benchmark.sqlite": 119799808,
+          "benchmark.sqlite-shm": 524288
+        },
+        "qualified_training_samples": null,
+        "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+      },
+      "background_work": {
+        "updates": 4847,
+        "model_writes": 152,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "ed82d961a4c5216ce6424dd010543a7db2f7b01c1aaabb499b3b5adc892c5245",
+        "manifest": "source-ed82d961a4c5216ce6424dd010543a7db2f7b01c1aaabb499b3b5adc892c5245.json"
+      },
+      "log": "components/runtime-only-1000-200.log.gz"
+    },
+    {
+      "name": "collector-only-1000-200",
+      "sensors": 1000,
+      "devices": 200,
+      "collector_enabled": true,
+      "exit_code": 0,
+      "observation_timeout_seconds": 30,
+      "events": 40,
+      "warmup_steps": 8,
+      "log_sha256": "e8d6f23e666a113d6772aa89f7ec32a47ccebd74650ae412f132cb2540796db5",
+      "status": "completed",
+      "raw_archive": "components/collector-only-1000-200.raw.json.gz",
+      "raw_sha256": "be02a00f4e6053b9afcb423dec8956798dac5b2d9b9efdd2070a9dfce121ffa0",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 1193.4770640000352,
+        "p95_ms": 2095.3414309999516,
+        "p99_ms": 2305.1306509998994,
+        "max_ms": 2555.795539999963
+      },
+      "prediction": {
+        "count": 4096,
+        "p50_ms": 0.174382,
+        "p95_ms": 1.070537,
+        "p99_ms": 3.090823,
+        "max_ms": 11.781278
+      },
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1352.1580209999229,
+        "p95_ms": 23545.97205699997,
+        "p99_ms": 26578.202665999925,
+        "max_ms": 27577.310269999998
+      },
+      "pipeline": {
+        "p50_ms": 1202.4540499999148,
+        "p95_ms": 2101.601133000031,
+        "p99_ms": 2313.6213590000807
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": 67435,
+      "store_lock_wait": {
+        "count": 762,
+        "p50_ms": 280.200161,
+        "p95_ms": 651.963176,
+        "p99_ms": 779.646755,
+        "max_ms": 821.721304
+      },
+      "executor_queue_wait": {
+        "count": 4096,
+        "p50_ms": 1.038477,
+        "p95_ms": 3.392668,
+        "p99_ms": 5.29186,
+        "max_ms": 10.557044
+      },
+      "process_cpu_ms": 111073.90318899999,
+      "wall_ms": 93526.81207399996,
+      "rss_mb": 510.25390625,
+      "peak_rss_mb": 529.30859375,
+      "collector": {
+        "queued": 9648,
+        "written": 9648,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 120,
+        "max_queue_bytes": 1952832,
+        "batches": 1055,
+        "max_write_latency_ms": 1110.5630679999194,
+        "last_error": null,
+        "deferred_for_foreground": 2160,
+        "foreground_batches": 1010,
+        "deferred_for_sqlite": 2163,
+        "committed_after_epoch_change": 0,
+        "native_event_upserts": 61,
+        "native_seed_upserts": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "c53af10779024082912cd3a8b1bfc7d7",
+        "worker_alive": false,
+        "by_kind": {
+          "event": {
+            "queued": 48,
+            "written": 48,
+            "dropped": 0,
+            "rejected": 0
+          },
+          "decision": {
+            "queued": 9600,
+            "written": 9600,
+            "dropped": 0,
+            "rejected": 0
+          }
+        },
+        "write_latency_p50_ms": 175.13232800001788,
+        "write_latency_p95_ms": 537.1243750000758,
+        "write_latency_p99_ms": 740.1447360000475,
+        "write_latency_sample_count": 2048,
+        "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+        "predecision": {
+          "requested": 9602,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "native_rows": {
+        "observations": 48,
+        "decisions": 9600,
+        "masks": 0,
+        "gaps": 1,
+        "segments": 0,
+        "object_page_bytes": {
+          "collector": 40497152,
+          "retention": 12288,
+          "native_observations": 36864,
+          "protection_windows": 22048768
+        },
+        "rss_after_stop_mb": 510.0234375,
+        "sqlite_files": {
+          "benchmark.sqlite-wal": 365052632,
+          "benchmark.sqlite": 157388800,
+          "benchmark.sqlite-shm": 720896
+        },
+        "qualified_training_samples": null,
+        "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+      },
+      "background_work": {
+        "updates": 6316,
+        "model_writes": 198,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "1457f9fecd16b3151132ef88ef583d57dd9d7c4063545ed245de3f223b310177",
+        "manifest": "source-1457f9fecd16b3151132ef88ef583d57dd9d7c4063545ed245de3f223b310177.json"
+      },
+      "log": "components/collector-only-1000-200.log.gz"
+    }
+  ]
+}
