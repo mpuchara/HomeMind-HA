@@ -6,16 +6,28 @@ Baseline: exact Draft #364 `b3a67c0a2d264697ac69f5ee16bdd673b843f6d3`,
 production reference 0.14.232 / `f7384ba5476f26155ecb138034cc3350fa5bfda2`.
 This is the audit/profiling substage, not acceptance of U05b.4c.1b–d.
 
-The add-on manifest declares `homeassistant_api: true` but no minimum Core
-version. The running household Core version, permissions and Recorder
-configuration were not observed in this task. **BLOCKER for HA-native adoption:**
-establish that deployment's version/capabilities and test its reconnect/access
-behavior. Source inspection is not a live integration test.
+The user confirmed on 2026-11-04 that the installed HA Core version is
+**2026.1.2** and selected it as the **minimum supported version** for this work.
+This is the compatibility floor; the add-on manifest itself still has no Core
+minimum declaration. Permissions, Recorder configuration and live API behavior
+were not inspected. Reconnect/access and Recorder-load acceptance remain
+**BLOCKER for HA-native adoption**, independently of the known version.
 
-The pinned Core audit target is 2026.10.4, commit
-`357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b`, observed as the latest stable release
-on 2026-11-03. Compatibility checks also inspect 2025.1.4; this does not claim
-support for every intervening version. Official client state-delta reference:
+The primary compatibility source is Core 2026.1.2, commit
+`ae17b620f69b7a132d32d2de1e30097f9a251616`. Inspection confirms entity selection
+and include/exclude filters for `subscribe_entities`, event-type filtering for
+`subscribe_events`, synchronous snapshot/listener setup, partial context deltas,
+and explicit `significant_changes_only=0` for full REST history. Registry helpers,
+history WebSocket and Recorder schema are included in the source manifest.
+[Minimum-version commands](https://github.com/home-assistant/core/blob/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/websocket_api/commands.py)
+and [history query](https://github.com/home-assistant/core/blob/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/history/__init__.py)
+are official owning sources, not live integration tests.
+
+Core 2026.10.4, commit `357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b`, remains an
+additional comparison target, observed on 2026-11-03. Earlier 2025.1.4 inspection
+is historical comparison only, not a supported minimum. Source inspection of
+these versions does not certify every intervening release.
+Official client state-delta reference:
 `ad8031f63b996cccb9dc53633325c2039b030aee`. File URLs, hashes and sizes are in
 `benchmarks/u05b4c1/ha-source-manifest.json`; upstream code is not vendored or
 imported into the add-on. References below are public API documentation and

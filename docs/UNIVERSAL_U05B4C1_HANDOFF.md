@@ -50,12 +50,13 @@ Read [HA audit](UNIVERSAL_U05B4C1_HA_NATIVE_AUDIT.md),
 [performance report](UNIVERSAL_U05B4C1_PERFORMANCE.md), and
 [machine-readable summary](benchmarks/UNIVERSAL_U05B4C1_SUMMARY.json).
 
-Official Core 2026.10.4 source is pinned to
-`357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b`; 2025.1.4 source and the official JS
-delta client are also inspected. URLs/hashes are retained. Repository minimum
-HA Core version and actual household Core version/configuration are unknown;
-the optional version question remains pending. No supported-version/live-API
-acceptance is fabricated from source inspection.
+The user confirmed on 2026-11-04: installed and minimum supported HA Core
+**2026.1.2**. Its official sources are pinned to
+`ae17b620f69b7a132d32d2de1e30097f9a251616`; eight files and hashes are added to
+the source manifest. Core 2026.10.4 and 2025.1.4 remain comparison sources;
+2025.1.4 is not the supported floor. Public history-query semantics and compact
+subscription/filter/delta contracts are confirmed in 2026.1.2. Permissions,
+Recorder configuration, reconnect behavior and live load remain unvalidated.
 
 HomeMind already delegates device integration, physical services, registries
 and historical retrieval to HA. Filtered compact updates preserve selected
@@ -125,9 +126,12 @@ The early parallel cProfile experiment is rejected instrumentation: inconsistent
 CPU attribution and one 50/10 diagnostic timeout. These results remain separate
 and cannot support attribution or a production-failure claim.
 
-Required CI for this implementation/reporting branch is recorded in the PR
-and summary; check its exact head/run before continuing. A previous-stage CI
-is not evidence for new files. Do not treat pending CI as successful.
+CI 41742078889 passed for reporting HEAD
+`e8aea5e3c0ddc72634b1362b3f1a9a057b05a527`: Python 3.11 and 3.13 each ran
+3110 tests (301.620 / 338.354 seconds); image and required old/new benchmark
+steps passed, packaging was skipped. The subsequent compatibility-floor update
+changes documentation/source manifests only; its own CI status is recorded in
+Draft PR #365. A green audit CI is not runtime-recovery acceptance.
 
 ## Resume locations and next work
 

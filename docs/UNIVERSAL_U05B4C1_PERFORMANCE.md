@@ -188,9 +188,9 @@ unresolved permission, reconnect and historical-contract boundaries.
   overloaded runs. No real loss reduction has been implemented or claimed.
 * **BLOCKER / 1d:** final matched four-scale A/A acceptance matrix after actual
   runtime/collector fixes, including default 30-second runs, remains required.
-* **BLOCKER / HA-native adoption:** actual supported/deployed Core version,
-  server permission/reconnect behavior, Recorder configuration and real API
-  load require validation. Offline replay cannot certify these.
+* **BLOCKER / HA-native adoption:** server permission/reconnect behavior, Recorder configuration and real API
+  load require validation. Offline replay cannot certify these. Installed/minimum Core is user-confirmed
+  2026.1.2; knowing the version does not resolve live acceptance.
 
 Prioritize eliminating repeated schema work with a proven invalidation design,
 bounding shared-lock work and preserving independent ownership/evidence

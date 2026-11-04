@@ -1426,7 +1426,7 @@
       "reason": "Missing significant_changes_only=0"
     },
     "implementation_sha": "ff44e24b2344a7140369ac864b6bcc2f7d63cc8a",
-    "ci_status": "pending",
+    "ci_status": "success",
     "local_source_comparison": {
       "checked_files": 724,
       "implementation": "ff44e24b2344a7140369ac864b6bcc2f7d63cc8a",
@@ -1439,7 +1439,13 @@
       ]
     },
     "final_profiler_aa_source_verified": true,
-    "final_runtime_python_manifest_sha256": "6c980c7076903f0c593b7ad26f106279040f17ca7b0c5cab01cbba8689221516"
+    "final_runtime_python_manifest_sha256": "6c980c7076903f0c593b7ad26f106279040f17ca7b0c5cab01cbba8689221516",
+    "ci_commit": "e8aea5e3c0ddc72634b1362b3f1a9a057b05a527",
+    "ci_run": 41742078889,
+    "ci_tests": {
+      "3.11": 3110,
+      "3.13": 3110
+    }
   },
   "invalid_diagnostics": {
     "folder": "u05b4c1/invalid-cprofile",
@@ -1451,6 +1457,17 @@
     "Collector losses persist, mixed envelope counters",
     "Repeatable p95 improvement and complete post-fix matrix not established",
     "200/30 old current A outlier lacks conclusive cause",
-    "Live HA version/permission/reconnect and Recorder load unvalidated"
-  ]
+    "Live HA permission/reconnect and Recorder load unvalidated"
+  ],
+  "ha_compatibility": {
+    "minimum_core": "2026.1.2",
+    "installed_core_user_reported": "2026.1.2",
+    "confirmed_on": "2026-11-04",
+    "source_commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "live_api_acceptance": false,
+    "comparison_versions": [
+      "2026.10.4",
+      "2025.1.4"
+    ]
+  }
 }
