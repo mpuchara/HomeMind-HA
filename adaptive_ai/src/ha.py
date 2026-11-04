@@ -55,8 +55,12 @@ class HAClient:
             params["no_attributes"] = ""
         if significant:
             params["significant_changes_only"] = ""
+        else:
+            # HA defaults this query flag to true; omission does not request
+            # attribute-only transitions required by full controllable history.
+            params["significant_changes_only"] = "0"
         query = urlencode(params, doseq=True)
-        # HA treats the presence of flag params as true; urlencode gives = which is accepted.
+        # minimal_response/no_attributes use presence; significance also accepts 0.
         return self.request("GET", f"history/period/{quote(start_dt, safe='')}?{query}", timeout=timeout)
 
     def automation_config(self, automation_id, timeout=8):

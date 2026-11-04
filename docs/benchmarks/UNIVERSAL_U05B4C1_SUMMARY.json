@@ -1,0 +1,1473 @@
+{
+  "stage": "U05b.4c.1a audit/profiling",
+  "overall_recovery_status": "BLOCKER: 1b/1c/1d remain",
+  "baseline_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+  "implementation_sha": "ff44e24b2344a7140369ac864b6bcc2f7d63cc8a",
+  "synthetic_host_only": true,
+  "actual_home_assistant_version": null,
+  "records": [
+    {
+      "name": "stack-5-1",
+      "file": "u05b4c1/stack-5-1.json",
+      "raw_archive": "u05b4c1/stack-5-1.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "4571b119eeaea1039d6da60094337b5312a3993547db1628ff1e414ed847dcc6",
+      "warmup": {
+        "count": 2,
+        "p50_ms": 13.56566800000003,
+        "p95_ms": 13.56566800000003,
+        "p99_ms": 13.56566800000003,
+        "max_ms": 17.835752999999954
+      },
+      "event_to_intent": {
+        "count": 4,
+        "p50_ms": 1.7182990000002007,
+        "p95_ms": 2.6058880000006113,
+        "p99_ms": 2.6058880000006113,
+        "max_ms": 6.523267999999582
+      },
+      "cpu_ms": 60.754892999999925,
+      "rss_mb": 68.671875,
+      "background_work": {
+        "updates": 170,
+        "model_writes": 6,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 12,
+        "written": 12,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 12,
+        "max_queue_bytes": 100420,
+        "batches": 2,
+        "max_write_latency_ms": 1293.432073,
+        "last_error": null,
+        "deferred_for_foreground": 22,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "536ce62cb3744cc7abe57abc71ea4a57",
+        "worker_alive": false,
+        "write_latency_p95_ms": 1281.9521090000005,
+        "predecision": {
+          "requested": 6,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 4,
+        "discarded_samples": 0,
+        "wall": {
+          "count": 4,
+          "p50_ms": 0.126067,
+          "p95_ms": 0.126207,
+          "p99_ms": 0.126207,
+          "max_ms": 0.133674
+        },
+        "thread_cpu": {
+          "count": 4,
+          "p50_ms": 0.125337,
+          "p95_ms": 0.125551,
+          "p99_ms": 0.125551,
+          "max_ms": 0.133244
+        },
+        "sampled_wall_sum_ms": 0.510783
+      },
+      "input_sha256": "b71e748f56f3a10ca5ca0105f079b4224e755f9b26b77a7d174882eb08fd2fec",
+      "decisions_sha256": "e096056a2cc0995d53e50e1bf5b93c161cec7ffd5a474f2d771dc40d94713308",
+      "ha_calls": 0,
+      "root_pipeline_calls": 4
+    },
+    {
+      "name": "stack-50-10",
+      "file": "u05b4c1/stack-50-10.json",
+      "raw_archive": "u05b4c1/stack-50-10.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "4571b119eeaea1039d6da60094337b5312a3993547db1628ff1e414ed847dcc6",
+      "warmup": {
+        "count": 20,
+        "p50_ms": 151.3038550000001,
+        "p95_ms": 429.6593780000002,
+        "p99_ms": 429.6593780000002,
+        "max_ms": 551.9158799999992
+      },
+      "event_to_intent": {
+        "count": 40,
+        "p50_ms": 22.613319999999604,
+        "p95_ms": 47.098372000000666,
+        "p99_ms": 57.27264300000101,
+        "max_ms": 58.55379000000127
+      },
+      "cpu_ms": 275.52105000000006,
+      "rss_mb": 93.11328125,
+      "background_work": {
+        "updates": 241,
+        "model_writes": 8,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 66,
+        "written": 66,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 66,
+        "max_queue_bytes": 984004,
+        "batches": 3,
+        "max_write_latency_ms": 2414.0913160000005,
+        "last_error": null,
+        "deferred_for_foreground": 46,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "9610a2f010374a5b8c65571510eb80e7",
+        "worker_alive": false,
+        "write_latency_p95_ms": 2339.5616630000013,
+        "predecision": {
+          "requested": 60,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 45,
+        "discarded_samples": 0,
+        "wall": {
+          "count": 45,
+          "p50_ms": 0.154174,
+          "p95_ms": 0.490258,
+          "p99_ms": 2.825752,
+          "max_ms": 3.267691
+        },
+        "thread_cpu": {
+          "count": 45,
+          "p50_ms": 0.153806,
+          "p95_ms": 0.300345,
+          "p99_ms": 0.347981,
+          "max_ms": 0.379586
+        },
+        "sampled_wall_sum_ms": 15.805978
+      },
+      "input_sha256": "95baa113dbd906ce61c579a23470b9e3511123aacfcd2b12c1611e05f897a819",
+      "decisions_sha256": "5b2ee02102876502241de4716e480725891fe35fe44e25fe9f9a1f7fa9bd2b5a",
+      "ha_calls": 0,
+      "root_pipeline_calls": 40
+    },
+    {
+      "name": "stack-200-30",
+      "file": "u05b4c1/stack-200-30.json",
+      "raw_archive": "u05b4c1/stack-200-30.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "4571b119eeaea1039d6da60094337b5312a3993547db1628ff1e414ed847dcc6",
+      "warmup": {
+        "count": 60,
+        "p50_ms": 491.3779530000006,
+        "p95_ms": 1867.1787209999984,
+        "p99_ms": 2018.392624999997,
+        "max_ms": 2159.721846
+      },
+      "event_to_intent": {
+        "count": 120,
+        "p50_ms": 99.95829599999695,
+        "p95_ms": 182.29717999999906,
+        "p99_ms": 197.0211469999974,
+        "max_ms": 209.5796159999992
+      },
+      "cpu_ms": 978.1731590000006,
+      "rss_mb": 138.46875,
+      "background_work": {
+        "updates": 481,
+        "model_writes": 16,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 186,
+        "written": 186,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 186,
+        "max_queue_bytes": 2936164,
+        "batches": 4,
+        "max_write_latency_ms": 5928.356479000002,
+        "last_error": null,
+        "deferred_for_foreground": 116,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "943241f224434e498141ac9e8d75d943",
+        "worker_alive": false,
+        "write_latency_p95_ms": 5331.011715999999,
+        "predecision": {
+          "requested": 180,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 124,
+        "discarded_samples": 0,
+        "wall": {
+          "count": 124,
+          "p50_ms": 0.159121,
+          "p95_ms": 0.402288,
+          "p99_ms": 1.397291,
+          "max_ms": 1.69357
+        },
+        "thread_cpu": {
+          "count": 124,
+          "p50_ms": 0.159183,
+          "p95_ms": 0.254911,
+          "p99_ms": 0.30132,
+          "max_ms": 0.54447
+        },
+        "sampled_wall_sum_ms": 26.546103
+      },
+      "input_sha256": "424e3390f029c056a792dc22412a1d0421cf995cd9c820f8a45445b9b4f0e987",
+      "decisions_sha256": "cf9c1426eaf2d1e3b2d9c284b2c534db77bbebc314d688490124dc1ad3b6a391",
+      "ha_calls": 0,
+      "root_pipeline_calls": 120
+    },
+    {
+      "name": "stack-1000-200",
+      "file": "u05b4c1/stack-1000-200.json",
+      "raw_archive": "u05b4c1/stack-1000-200.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "4571b119eeaea1039d6da60094337b5312a3993547db1628ff1e414ed847dcc6",
+      "warmup": {
+        "count": 400,
+        "p50_ms": 6388.01070000001,
+        "p95_ms": 13039.739516000012,
+        "p99_ms": 13769.179560000011,
+        "max_ms": 13972.16121800001
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1507.6887239999905,
+        "p95_ms": 2629.1371050000125,
+        "p99_ms": 2839.9480269999913,
+        "max_ms": 2955.3470319999915
+      },
+      "cpu_ms": 12334.444560000009,
+      "rss_mb": 421.5859375,
+      "background_work": {
+        "updates": 2126,
+        "model_writes": 67,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 1204,
+        "written": 168,
+        "dropped": 1038,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385160,
+        "batches": 4,
+        "max_write_latency_ms": 2147.354517000025,
+        "last_error": null,
+        "deferred_for_foreground": 725,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 2,
+        "session": "0e2dea2b14fc4cd0ad007634a3e39ebf",
+        "worker_alive": false,
+        "write_latency_p95_ms": 2024.0138860000059,
+        "predecision": {
+          "requested": 1200,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 811,
+        "discarded_samples": 555,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.169394,
+          "p95_ms": 0.432576,
+          "p99_ms": 1.468473,
+          "max_ms": 4.563798
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.169518,
+          "p95_ms": 0.284279,
+          "p99_ms": 0.331268,
+          "max_ms": 1.242177
+        },
+        "sampled_wall_sum_ms": 61.770544
+      },
+      "input_sha256": "c60bb60d9357c6b0cc3a632f0ed93f1b5595cb7d438415a6c77944ec616a186b",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "ablation-baseline",
+      "file": "u05b4c1/ablation-baseline.json",
+      "raw_archive": "u05b4c1/ablation-baseline.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1612.9358630000183,
+        "p95_ms": 22627.976930999994,
+        "p99_ms": 34787.508203000005,
+        "max_ms": 37160.79882299999
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1305.5098889999783,
+        "p95_ms": 2279.8909939999985,
+        "p99_ms": 2399.7511620000014,
+        "max_ms": 2426.8076719999954
+      },
+      "cpu_ms": 10935.070412000015,
+      "rss_mb": 446.28515625,
+      "background_work": {
+        "updates": 3873,
+        "model_writes": 122,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385136,
+        "batches": 7,
+        "max_write_latency_ms": 4712.247483999989,
+        "last_error": null,
+        "deferred_for_foreground": 1432,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "0b4e2970b97f4717b8b23c33fdb4e4e1",
+        "worker_alive": false,
+        "write_latency_p95_ms": 4430.8761629999935,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 810,
+        "discarded_samples": 554,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.176982,
+          "p95_ms": 0.438785,
+          "p99_ms": 1.635782,
+          "max_ms": 5.899247
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.177012,
+          "p95_ms": 0.305267,
+          "p99_ms": 0.359922,
+          "max_ms": 5.39277
+        },
+        "sampled_wall_sum_ms": 69.548996,
+        "aggregate": {
+          "wall_sum_ms": 231.15486400000003,
+          "thread_cpu_sum_ms": 169.91642900000033,
+          "wall_max_ms": 8.4926
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "ablation-no-training",
+      "file": "u05b4c1/ablation-no-training.json",
+      "raw_archive": "u05b4c1/ablation-no-training.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1181.127475000011,
+        "p95_ms": 10763.697430999997,
+        "p99_ms": 17303.142280999993,
+        "max_ms": 17754.408533
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 721.3217699999745,
+        "p95_ms": 1571.5171880000298,
+        "p99_ms": 1781.2415249999844,
+        "max_ms": 1831.5528240000276
+      },
+      "cpu_ms": 5928.270854000004,
+      "rss_mb": 447.44140625,
+      "background_work": {
+        "updates": 0,
+        "model_writes": 0,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385136,
+        "batches": 7,
+        "max_write_latency_ms": 3311.4254169999526,
+        "last_error": null,
+        "deferred_for_foreground": 784,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "0b62cae8deee4344967ba4c6b132e63f",
+        "worker_alive": false,
+        "write_latency_p95_ms": 3197.652602000005,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 800,
+        "discarded_samples": 544,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.176663,
+          "p95_ms": 1.491234,
+          "p99_ms": 2.591371,
+          "max_ms": 4.593663
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.177013,
+          "p95_ms": 0.316991,
+          "p99_ms": 0.396649,
+          "max_ms": 1.267843
+        },
+        "sampled_wall_sum_ms": 82.194507,
+        "aggregate": {
+          "wall_sum_ms": 229.75557699999982,
+          "thread_cpu_sum_ms": 162.88883100000004,
+          "wall_max_ms": 4.593663
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "ablation-no-candidates",
+      "file": "u05b4c1/ablation-no-candidates.json",
+      "raw_archive": "u05b4c1/ablation-no-candidates.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1902.1676719999618,
+        "p95_ms": 4709.140517999969,
+        "p99_ms": 7036.871835,
+        "max_ms": 7630.782857999975
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1273.5786910000115,
+        "p95_ms": 2092.7809760000287,
+        "p99_ms": 2171.523131000015,
+        "max_ms": 2206.7854919999945
+      },
+      "cpu_ms": 9650.88633500001,
+      "rss_mb": 287.0546875,
+      "background_work": {
+        "updates": 1999,
+        "model_writes": 63,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385088,
+        "batches": 7,
+        "max_write_latency_ms": 3984.9162959999944,
+        "last_error": null,
+        "deferred_for_foreground": 812,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "b8c2227c6d944c35abf942b08ac95377",
+        "worker_alive": false,
+        "write_latency_p95_ms": 3765.124656000012,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 800,
+        "discarded_samples": 544,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.169869,
+          "p95_ms": 0.364767,
+          "p99_ms": 2.293673,
+          "max_ms": 3.309939
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.170036,
+          "p95_ms": 0.280334,
+          "p99_ms": 0.354928,
+          "max_ms": 0.596471
+        },
+        "sampled_wall_sum_ms": 61.451994,
+        "aggregate": {
+          "wall_sum_ms": 186.66812299999995,
+          "thread_cpu_sum_ms": 154.58700199999998,
+          "wall_max_ms": 4.587275
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "ablation-collector-off",
+      "file": "u05b4c1/ablation-collector-off.json",
+      "raw_archive": "u05b4c1/ablation-collector-off.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1981.4292309999928,
+        "p95_ms": 28782.131100000013,
+        "p99_ms": 44996.082738999976,
+        "max_ms": 45946.733344999986
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1721.834223999963,
+        "p95_ms": 3184.8370870000053,
+        "p99_ms": 3329.962883999997,
+        "max_ms": 3417.4974239999756
+      },
+      "cpu_ms": 14151.102116999993,
+      "rss_mb": 441.45703125,
+      "background_work": {
+        "updates": 3932,
+        "model_writes": 123,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": null,
+      "model_prediction": {
+        "count": 812,
+        "discarded_samples": 556,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.184145,
+          "p95_ms": 1.709966,
+          "p99_ms": 3.146666,
+          "max_ms": 6.021114
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.184156,
+          "p95_ms": 0.363538,
+          "p99_ms": 0.48553,
+          "max_ms": 3.108635
+        },
+        "sampled_wall_sum_ms": 95.59562700000001,
+        "aggregate": {
+          "wall_sum_ms": 346.10438599999964,
+          "thread_cpu_sum_ms": 194.93664299999975,
+          "wall_max_ms": 11.52939
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "ablation-schema-once",
+      "file": "u05b4c1/ablation-schema-once.json",
+      "raw_archive": "u05b4c1/ablation-schema-once.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1644.5731659999865,
+        "p95_ms": 8546.598260999985,
+        "p99_ms": 11377.712534000011,
+        "max_ms": 11927.691422000065
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1426.7881330000591,
+        "p95_ms": 2413.8329959999965,
+        "p99_ms": 2518.7363349999714,
+        "max_ms": 2606.6727930000297
+      },
+      "cpu_ms": 11734.43812100001,
+      "rss_mb": 430.01953125,
+      "background_work": {
+        "updates": 2206,
+        "model_writes": 69,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385152,
+        "batches": 7,
+        "max_write_latency_ms": 4208.731495000052,
+        "last_error": null,
+        "deferred_for_foreground": 888,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "59d3fb667b4b4e52b96c0d2903a0d27d",
+        "worker_alive": false,
+        "write_latency_p95_ms": 3974.772449999932,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 811,
+        "discarded_samples": 555,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.173117,
+          "p95_ms": 0.28113,
+          "p99_ms": 1.946542,
+          "max_ms": 4.242908
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.173098,
+          "p95_ms": 0.257523,
+          "p99_ms": 0.327914,
+          "max_ms": 2.202828
+        },
+        "sampled_wall_sum_ms": 61.979494,
+        "aggregate": {
+          "wall_sum_ms": 203.34940399999996,
+          "thread_cpu_sum_ms": 159.35357300000007,
+          "wall_max_ms": 7.205604
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "admission-A",
+      "file": "u05b4c1/admission-A.json",
+      "raw_archive": "u05b4c1/admission-A.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41b9562f11a3be77f355431a055e6d18520d059501712c47a270e00c27ffd3e4",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1633.3520989999215,
+        "p95_ms": 23622.00380299987,
+        "p99_ms": 28478.714107999847,
+        "max_ms": 29449.462048999976
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1400.663809999969,
+        "p95_ms": 2454.573289999871,
+        "p99_ms": 2711.9998049997776,
+        "max_ms": 2760.3282659999877
+      },
+      "cpu_ms": 11536.790059999987,
+      "rss_mb": 452.56640625,
+      "background_work": {
+        "updates": 3943,
+        "model_writes": 124,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385136,
+        "batches": 7,
+        "max_write_latency_ms": 3888.4652519998326,
+        "last_error": null,
+        "deferred_for_foreground": 1284,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "efa5897ea8d54169b8776da4ca7582e7",
+        "worker_alive": false,
+        "write_latency_p95_ms": 3733.9848069998425,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 808,
+        "discarded_samples": 552,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.174196,
+          "p95_ms": 0.709776,
+          "p99_ms": 3.181916,
+          "max_ms": 8.156749
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.174193,
+          "p95_ms": 0.295375,
+          "p99_ms": 0.425833,
+          "max_ms": 1.519202
+        },
+        "sampled_wall_sum_ms": 82.357812,
+        "aggregate": {
+          "wall_sum_ms": 266.9397349999999,
+          "thread_cpu_sum_ms": 166.29132899999985,
+          "wall_max_ms": 8.395778
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    },
+    {
+      "name": "admission-B",
+      "file": "u05b4c1/admission-B.json",
+      "raw_archive": "u05b4c1/admission-B.raw.json.gz",
+      "runtime_reference": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "profiler_sha256": "41b9562f11a3be77f355431a055e6d18520d059501712c47a270e00c27ffd3e4",
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 1611.283473999947,
+        "p95_ms": 8916.483330999881,
+        "p99_ms": 11767.994229999886,
+        "max_ms": 12441.68958199998
+      },
+      "event_to_intent": {
+        "count": 800,
+        "p50_ms": 1274.7544179999295,
+        "p95_ms": 2210.846275999984,
+        "p99_ms": 2450.283087000116,
+        "max_ms": 2514.8682980000103
+      },
+      "cpu_ms": 10615.569975,
+      "rss_mb": 428.453125,
+      "background_work": {
+        "updates": 2657,
+        "model_writes": 84,
+        "correct_reads": 1,
+        "correct_writes": 1,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "collector": {
+        "queued": 2408,
+        "written": 337,
+        "dropped": 2075,
+        "gaps": 2,
+        "errors": 0,
+        "max_queue": 518,
+        "max_queue_bytes": 8385160,
+        "batches": 7,
+        "max_write_latency_ms": 4166.833740000129,
+        "last_error": null,
+        "deferred_for_foreground": 912,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 4,
+        "session": "d2dd0087fbaf4e619aedd8632ffeeb8b",
+        "worker_alive": false,
+        "write_latency_p95_ms": 3971.6700039998614,
+        "predecision": {
+          "requested": 2400,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "model_prediction": {
+        "count": 817,
+        "discarded_samples": 561,
+        "wall": {
+          "count": 256,
+          "p50_ms": 0.173547,
+          "p95_ms": 0.796653,
+          "p99_ms": 2.865132,
+          "max_ms": 4.361941
+        },
+        "thread_cpu": {
+          "count": 256,
+          "p50_ms": 0.173521,
+          "p95_ms": 0.27735,
+          "p99_ms": 0.414714,
+          "max_ms": 1.064122
+        },
+        "sampled_wall_sum_ms": 75.248765,
+        "aggregate": {
+          "wall_sum_ms": 232.47836300000014,
+          "thread_cpu_sum_ms": 165.04164000000023,
+          "wall_max_ms": 4.72747
+        }
+      },
+      "input_sha256": "f629bfb26c89c13aa852274d6cf8d02e63fc3399f203f69cd9c79e593aa8aa60",
+      "decisions_sha256": "6747920a8d8d09edeb824bd266d17ea75ee32fd6dd82459d891550668e1c44a2",
+      "ha_calls": 0,
+      "root_pipeline_calls": 800
+    }
+  ],
+  "controlled_input_and_decision_parity": true,
+  "aa_background_work_equal": false,
+  "aa_background_work_note": "Continuous trainer runs until foreground completes: admission A 3943 updates/124 model writes; B 2657/84. Identical event/decision hashes do not mean equal concurrent background work. This is a measured confound, not a sufficient explanation for all latency spread.",
+  "experiments": {
+    "scope": "Offline synthetic HA-native audit, not HA server/network/Recorder/Pi measurements",
+    "transport": [
+      {
+        "repeat": 0,
+        "sensors": 5,
+        "devices": 1,
+        "events": 400,
+        "synthetic_selected_entities": 2,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 258277,
+          "cpu_ms": 1.6680359999999976,
+          "wall_ms": 1.6711819999954969,
+          "processed_entity_updates": 406
+        },
+        "variant_b_filtered_compact": {
+          "messages": 81,
+          "bytes": 8467,
+          "cpu_ms": 0.8790709999999952,
+          "wall_ms": 0.8797589999858246,
+          "processed_entity_updates": 82
+        },
+        "variant_c_dual_stream": {
+          "messages": 482,
+          "bytes": 266744,
+          "decode_cpu_sum_ms": 2.547106999999993,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "9e624ca7726d4e07b7b5a33acff60e66598df086027bb9953e212686e5df2fb9",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 1,
+        "sensors": 5,
+        "devices": 1,
+        "events": 400,
+        "synthetic_selected_entities": 2,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 258277,
+          "cpu_ms": 1.786751000000003,
+          "wall_ms": 1.790700000015022,
+          "processed_entity_updates": 406
+        },
+        "variant_b_filtered_compact": {
+          "messages": 81,
+          "bytes": 8467,
+          "cpu_ms": 1.019403000000002,
+          "wall_ms": 1.0203519999549826,
+          "processed_entity_updates": 82
+        },
+        "variant_c_dual_stream": {
+          "messages": 482,
+          "bytes": 266744,
+          "decode_cpu_sum_ms": 2.806154000000005,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "9e624ca7726d4e07b7b5a33acff60e66598df086027bb9953e212686e5df2fb9",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 0,
+        "sensors": 50,
+        "devices": 10,
+        "events": 400,
+        "synthetic_selected_entities": 11,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 270195,
+          "cpu_ms": 1.779720999999998,
+          "wall_ms": 1.7830809999850317,
+          "processed_entity_updates": 460
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 5813,
+          "cpu_ms": 0.5909600000000015,
+          "wall_ms": 0.5915880000202378,
+          "processed_entity_updates": 51
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 276008,
+          "decode_cpu_sum_ms": 2.3706809999999994,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "7b19748403b70c9a3b5eeafde96d2e0155b4c5453332e09ad45fdf978bdb9948",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 1,
+        "sensors": 50,
+        "devices": 10,
+        "events": 400,
+        "synthetic_selected_entities": 11,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 270195,
+          "cpu_ms": 1.6592609999999952,
+          "wall_ms": 1.6616690001001189,
+          "processed_entity_updates": 460
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 5813,
+          "cpu_ms": 0.5481209999999986,
+          "wall_ms": 0.5489849999094076,
+          "processed_entity_updates": 51
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 276008,
+          "decode_cpu_sum_ms": 2.2073819999999937,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "7b19748403b70c9a3b5eeafde96d2e0155b4c5453332e09ad45fdf978bdb9948",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 0,
+        "sensors": 200,
+        "devices": 30,
+        "events": 400,
+        "synthetic_selected_entities": 31,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 305817,
+          "cpu_ms": 2.6131320000000042,
+          "wall_ms": 2.622457000029499,
+          "processed_entity_updates": 630
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 8953,
+          "cpu_ms": 0.7200019999999974,
+          "wall_ms": 0.7217749999881562,
+          "processed_entity_updates": 71
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 314770,
+          "decode_cpu_sum_ms": 3.3331340000000016,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "ee4c96b442cd3a31152d8f1cd025e625054b241068ab3d95e1d3d16ba2732dc9",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 1,
+        "sensors": 200,
+        "devices": 30,
+        "events": 400,
+        "synthetic_selected_entities": 31,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 305817,
+          "cpu_ms": 1.9472070000000063,
+          "wall_ms": 1.9521140000051673,
+          "processed_entity_updates": 630
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 8953,
+          "cpu_ms": 0.6474649999999998,
+          "wall_ms": 0.6481400000666326,
+          "processed_entity_updates": 71
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 314770,
+          "decode_cpu_sum_ms": 2.5946720000000063,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "ee4c96b442cd3a31152d8f1cd025e625054b241068ab3d95e1d3d16ba2732dc9",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 0,
+        "sensors": 1000,
+        "devices": 200,
+        "events": 400,
+        "synthetic_selected_entities": 201,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 508250,
+          "cpu_ms": 3.7765489999999904,
+          "wall_ms": 3.783424999937779,
+          "processed_entity_updates": 1600
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 35743,
+          "cpu_ms": 2.080941000000003,
+          "wall_ms": 2.082369999925504,
+          "processed_entity_updates": 241
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 543993,
+          "decode_cpu_sum_ms": 5.857489999999993,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "3e7dfa9360022404e4c5a971f567a43aa161c91be63243b6bb20285d8395aa4f",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      },
+      {
+        "repeat": 1,
+        "sensors": 1000,
+        "devices": 200,
+        "events": 400,
+        "synthetic_selected_entities": 201,
+        "variant_a_events": {
+          "messages": 401,
+          "bytes": 508250,
+          "cpu_ms": 2.875928,
+          "wall_ms": 2.87935500000458,
+          "processed_entity_updates": 1600
+        },
+        "variant_b_filtered_compact": {
+          "messages": 41,
+          "bytes": 35743,
+          "cpu_ms": 2.0435360000000125,
+          "wall_ms": 2.045959999918523,
+          "processed_entity_updates": 241
+        },
+        "variant_c_dual_stream": {
+          "messages": 442,
+          "bytes": 543993,
+          "decode_cpu_sum_ms": 4.919464000000012,
+          "note": "logical dual subscription, not two sockets; summed decoder costs only"
+        },
+        "equivalent_selected_runtime_state": true,
+        "state_sha256": "3e7dfa9360022404e4c5a971f567a43aa161c91be63243b6bb20285d8395aa4f",
+        "original_event_envelope_preserved_by_compact": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "ha_server_cpu_ms": null,
+        "network_ms": null,
+        "event_to_intent_ms": null,
+        "rest_resync_ms": null,
+        "recorder_io_ms": null,
+        "limits": "Decoder microbenchmark including compact initial snapshot, same generated changes. No end-to-end speedup claim; unknown live subscription dependency set and HA version require validation."
+      }
+    ],
+    "journal": [
+      {
+        "sensors": 5,
+        "rows": 20,
+        "per_sensor": 4,
+        "batch_size": 128,
+        "timing": {
+          "wall_ms": 4.657248000057734,
+          "cpu_ms": 1.9681959999999776
+        },
+        "write_sql_api_calls": {
+          "execute": 11
+        },
+        "sqlite_objects_bytes": {
+          "feature_observation_events": 4096,
+          "feature_window_entities": 4096,
+          "feature_windows": 4096
+        },
+        "sqlite_files_bytes": {
+          "journal.db": 167936
+        },
+        "recorder_rows": null,
+        "actual_duplicate_rows": null,
+        "coverage_witness": false,
+        "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+      },
+      {
+        "sensors": 50,
+        "rows": 200,
+        "per_sensor": 4,
+        "batch_size": 128,
+        "timing": {
+          "wall_ms": 20.836149000047044,
+          "cpu_ms": 11.85205100000003
+        },
+        "write_sql_api_calls": {
+          "execute": 37
+        },
+        "sqlite_objects_bytes": {
+          "feature_observation_events": 32768,
+          "feature_window_entities": 4096,
+          "feature_windows": 4096
+        },
+        "sqlite_files_bytes": {
+          "journal.db": 237568
+        },
+        "recorder_rows": null,
+        "actual_duplicate_rows": null,
+        "coverage_witness": false,
+        "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+      },
+      {
+        "sensors": 200,
+        "rows": 800,
+        "per_sensor": 4,
+        "batch_size": 128,
+        "timing": {
+          "wall_ms": 76.27488299999641,
+          "cpu_ms": 44.256762
+        },
+        "write_sql_api_calls": {
+          "execute": 167
+        },
+        "sqlite_objects_bytes": {
+          "feature_observation_events": 110592,
+          "feature_window_entities": 4096,
+          "feature_windows": 4096
+        },
+        "sqlite_files_bytes": {
+          "journal.db": 446464
+        },
+        "recorder_rows": null,
+        "actual_duplicate_rows": null,
+        "coverage_witness": false,
+        "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+      },
+      {
+        "sensors": 1000,
+        "rows": 4000,
+        "per_sensor": 4,
+        "batch_size": 128,
+        "timing": {
+          "wall_ms": 405.47143399999186,
+          "cpu_ms": 248.639736
+        },
+        "write_sql_api_calls": {
+          "execute": 817
+        },
+        "sqlite_objects_bytes": {
+          "feature_observation_events": 532480,
+          "feature_window_entities": 4096,
+          "feature_windows": 4096
+        },
+        "sqlite_files_bytes": {
+          "journal.db": 1540096
+        },
+        "recorder_rows": null,
+        "actual_duplicate_rows": null,
+        "coverage_witness": false,
+        "limits": "Actual local FeatureJournal writes with V3 triggers, no live Recorder or concurrent inference. SQL API calls exclude internal trigger VM work; dbstat reports object pages, not logical payload size. No inference about which entities a household Recorder includes."
+      }
+    ],
+    "recorder_inspection": [
+      {
+        "rows": 0,
+        "entities": [],
+        "missing_requested_entities": [
+          "sensor.example"
+        ],
+        "rows_with_attributes": 0,
+        "rows_with_context": 0,
+        "rows_with_both_state_clocks": 0,
+        "original_local_received_times": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+      },
+      {
+        "rows": 0,
+        "entities": [],
+        "missing_requested_entities": [
+          "sensor.example"
+        ],
+        "rows_with_attributes": 0,
+        "rows_with_context": 0,
+        "rows_with_both_state_clocks": 0,
+        "original_local_received_times": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+      },
+      {
+        "rows": 1,
+        "entities": [
+          "sensor.example"
+        ],
+        "missing_requested_entities": [],
+        "rows_with_attributes": 1,
+        "rows_with_context": 1,
+        "rows_with_both_state_clocks": 1,
+        "original_local_received_times": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+      },
+      {
+        "rows": 1,
+        "entities": [],
+        "missing_requested_entities": [
+          "sensor.example"
+        ],
+        "rows_with_attributes": 0,
+        "rows_with_context": 0,
+        "rows_with_both_state_clocks": 0,
+        "original_local_received_times": false,
+        "history_complete": false,
+        "evidence_eligible": false,
+        "reason": "Recorder responses do not prove inclusion/retention/WS continuity or original local receipt clocks"
+      }
+    ],
+    "architecture_decision": {
+      "filtered_compact": "research only, runtime cache only; no evidence qualification",
+      "dual_stream": "not adopted: measured additive wire cost; no measured end-to-end benefit",
+      "recorder_replacement": "rejected: API responses lack original local receipt/coverage/AI authority",
+      "recorder_auxiliary": "existing HAClient/HistoryManager retained; no hot-path history query"
+    },
+    "actual_ha_version": null,
+    "production_configuration_changed": false
+  },
+  "validation": {
+    "local_full_suite": {
+      "tests": 3110,
+      "seconds": 478.362,
+      "status": "OK",
+      "exit_code": 0,
+      "log_sha256": "77461ffba5628d08361efe85f210e40f3b97d0fa8848c69b693f02f48250e6b2",
+      "source_manifest_sha256": "05376e98e06e8293d8e704b7bd205cd72b054613bdad139b5dcc8e439859091a",
+      "note": "Validated snapshot precedes final diagnostic admission/Tiny-lock probes; runtime/client/protocol/test code matches implementation. Final profiler source is exercised separately by admission A/B and required CI."
+    },
+    "new_contract_tests": {
+      "tests": 10,
+      "exit_code": 0
+    },
+    "failing_history_query_test_before_fix": {
+      "file": "contracts-before.log",
+      "reason": "Missing significant_changes_only=0"
+    },
+    "implementation_sha": "ff44e24b2344a7140369ac864b6bcc2f7d63cc8a",
+    "ci_status": "success",
+    "local_source_comparison": {
+      "checked_files": 724,
+      "implementation": "ff44e24b2344a7140369ac864b6bcc2f7d63cc8a",
+      "differences": [
+        {
+          "file": "tools/profile_universal_runtime.py",
+          "implementation_sha256": "41b9562f11a3be77f355431a055e6d18520d059501712c47a270e00c27ffd3e4",
+          "validated_sha256": "41a373ed74e60dc59db07b1be345bb6fbb3bdd34e5ef9c3c666c52d3dabbeaff"
+        }
+      ]
+    },
+    "final_profiler_aa_source_verified": true,
+    "final_runtime_python_manifest_sha256": "6c980c7076903f0c593b7ad26f106279040f17ca7b0c5cab01cbba8689221516",
+    "ci_commit": "e8aea5e3c0ddc72634b1362b3f1a9a057b05a527",
+    "ci_run": 41742078889,
+    "ci_tests": {
+      "3.11": 3110,
+      "3.13": 3110
+    }
+  },
+  "invalid_diagnostics": {
+    "folder": "u05b4c1/invalid-cprofile",
+    "status": "rejected instrumentation",
+    "reason": "Inconsistent cProfile CPU attribution; 50/10 timeout; not evidence of production failure"
+  },
+  "blockers": [
+    "Default 30s 1000/200 recovery not established",
+    "Collector losses persist, mixed envelope counters",
+    "Repeatable p95 improvement and complete post-fix matrix not established",
+    "200/30 old current A outlier lacks conclusive cause",
+    "Live HA permission/reconnect and Recorder load unvalidated"
+  ],
+  "ha_compatibility": {
+    "minimum_core": "2026.1.2",
+    "installed_core_user_reported": "2026.1.2",
+    "confirmed_on": "2026-11-04",
+    "source_commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "live_api_acceptance": false,
+    "comparison_versions": [
+      "2026.10.4",
+      "2025.1.4"
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+test_recorder_full_minimal_missing_and_unavailable_do_not_certify_coverage (test_ha_native_contracts.AuxiliaryEvidenceTests.test_recorder_full_minimal_missing_and_unavailable_do_not_certify_coverage) ... ok
+test_stack_sampler_is_bounded_and_does_not_capture_local_values (test_ha_native_contracts.AuxiliaryEvidenceTests.test_stack_sampler_is_bounded_and_does_not_capture_local_values) ... ok
+test_attribute_remove_partial_context_and_clocks_preserve_known_fields (test_ha_native_contracts.CompactContractTests.test_attribute_remove_partial_context_and_clocks_preserve_known_fields) ... ok
+test_compact_context_id_does_not_invent_unknown_parent_or_user (test_ha_native_contracts.CompactContractTests.test_compact_context_id_does_not_invent_unknown_parent_or_user) ... ok
+test_invalid_partial_message_cannot_commit_earlier_changes (test_ha_native_contracts.CompactContractTests.test_invalid_partial_message_cannot_commit_earlier_changes) ... ok
+test_malformed_attributes_clocks_and_unknown_contract_fail_closed (test_ha_native_contracts.CompactContractTests.test_malformed_attributes_clocks_and_unknown_contract_fail_closed) ... ok
+test_removal_reconnect_and_changed_subscription_require_fresh_base (test_ha_native_contracts.CompactContractTests.test_removal_reconnect_and_changed_subscription_require_fresh_base) ... ok
+test_transport_replay_preserves_selected_state_but_never_claims_evidence (test_ha_native_contracts.CompactContractTests.test_transport_replay_preserves_selected_state_but_never_claims_evidence) ... ok
+test_default_history_still_requests_minimal_significant_without_attributes (test_ha_native_contracts.HistoryRequestTests.test_default_history_still_requests_minimal_significant_without_attributes) ... ok
+test_full_history_disables_significant_default_explicitly (test_ha_native_contracts.HistoryRequestTests.test_full_history_disables_significant_default_explicitly) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.126s
+
+OK

@@ -1,0 +1,14 @@
+Adaptive AI 0.14.232 starting; HA=http://supervisor/core/api
+Traceback (most recent call last):
+  File "/home/mpuchara/homemind-u05b4c1-20261103/current/tools/profile_universal_runtime.py", line 130, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/mpuchara/homemind-u05b4c1-20261103/current/tools/profile_universal_runtime.py", line 126, in main
+    result=run(args)
+           ^^^^^^^^^
+  File "/home/mpuchara/homemind-u05b4c1-20261103/current/tools/profile_universal_runtime.py", line 82, in run
+    raw=harness.run(args.source_root,args.devices,args.events,entities=args.sensors+args.devices,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mpuchara/homemind-u05b4c1-20261103/current/tools/benchmark_runtime_scaling.py", line 267, in run
+    raise AssertionError(dict(seen=len(seen),expected=count,error=engine.error,
+AssertionError: {'seen': 7, 'expected': 10, 'error': None, 'event_step': 0, 'warmup': True, 'observation_timeout_seconds': 120.0, 'elapsed_ms': 120000.637811}

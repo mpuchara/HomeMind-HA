@@ -1,0 +1,2 @@
+Adaptive AI 0.14.232 starting; HA=http://supervisor/core/api
+{"sensors": 5, "devices": 1, "warmup_pipeline": {"count": 2, "p50_ms": 43.353736000000254, "p95_ms": 43.353736000000254, "p99_ms": 43.353736000000254, "max_ms": 48.343552999995154}, "event_to_intent": {"count": 4, "p50_ms": 9.893185999999332, "p95_ms": 10.12264300000254, "p99_ms": 10.12264300000254, "max_ms": 16.40177600000925}, "profiled_agent_calls": 6, "ha_calls": 0}

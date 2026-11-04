@@ -1,0 +1,167 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/components/websocket_api/commands.py",
+    "tag": "2026.10.4",
+    "file": "components_websocket_api_commands.py",
+    "sha256": "af8271175e357383797c955545afb6ea9bb4aa14bac2aa1da0a342aaca78d99e",
+    "bytes": 46271,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/components/websocket_api/commands.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/components/websocket_api/messages.py",
+    "tag": "2026.10.4",
+    "file": "components_websocket_api_messages.py",
+    "sha256": "525d060ffc2aa2ab8f76a075d036c1ebb5cf243e5391f5ef11c73f7be1a5c7ed",
+    "bytes": 9005,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/components/websocket_api/messages.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/components/history/__init__.py",
+    "tag": "2026.10.4",
+    "file": "components_history___init__.py",
+    "sha256": "134fce5b006d52c3fb9221cad888871e473147ecd99a92b2f8efa8c3787d75f4",
+    "bytes": 6042,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/components/history/__init__.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/components/history/websocket_api.py",
+    "tag": "2026.10.4",
+    "file": "components_history_websocket_api.py",
+    "sha256": "5b3fdf3acfa0c8e254819473e24408a9d54d3b0cedb8cda6f13551b5bf8ed7c0",
+    "bytes": 19423,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/components/history/websocket_api.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/helpers/entity_registry.py",
+    "tag": "2026.10.4",
+    "file": "helpers_entity_registry.py",
+    "sha256": "f77b7ae946a0902136faadb3cfe45d17aca24fa639c43189295e101f5e47f425",
+    "bytes": 115504,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/helpers/entity_registry.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/helpers/device_registry.py",
+    "tag": "2026.10.4",
+    "file": "helpers_device_registry.py",
+    "sha256": "a7121fe607eae7e0b9128ba23517072925890eab8904dca9e4554ed71f62ac20",
+    "bytes": 216019,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/helpers/device_registry.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/helpers/area_registry.py",
+    "tag": "2026.10.4",
+    "file": "helpers_area_registry.py",
+    "sha256": "4e3317d638ee185e5d36053b1ba8d4f10dcbafb99c2c589b18bcfa322ea88bbe",
+    "bytes": 21373,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/helpers/area_registry.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2026.10.4/homeassistant/components/recorder/db_schema.py",
+    "tag": "2026.10.4",
+    "file": "components_recorder_db_schema.py",
+    "sha256": "2ae9c803ec3fc575b04ee93997a30e746d33cbd5bf44e03d74e9d2c910cac668",
+    "bytes": 32818,
+    "commit": "357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/357cae5c598dfcd7a0ea7dc5b1facccd4ec6037b/homeassistant/components/recorder/db_schema.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2025.1.4/homeassistant/components/websocket_api/commands.py",
+    "file": "ha2025_homeassistant_components_websocket_api_commands.py",
+    "tag": "2025.1.4",
+    "sha256": "d8ac8be8557986031ff95e3bfe9fb069a35cfce372f1a4ba0c4ca9e5d5a9cfb7",
+    "bytes": 30648
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/2025.1.4/homeassistant/components/history/__init__.py",
+    "file": "ha2025_homeassistant_components_history___init__.py",
+    "tag": "2025.1.4",
+    "sha256": "9f008c10885c6935c8c3a5872e22063dfbcb68a40a6aed3aad673135d8d365d6",
+    "bytes": 5674
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/home-assistant-js-websocket/ad8031f63b996cccb9dc53633325c2039b030aee/lib/states.ts",
+    "file": "official-client-states.ts",
+    "commit": "ad8031f63b996cccb9dc53633325c2039b030aee",
+    "sha256": "7d5daac6f30a44b87faf1111b2dc9d5c51a9696b4f9ed2a193ac5a68e63b6e52",
+    "bytes": 5550
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/websocket_api/commands.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/websocket_api/commands.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_components_websocket_api_commands.py",
+    "sha256": "598df21a50718225a1096749b34137860691897fef208e780f9bb771bd99ad5a",
+    "bytes": 39732
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/websocket_api/messages.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/websocket_api/messages.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_components_websocket_api_messages.py",
+    "sha256": "154b44945f315fdb2e067895cdeb8664c0c144c2d67b5198b9b30bc3901ec71e",
+    "bytes": 8757
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/history/__init__.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/history/__init__.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_components_history___init__.py",
+    "sha256": "5a24b2369f9704b683acfc8d89fe42bd1d323da395b8665b4e0136cd22fd9871",
+    "bytes": 5731
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/history/websocket_api.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/history/websocket_api.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_components_history_websocket_api.py",
+    "sha256": "243c6f569d5d44a21ffc60b82263d5a588bf9f945079302ca5901ec5ebe1f16a",
+    "bytes": 18841
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/entity_registry.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/entity_registry.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_helpers_entity_registry.py",
+    "sha256": "69e42ff9cd485e6e89312ed71034356d3609cc6154e75154acfeeb168e9b7d96",
+    "bytes": 80034
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/device_registry.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/device_registry.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_helpers_device_registry.py",
+    "sha256": "dbef11c3840de4fd4e1abf6ea1dfd84fd2f0b242a0f391d66808f2e5e22d687f",
+    "bytes": 76292
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/area_registry.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/helpers/area_registry.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_helpers_area_registry.py",
+    "sha256": "0f653a3ce07dba4703e4163a3f004971da8731d35e7c6bf535b8b06682fa6399",
+    "bytes": 21238
+  },
+  {
+    "url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/recorder/db_schema.py",
+    "immutable_url": "https://raw.githubusercontent.com/home-assistant/core/ae17b620f69b7a132d32d2de1e30097f9a251616/homeassistant/components/recorder/db_schema.py",
+    "tag": "2026.1.2",
+    "commit": "ae17b620f69b7a132d32d2de1e30097f9a251616",
+    "file": "ha2026_1_2_components_recorder_db_schema.py",
+    "sha256": "3abdcd41117dc599991eb9bc496dd753e547e623cbfe4d10c468012b9078a730",
+    "bytes": 31972
+  }
+]
