@@ -40,3 +40,32 @@ the ext4 source snapshot with the benchmark instrumentation applied.
 
 See [instrumentation commit CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41892759549)
 for the separate Python 3.11, Python 3.13 and image results.
+
+## g.2 gates for implementation `245307f4`
+
+**Overall status is BLOCKER.** The matched harness provides synthetic
+component evidence. The Busy latency and CPU screens did not clear.
+
+| Gate | Status | Scope |
+| --- | --- | --- |
+| A · Functional Safety | INCONCLUSIVE | Same 384 original intents and signature per matched case. Zero HA calls. Production composition pending. |
+| B · Warmup | NOT RUN | Preseeded timed workloads. |
+| C · Collector Durability | PASS in matched host matrix | Every enabled row set persisted 384 original decisions with zero collector drops and errors. |
+| D · Steady-State Performance | BLOCKER | Busy 128+128 breached both latency margins. Both supported Busy cases breached the CPU margin. |
+| E · Qualified Historical Evidence | PASS in matched host matrix | V3 rose 16/1152 → 53/1152. OFF, incomplete and unsupported controls yielded zero V3. |
+| F · Predecision Scalability | BLOCKER | Throughput screen passed, but Busy cost remains open. Over 256 durable configs remains unsupported. |
+| G · Candidate Recovery | NOT RUN | Load-end diagnostics only. Drain and fresh wave remain open. |
+| H · Long-Term Stability | NOT RUN | Four-hour run pending for this SHA. |
+| I · Production Composition | NOT RUN | Real scheduler, fake WebSocket, reconnect and HTTP timing pending. |
+| J · Raspberry Pi / Real HA | NOT RUN | Synthetic host runs only. |
+
+The retention miss remains INTERMITTENT / UNRESOLVED. The earlier failure
+and isolated repetitions retain their original source identities.
+
+On implementation `245307f470cd710e0a3d6906934d825573d5a3d8`, the
+ext4 focused suite passed 114 tests in 71.002 s. It covered controlled
+budget accounting and foreground admission, detached predecision, the
+durable configuration bound, collector contention and restart, historical
+retention and affected sensors. The implementation run passed full Python
+3.11 and 3.13 regression, the required benchmarks and image build/smoke.
+[Implementation CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41917914493)

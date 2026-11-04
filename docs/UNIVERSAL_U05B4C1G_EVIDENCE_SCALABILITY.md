@@ -127,3 +127,79 @@ Report consumed/prepared per case. Screen relative latency at +10% p95 and
 +15% p99 per pair, relative load CPU at +15% and RSS at +10%. One pair per
 case is descriptive. An observed breach stays visible and a production
 non-inferiority claim requires independent repetitions.
+
+## g.2 implementation and matched observations
+
+Implementation `245307f470cd710e0a3d6906934d825573d5a3d8`. A completed
+preparation turn accrues cooldown equal to active turn wall time ×
+`(1 − duty) / duty`, using the configured Training Budget duty cycle.
+Ingress waits and native writes can overlap that cooldown. There is no
+preparation sleep and no accumulated burst credit. The worker rechecks
+foreground admission before each single-target turn. Preparation uses a
+zero SQLite busy timeout. Failed writer drains leave preparation for a
+later iteration. The original writer's checkpoint retains its intra-turn
+behavior and no longer charges elapsed time from a preceding preparation
+turn. The existing closed-session recovery now imports the SQLite exception
+type it uses.
+
+| Case | Prepared | Consumed / prepared | V3 qualified / intents | p95 ms | p99 ms | Load CPU s | End RSS MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Normal 200+0 | 10 → 40 | 5/10 → 22/40 | 5/384 → 22/384 | 111.0 → 64.4 | 133.7 → 73.0 | 2.46 → 2.14 | 77.9 → 81.1 |
+| Busy 128+128 | 9 → 36 | 8/9 → 28/36 | 7/384 → 24/384 | 139.0 → 179.6 | 160.5 → 258.9 | 5.08 → 6.54 | 89.9 → 93.0 |
+| Busy 200+56 | 9 → 27 | 5/9 → 9/27 | 4/384 → 7/384 | 238.5 → 260.2 | 309.9 → 306.0 | 6.74 → 8.96 | 86.7 → 87.9 |
+| Busy 200+200 | 0 → 0 | — | 0/384 → 0/384 | 236.3 → 265.4 | 278.6 → 297.5 | 9.43 → 10.00 | 101.9 → 99.2 |
+| OFF 200+0 | 0 → 0 | — | 0/384 → 0/384 | 89.7 → 53.2 | 100.1 → 59.0 | 1.66 → 1.02 | 56.2 → 55.9 |
+| Incomplete 200+0 | 0 → 0 | — | 0/384 → 0/384 | 55.2 → 54.9 | 64.7 → 68.8 | 1.22 → 1.23 | 76.2 → 76.2 |
+
+The supported cases met the registered throughput screen. Consumed
+evidence rose from 18 to 59 and V3 from 16/1152 to 53/1152. Consumption
+efficiency fell in both Busy cases. The Busy 128+128 pair exceeded both
+latency margins and the two Busy cases exceeded the CPU margin. In Busy
+128+128 the concurrent worker produced 1,045 → 901 updates and Candidate
+processed 332 → 302 jobs while its own drops rose 36 → 70. Offered load
+was identical. Completed background work varied, so causal attribution
+and latency non-inferiority remain open.
+
+Two additional unprofiled pairs reversed the original run order.
+
+| Case | Consumed / prepared | V3 qualified / intents | p95 ms | p99 ms | Load CPU s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Busy 128+128 repeat | 8/9 → 36/40 | 7/384 → 31/384 | 139.9 → 144.6 | 161.8 → 171.8 | 5.06 → 5.93 |
+| Busy 200+56 repeat | 5/11 → 21/41 | 4/384 → 18/384 | 144.6 → 161.4 | 170.5 → 183.6 | 5.01 → 6.18 |
+
+The 128+128 repeat stayed within both latency margins. The 200+56
+repeat exceeded the p95 margin by 1.6 percentage points. All four
+supported Busy pairs exceeded the CPU margin. The repeat results
+strengthen the throughput observation and leave the tail result mixed.
+
+The current preparation worker spent 0.667, 0.968 and 1.172 s wall time
+in turns during the three supported loads and 0.668, 0.794 and 0.873 s
+of thread CPU, respectively. Preparation occupied about 7%, 10% and 12%
+of load wall time. Its cooldown deferred 0, 1 and 1 admission attempts.
+These are not measurements of aggregate CPU capacity. Raw rows retain
+pending and rejected counts, physical V2 receipts, collector counts,
+native writer latency and SQLite operations. The inherited harness
+does not expose event-to-intent max or split snapshot rejection into
+eviction, expiry and invalidation. Those metrics are unmeasured.
+
+## g.2 durable configuration bound
+
+The bounded count shares the native SQLite snapshot and runs before
+affected-sensor lookups or arbiter table copies. The separate profiled
+runs include finalization, so counts can exceed the timed load counters.
+
+| Durable configs | Median native snapshot wall ms | Median turn wall ms | Median turn thread CPU ms | Traced native SQL calls / turn |
+| --- | ---: | ---: | ---: | ---: |
+| 256 | 11.152 → 12.204 | 301.994 → 28.176 | 18.957 → 21.027 | 12 → 13 |
+| 258 | 13.595 → 0.395 | 777.591 → 4.824 | 17.013 → 4.694 | 12 → 3 |
+| 400 | 30.032 → 0.514 | 325.124 → 5.177 | 24.961 → 4.957 | 12 → 3 |
+
+The extra query at 256 retained valid preparation and V2/V3 production
+in the synthetic case. The 258 and 400 cases still returned `agent bound`
+and produced zero V2 and V3. Lower per-attempt cost did not guarantee
+lower aggregate rejection work. The 400 profile made 15 → 216 rejected
+attempts, and the 258 profile made 13 → 238. These are unsupported controls.
+At 256, the original mask's median wall time was 2.406 → 2.766 ms and
+affected-evidence preparation was 0.150 → 0.157 ms. These inclusive spans
+can overlap. The bounded copy probe combines related state and payload
+copies and does not separately attribute them.

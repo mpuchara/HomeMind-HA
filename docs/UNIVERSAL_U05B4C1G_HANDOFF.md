@@ -59,3 +59,48 @@ Compose them with the real Engine and the scheduler workload from
 `GET /api/agents/{id}/teach-rl-status` through the existing routes.
 Record service-call attempts at the transport boundary and compare HTTP
 latency during idle, sustained write load and reconnect.
+# U05b.4c.1g.2 handoff
+
+Implementation `245307f470cd710e0a3d6906934d825573d5a3d8` on Draft #369
+was compared with exact baseline `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+Keep both archived sources under
+`~/homemind-u05b4c1g/g2-245307f470cd710e0a3d6906934d825573d5a3d8-B28dat`
+in WSL. The directory has source identities, harness hashes, raw JSONL,
+stderr and exit status for each attempt. The initial archive attempt in
+the sibling `-GEC7CU` directory failed before running a benchmark because
+Linux Git could not resolve the Windows worktree pointer. Windows Git
+archive through WSL produced the two ext4 snapshots for the measured runs.
+
+Start from the g.2 evidence report and the g.2 gate table. Both Busy cases
+already have one reverse-order repeat. All four pairs exceeded the CPU
+margin and the latency screen was mixed. Profile preparation overlap with
+ingress and Candidate activity before changing the preparation policy.
+Keep the synthetic background worker's actual update and Candidate counts
+visible, since fixed ingress does not guarantee identical background work.
+Use unprofiled measurements to assess latency. Keep the 400-config control
+and limit the supported comparisons to at most 256 durable configs.
+
+From each snapshot root (`base` and `current`), run the same command with a
+fresh output suffix. Use `--cases 1000:200 --candidates 56` for the other
+supported Busy case.
+
+```bash
+source ~/homemind-perf-venv/bin/activate
+python tools/benchmark_qualified_evidence.py --cases 1000:128 --modes busy \
+  --candidates 128 --ticks 24 --period .4 --fanout 16 \
+  --output "$(mktemp -d "$HOME/homemind-u05b4c1g/g2-extra-XXXXXX")/busy128.jsonl"
+```
+
+For g.3 use the same Busy workload with only preparation toggled. Measure
+the first queue drain, stale futures and a fresh wave. Preserve the prior
+retention failure log and run rollback in both retention-first and
+retention-last orders. For g.4 compose the real scheduler with the fake
+WebSocket and time the three existing HTTP routes. For g.5 run the
+four-hour soak on ext4 with a fresh output name and no concurrent latency
+run:
+
+```bash
+source ~/homemind-perf-venv/bin/activate
+python tools/benchmark_qualified_soak.py --duration 14400 --window 45 \
+  --output ~/homemind-u05b4c1g/soak-4h-final.jsonl
+```
