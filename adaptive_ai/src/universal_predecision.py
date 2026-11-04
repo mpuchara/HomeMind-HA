@@ -21,6 +21,19 @@ TABLES = ('agents', 'device_explicit_mappings', 'device_resource_state',
 REVISION_TABLES = TABLES + ('universal_affected_declarations',)
 
 
+def _sqlite_row_bytes(rows):
+    # A detached SQLite row contains scalar values. Account for the batch,
+    # each row, and each scalar using the same structural budget as bounded_copy.
+    size = 64 + sum(64 * (1 + len(row)) for row in rows)
+    for row in rows:
+        for value in row:
+            if isinstance(value, str):
+                size += 4 * len(value)
+            elif value is not None and type(value) not in (int, float):
+                raise ValueError('non-JSON receipt')
+    return size
+
+
 def initialize(conn):
     from universal_affected_sensors import ensure_schema
     ensure_schema(conn)
@@ -201,11 +214,13 @@ class PredecisionEvidence:
                 declaration=latest(c,aid)
                 affected_scope=affected_topology(c,topology)
                 copied_bytes = 0
+                configs = []
                 for table in TABLES:
                     schema = c.execute('SELECT sql FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone()
                     if schema is None:
                         raise ValueError('missing arbiter table: '+table)
-                    db.execute(schema[0])
+                    if table != 'agents':
+                        db.execute(schema[0])
                     cursor = c.execute(f'SELECT * FROM {table} LIMIT 10001')
                     count = 0
                     while True:
@@ -213,12 +228,15 @@ class PredecisionEvidence:
                         if not rows:
                             break
                         count += len(rows)
-                        rows, size = bounded_copy([tuple(r) for r in rows],limit=4*1024*1024)
-                        copied_bytes += size
+                        copied_bytes += _sqlite_row_bytes(rows)
                         if count > 10000 or copied_bytes > 4*1024*1024:
                             raise ValueError('arbiter table bound')
-                        db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
-                configs = [self.store._agent_dict(r) for r in db.execute('SELECT * FROM agents')]
+                        if table == 'agents':
+                            # SnapshotStore serves configs directly to the arbiter.
+                            # Read them once from the same native transaction.
+                            configs.extend(self.store._agent_dict(row) for row in rows)
+                        else:
+                            db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
                 config = next((a for a in configs if a['id'] == aid), None)
                 if config is None or any(agent.get(k) != v for k, v in config.items()):
                     raise ValueError('RAM/durable config mismatch')

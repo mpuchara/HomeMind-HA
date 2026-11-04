@@ -26,8 +26,10 @@ SCALES = "5:1,50:10,200:30,1000:200"
 
 def quantiles(values):
     ordered = sorted(values)
-    return {f"p{p}_ms": ordered[(len(ordered)-1)*p//100] if ordered else None
-            for p in (50, 95, 99)}
+    result = {f"p{p}_ms": ordered[(len(ordered)-1)*p//100] if ordered else None
+              for p in (50, 95, 99)}
+    result["max_ms"] = ordered[-1] if ordered else None
+    return result
 
 
 def wait_for_writer(collector, timeout=30):
