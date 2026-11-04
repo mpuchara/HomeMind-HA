@@ -301,6 +301,31 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         with self.store.conn() as c:
             self.assertEqual(c.execute('SELECT reason FROM universal_collection_sessions WHERE id=?',(self.collector.session,)).fetchone()[0],'clean_shutdown')
 
+    def test_worker_reopens_after_reusable_connection_startup_failure(self):
+        from contextlib import contextmanager
+        original=self.store.connection_session
+        attempts=[];committed=threading.Event();write=self.collector._write
+        @contextmanager
+        def connection():
+            attempts.append(True)
+            if len(attempts)==1:raise OSError('temporary session open failure')
+            with original() as c:yield c
+        def written(*args):
+            result=write(*args);committed.set();return result
+        self.collector.event('sensor.a',dict(state='1'),event_ts=10.,received_ts=11.)
+        with patch.object(self.store,'connection_session',connection),patch.object(self.collector,'_write',written):
+            self.collector.start()
+            try:
+                self.assertTrue(self.collector.ready.wait(3.))
+                self.assertTrue(committed.wait(3.))
+            finally:self.assertTrue(self.collector.stop(3.))
+        self.assertGreaterEqual(len(attempts),2)
+        self.assertEqual(self.collector.stats['errors'],1)
+        self.assertEqual(self.collector.stats['last_error'],'OSError')
+        self.assertEqual(self.collector.stats['dropped'],0)
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE entity_id='sensor.a'").fetchone()[0],1)
+
     def test_sustained_foreground_does_not_starve_native_writer(self):
         self.collector.idle_ready=lambda:False
         self.collector.event('binary_sensor.motion',dict(state='on'),event_ts=10.,received_ts=11.)

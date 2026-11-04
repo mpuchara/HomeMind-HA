@@ -15,7 +15,7 @@ import time
 import uuid
 
 from storage_budget import require_storage_available, StorageRetry
-from sqlite_background import background_sqlite, is_sqlite_busy, connection_session
+from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_worker
 
 MAX_RECORD = 4 * 1024 * 1024
 MAX_ENTITIES = 10000
@@ -587,8 +587,11 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def run(self):
         # Short conn() transactions retain their independent commit boundaries.
-        with connection_session(self.store):
-            self._run()
+        # Opening the reusable session can fail before drain()'s retry handler.
+        # Use the same reopen/final-drain lifecycle as the other native writers.
+        def report(exc):
+            self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
+        run_connection_worker(self.store,self.halt,self._run,self.retry,report)
 
     def _run(self):
         self.ready.set()
