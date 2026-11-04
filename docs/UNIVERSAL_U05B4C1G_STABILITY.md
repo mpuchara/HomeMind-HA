@@ -80,3 +80,15 @@ one breached the CPU margin, and Normal breached CPU and both latency
 margins. The supported cases retained the throughput gain. Gates G–J
 remain unrun and the earlier intermittent retention miss remains open.
 [Snapshot follow-up CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41922738919)
+
+### Preparation cadence follow-up
+
+`ab7116f585a2016c3a4a2cf6d513a7a62c3b40fb` passed 115 focused WSL
+tests in 76.385 s. Nine matched pairs preserved intent signatures with
+zero HA calls and zero collector errors or drops. All enabled cases
+persisted 384 original decisions. OFF, incomplete and the 400-config
+control yielded zero V3. Gate D remains **BLOCKER**. The four supported
+Busy pairs and first Normal pair met the registered performance margins.
+The second Normal pair exceeded p95 and CPU. The registered throughput
+screen passed. Gates G–J remain unrun for this checkpoint.
+[Cadence CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41931141100)

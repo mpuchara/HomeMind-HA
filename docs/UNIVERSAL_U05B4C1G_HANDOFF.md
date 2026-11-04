@@ -61,6 +61,15 @@ Record service-call attempts at the transport boundary and compare HTTP
 latency during idle, sustained write load and reconnect.
 # U05b.4c.1g.2 handoff
 
+Cadence checkpoint `ab7116f585a2016c3a4a2cf6d513a7a62c3b40fb` is the
+latest runtime. Its snapshots and raw results are in WSL under
+`~/homemind-u05b4c1g/g2cad-ab7116f5-siPzhv`. All four supported Busy
+pairs passed the registered margins. Normal passed once and breached
+p95 and CPU in the reverse-order pair. Focus subsequent diagnostics on
+Normal before changing the preparation cadence again. Compare CPU per
+turn and overlap with the next ingress rather than using aggregate CPU
+alone. Preserve all observed pairs and the registered margins.
+
 Snapshot optimization `3aecd8182223fa69af4578c6edbc7bbd7a1ae284` is
 the latest runtime checkpoint. Use the paired sources, logs, harness
 hashes and source identity in WSL under

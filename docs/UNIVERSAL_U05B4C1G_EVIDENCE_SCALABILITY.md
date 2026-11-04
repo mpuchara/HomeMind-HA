@@ -260,3 +260,35 @@ The separate 400-config control still rejected with `agent bound` and
 zero V3. Its native snapshot median was 31.773 → 0.757 ms versus #368.
 The unsupported case attempted more preparations, 14 → 165 in the
 profile, so the lower per-attempt cost does not establish lower total CPU.
+
+## g.2 preparation poll cadence
+
+Implementation `ab7116f585a2016c3a4a2cf6d513a7a62c3b40fb` retains the
+existing 250 ms preparation poll interval as a minimum between preparation
+starts. Writer notifications can advance the writer independently. The
+existing active-work cooldown can extend the interval and foreground
+admission still applies before each turn. A controlled-clock regression
+exercises multiple wakeups within the interval.
+
+Two serial pairs per supported case used the exact #368 baseline
+`951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`, identical harnesses, separate
+ext4 snapshots and reversed order in the second series.
+
+| Case | Prepared | V3 / 384 | p95 | p99 | Load CPU |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Normal pair 1 | 9 → 23 | 5 → 13 | −24.4% | −32.0% | −14.3% |
+| Normal pair 2 | 12 → 23 | 5 → 13 | **+15.2%** | +2.6% | **+19.0%** |
+| Busy 128+128 pair 1 | 10 → 23 | 6 → 19 | −33.3% | −34.0% | −14.6% |
+| Busy 128+128 pair 2 | 7 → 22 | 4 → 19 | +3.6% | −13.5% | −3.3% |
+| Busy 200+56 pair 1 | 10 → 22 | 4 → 10 | +2.4% | +8.4% | +11.8% |
+| Busy 200+56 pair 2 | 11 → 23 | 4 → 11 | −23.9% | −27.5% | −7.1% |
+
+Across the six supported pairs, consumed evidence increased 32 → 94 and
+V3 increased 28 → 85 per 2304 intents. All four Busy pairs passed all
+four performance margins. The second Normal pair breached p95 and CPU.
+The current Normal preparation thread used 0.397–0.409 s CPU per
+run. The baseline's Normal load CPU differed substantially between the
+two observations (2.863 and 2.047 s). The observations establish that
+the cadence bound reduces turn count under this offered load relative to
+the preceding implementation's 41-turn Normal observation. They leave
+Normal performance acceptance open.
