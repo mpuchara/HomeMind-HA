@@ -326,6 +326,56 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         with self.store.conn() as c:
             self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE entity_id='sensor.a'").fetchone()[0],1)
 
+    def test_worker_reopens_after_mid_session_connection_loss(self):
+        from contextlib import contextmanager
+
+        self.seed()
+        store, collector = self.store, self.collector
+        open_session, write = store.connection_session, collector._write
+        sessions = []
+        gap_written = threading.Event()
+        recovered = threading.Event()
+
+        @contextmanager
+        def connection():
+            with open_session() as conn:
+                sessions.append(conn)
+                yield conn
+
+        def write_with_loss(batch, gap, epoch, reset):
+            if len(sessions) == 1:
+                sessions[0].close()
+            write(batch, gap, epoch, reset)
+            if gap == 'write_failure':
+                gap_written.set()
+            if any(row[1] == 'event' for row in batch):
+                recovered.set()
+
+        with patch.object(store, 'connection_session', connection), patch.object(collector, '_write', write_with_loss):
+            collector.start()
+            try:
+                self.assertTrue(collector.ready.wait(3.))
+                with collector.cv:
+                    collector.event('binary_sensor.motion0', dict(state='on'), event_ts=41., received_ts=42.)
+                    collector.barrier(60.)
+                self.assertTrue(gap_written.wait(5.), collector.diagnostics())
+                collector.event('binary_sensor.motion0', dict(state='off'), event_ts=61., received_ts=62.)
+                collector.barrier(70.)
+                self.assertTrue(recovered.wait(5.), collector.diagnostics())
+            finally:
+                self.assertTrue(collector.stop(5.))
+
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(collector.stats['errors'], 1)
+        self.assertEqual(collector.stats['dropped'], 2)
+        self.source(20., 40.)
+        with self.assertRaisesRegex(ValueError, 'incomplete'):
+            self.source(20., 70.)
+        with store.conn() as conn:
+            rows = conn.execute(
+                'SELECT received_time FROM feature_observation_events WHERE received_time IN (42,62)')
+            self.assertEqual([row[0] for row in rows], [62.])
+
     def test_sustained_foreground_does_not_starve_native_writer(self):
         self.collector.idle_ready=lambda:False
         self.collector.event('binary_sensor.motion',dict(state='on'),event_ts=10.,received_ts=11.)
@@ -358,6 +408,39 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         self.source(20.,60.)
         with self.store.conn() as c:
             self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE event_time=41").fetchone()[0],1)
+
+    def test_delayed_commit_keeps_watermark_private_while_ingress_continues(self):
+        import universal_retention
+
+        self.seed()
+        collector = self.collector
+        seal = universal_retention.seal
+        before_commit, release = threading.Event(), threading.Event()
+
+        def pause_first_advance(conn, through):
+            if through == 60.:
+                before_commit.set()
+                if not release.wait(5.):
+                    raise RuntimeError('test did not release commit')
+            return seal(conn, through)
+
+        with patch.object(universal_retention, 'seal', side_effect=pause_first_advance):
+            collector.start()
+            try:
+                self.assertTrue(collector.ready.wait(3.))
+                collector.barrier(60.)
+                self.assertTrue(before_commit.wait(3.))
+                with self.assertRaisesRegex(ValueError, 'incomplete'):
+                    self.source(20., 60.)
+                self.assertTrue(collector.event('binary_sensor.motion0', dict(state='off'),
+                                                event_ts=61., received_ts=62.))
+                self.assertTrue(collector.barrier(70.))
+            finally:
+                release.set()
+                self.assertTrue(collector.stop(5.))
+        self.source(20., 70.)
+        self.assertEqual(collector.stats['dropped'], 0)
+        self.assertEqual(collector.stats['errors'], 0)
 
     def test_native_foreground_write_does_not_wait_for_unrelated_store_owner(self):
         held=threading.Event();release=threading.Event()

@@ -561,8 +561,14 @@ class HistoricalTrainingCollector(threading.Thread):
             # observations. A later failure cannot rewind that durable boundary;
             # retain the existing fail-closed gap rather than replaying it as if
             # the whole metadata transaction had rolled back.
+            self.gap('write_failure')
+            if (threading.current_thread() is self and isinstance(exc, sqlite3.ProgrammingError)
+                    and str(exc) == 'Cannot operate on a closed database.'):
+                # Retry on a new worker session. Reusing this connection would
+                # keep failing even when the underlying database is available.
+                raise
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
-            self.gap('write_failure');self.retry.defer(exc)
+            self.retry.defer(exc)
             return False
         finally:
             self.writing_foreground=False
