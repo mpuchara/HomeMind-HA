@@ -1,0 +1,6 @@
+test_matched_fit_preserves_schedule_counts_and_decisions_with_timeline (test_benchmark_matched_workload.MatchedWorkloadTests.test_matched_fit_preserves_schedule_counts_and_decisions_with_timeline) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 7.565s
+
+OK

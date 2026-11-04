@@ -1,0 +1,596 @@
+{
+  "joined_targets": 1200,
+  "dropped_by_thread": {
+    "MainThread": 0,
+    "adaptive-ai-agent-candidates": 40518,
+    "device-control_0": 0,
+    "Thread-1 (run)": 0,
+    "device-control_1": 0,
+    "adaptive-ai-index-scaling-fixture": 0,
+    "adaptive-ai-candidate-evidence-writer": 0,
+    "adaptive-ai-tournament-observer": 0,
+    "adaptive-ai-provenance-writer": 0,
+    "adaptive-ai-feature-journal-writer": 0,
+    "adaptive-ai-workflow-requests": 0
+  },
+  "total": {
+    "count": 1200,
+    "p50_ms": 70.571667,
+    "p95_ms": 149.651005,
+    "p99_ms": 172.397887,
+    "max_ms": 207.463042
+  },
+  "phase_quantiles": {
+    "event_to_submission": {
+      "count": 1200,
+      "p50_ms": 67.196406,
+      "p95_ms": 145.206999,
+      "p99_ms": 168.799629,
+      "max_ms": 203.152203
+    },
+    "executor_queue": {
+      "count": 1200,
+      "p50_ms": 0.287249,
+      "p95_ms": 1.967978,
+      "p99_ms": 3.739721,
+      "max_ms": 5.57538
+    },
+    "worker_entry_to_agent": {
+      "count": 1200,
+      "p50_ms": 1.770964,
+      "p95_ms": 7.140097,
+      "p99_ms": 11.685525,
+      "max_ms": 51.830462
+    },
+    "agent_to_intent_submit": {
+      "count": 1200,
+      "p50_ms": 1.038935,
+      "p95_ms": 2.816704,
+      "p99_ms": 4.418227,
+      "max_ms": 8.224751
+    }
+  },
+  "slowest": [
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3323578383373,
+      "total_ms": 207.463042,
+      "phases_ms": {
+        "event_to_submission": 203.152203,
+        "executor_queue": 0.155322,
+        "worker_entry_to_agent": 3.137562,
+        "agent_to_intent_submit": 1.017955
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.381806,
+        "prediction": 0.15611
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 124.403214,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 184.929811
+      },
+      "worker_active_pre_admission_exposure_ms": 200.519142
+    },
+    {
+      "target": "light.target_25",
+      "agent": "bdc0e3a1",
+      "received_ns": 3323578383373,
+      "total_ms": 199.905013,
+      "phases_ms": {
+        "event_to_submission": 189.103977,
+        "executor_queue": 0.291485,
+        "worker_entry_to_agent": 7.726248,
+        "agent_to_intent_submit": 2.783303
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.493663,
+        "prediction": 0.174329
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 110.373692,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 170.881585
+      },
+      "worker_active_pre_admission_exposure_ms": 186.680711
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3310199393841,
+      "total_ms": 195.11975,
+      "phases_ms": {
+        "event_to_submission": 186.362312,
+        "executor_queue": 2.907294,
+        "worker_entry_to_agent": 4.406091,
+        "agent_to_intent_submit": 1.444053
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.416025,
+        "prediction": 0.155047
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 122.70144,
+        "model_write": 26.834844,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 153.896521
+      },
+      "worker_active_pre_admission_exposure_ms": 182.71632
+    },
+    {
+      "target": "light.target_0",
+      "agent": "51cd1256",
+      "received_ns": 3323578383373,
+      "total_ms": 194.542662,
+      "phases_ms": {
+        "event_to_submission": 189.067827,
+        "executor_queue": 0.245945,
+        "worker_entry_to_agent": 2.536797,
+        "agent_to_intent_submit": 2.692093
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.620686,
+        "prediction": 1.500395
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 110.337542,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 170.845435
+      },
+      "worker_active_pre_admission_exposure_ms": 186.680711
+    },
+    {
+      "target": "light.target_25",
+      "agent": "bdc0e3a1",
+      "received_ns": 3310199393841,
+      "total_ms": 187.480021,
+      "phases_ms": {
+        "event_to_submission": 177.919984,
+        "executor_queue": 1.504977,
+        "worker_entry_to_agent": 7.022157,
+        "agent_to_intent_submit": 1.032903
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.356333,
+        "prediction": 0.16299
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 114.276987,
+        "model_write": 26.834844,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 146.389782
+      },
+      "worker_active_pre_admission_exposure_ms": 174.273992
+    },
+    {
+      "target": "light.target_0",
+      "agent": "51cd1256",
+      "received_ns": 3310199393841,
+      "total_ms": 179.3628,
+      "phases_ms": {
+        "event_to_submission": 174.007765,
+        "executor_queue": 0.451506,
+        "worker_entry_to_agent": 3.810556,
+        "agent_to_intent_submit": 1.092973
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.378143,
+        "prediction": 0.162397
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 110.364768,
+        "model_write": 26.834844,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 142.477563
+      },
+      "worker_active_pre_admission_exposure_ms": 170.361773
+    },
+    {
+      "target": "light.target_10",
+      "agent": "eb85663d",
+      "received_ns": 3323578383373,
+      "total_ms": 178.1917,
+      "phases_ms": {
+        "event_to_submission": 175.371489,
+        "executor_queue": 0.33906,
+        "worker_entry_to_agent": 1.453082,
+        "agent_to_intent_submit": 1.028069
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.42967,
+        "prediction": 0.155965
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 96.662709,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 157.149097
+      },
+      "worker_active_pre_admission_exposure_ms": 173.176417
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3321843223049,
+      "total_ms": 178.002533,
+      "phases_ms": {
+        "event_to_submission": 171.875074,
+        "executor_queue": 0.154761,
+        "worker_entry_to_agent": 4.926446,
+        "agent_to_intent_submit": 1.046252
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.396973,
+        "prediction": 0.160517
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 94.058029,
+        "model_write": 33.819796,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 147.366978
+      },
+      "worker_active_pre_admission_exposure_ms": 168.98506
+    },
+    {
+      "target": "light.target_12",
+      "agent": "e74aa467",
+      "received_ns": 3323578383373,
+      "total_ms": 175.625584,
+      "phases_ms": {
+        "event_to_submission": 168.799629,
+        "executor_queue": 1.315289,
+        "worker_entry_to_agent": 3.946157,
+        "agent_to_intent_submit": 1.564509
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.36867,
+        "prediction": 0.155987
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 92.313745,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 150.577237
+      },
+      "worker_active_pre_admission_exposure_ms": 166.604557
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3316088052744,
+      "total_ms": 175.206747,
+      "phases_ms": {
+        "event_to_submission": 172.308242,
+        "executor_queue": 0.183363,
+        "worker_entry_to_agent": 1.451239,
+        "agent_to_intent_submit": 1.263903
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.517575,
+        "prediction": 0.163244
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 24.36362,
+        "model_write": 50.612746,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 128.77688
+      },
+      "worker_active_pre_admission_exposure_ms": 170.14505
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3311931890682,
+      "total_ms": 174.263343,
+      "phases_ms": {
+        "event_to_submission": 170.270022,
+        "executor_queue": 0.265633,
+        "worker_entry_to_agent": 2.512054,
+        "agent_to_intent_submit": 1.215634
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.40864,
+        "prediction": 0.157952
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 98.720305,
+        "model_write": 38.435853,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 150.854427
+      },
+      "worker_active_pre_admission_exposure_ms": 168.049645
+    },
+    {
+      "target": "light.target_25",
+      "agent": "bdc0e3a1",
+      "received_ns": 3316088052744,
+      "total_ms": 173.711111,
+      "phases_ms": {
+        "event_to_submission": 171.3658,
+        "executor_queue": 0.777474,
+        "worker_entry_to_agent": 0.598477,
+        "agent_to_intent_submit": 0.96936
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.339699,
+        "prediction": 0.16262
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 24.36362,
+        "model_write": 50.612746,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 128.632896
+      },
+      "worker_active_pre_admission_exposure_ms": 169.226299
+    },
+    {
+      "target": "light.target_25",
+      "agent": "bdc0e3a1",
+      "received_ns": 3311931890682,
+      "total_ms": 172.397887,
+      "phases_ms": {
+        "event_to_submission": 166.746648,
+        "executor_queue": 1.694995,
+        "worker_entry_to_agent": 2.896235,
+        "agent_to_intent_submit": 1.060009
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.356456,
+        "prediction": 0.167638
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 97.341116,
+        "model_write": 38.435853,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 147.331053
+      },
+      "worker_active_pre_admission_exposure_ms": 164.526271
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3324842334302,
+      "total_ms": 172.311321,
+      "phases_ms": {
+        "event_to_submission": 168.267782,
+        "executor_queue": 0.24328,
+        "worker_entry_to_agent": 0.172157,
+        "agent_to_intent_submit": 3.628102
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.584721,
+        "prediction": 2.279774
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 93.774485,
+        "model_write": 38.922251,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 137.44027
+      },
+      "worker_active_pre_admission_exposure_ms": 165.841628
+    },
+    {
+      "target": "light.target_25",
+      "agent": "bdc0e3a1",
+      "received_ns": 3321843223049,
+      "total_ms": 170.256424,
+      "phases_ms": {
+        "event_to_submission": 163.519962,
+        "executor_queue": 0.306231,
+        "worker_entry_to_agent": 5.286876,
+        "agent_to_intent_submit": 1.143355
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.397437,
+        "prediction": 0.162954
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 86.189131,
+        "model_write": 33.819796,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 139.011866
+      },
+      "worker_active_pre_admission_exposure_ms": 160.629948
+    },
+    {
+      "target": "light.target_29",
+      "agent": "817f401b",
+      "received_ns": 3323578383373,
+      "total_ms": 170.207659,
+      "phases_ms": {
+        "event_to_submission": 165.942493,
+        "executor_queue": 0.321342,
+        "worker_entry_to_agent": 2.703573,
+        "agent_to_intent_submit": 1.240251
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.399456,
+        "prediction": 0.201255
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 92.313745,
+        "model_write": 37.441777,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 147.720101
+      },
+      "worker_active_pre_admission_exposure_ms": 163.747421
+    },
+    {
+      "target": "light.target_0",
+      "agent": "51cd1256",
+      "received_ns": 3316088052744,
+      "total_ms": 170.167498,
+      "phases_ms": {
+        "event_to_submission": 168.869269,
+        "executor_queue": 0.153767,
+        "worker_entry_to_agent": 0.252996,
+        "agent_to_intent_submit": 0.891466
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.325049,
+        "prediction": 0.158495
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 24.36362,
+        "model_write": 50.612746,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 127.354555
+      },
+      "worker_active_pre_admission_exposure_ms": 166.729768
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3322466924259,
+      "total_ms": 169.638794,
+      "phases_ms": {
+        "event_to_submission": 166.290906,
+        "executor_queue": 0.144004,
+        "worker_entry_to_agent": 2.191173,
+        "agent_to_intent_submit": 1.012711
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.384026,
+        "prediction": 0.188207
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 58.419664,
+        "model_write": 38.387412,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 137.010089
+      },
+      "worker_active_pre_admission_exposure_ms": 165.65829
+    },
+    {
+      "target": "light.target_16",
+      "agent": "6d02c03f",
+      "received_ns": 3321340302614,
+      "total_ms": 168.661552,
+      "phases_ms": {
+        "event_to_submission": 166.043499,
+        "executor_queue": 0.147117,
+        "worker_entry_to_agent": 1.444035,
+        "agent_to_intent_submit": 1.026901
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.362846,
+        "prediction": 0.158301
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 96.329056,
+        "model_write": 30.231193,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 134.347793
+      },
+      "worker_active_pre_admission_exposure_ms": 159.997148
+    },
+    {
+      "target": "light.target_10",
+      "agent": "eb85663d",
+      "received_ns": 3316088052744,
+      "total_ms": 167.702122,
+      "phases_ms": {
+        "event_to_submission": 166.399027,
+        "executor_queue": 0.106609,
+        "worker_entry_to_agent": 0.313574,
+        "agent_to_intent_submit": 0.882912
+      },
+      "own_exposure_ms": {
+        "store_lock_wait": 0.0,
+        "sqlite_execute": 0.0,
+        "context_features": 0.314974,
+        "prediction": 0.152994
+      },
+      "background_pre_admission_exposure_ms": {
+        "training_update": 24.36362,
+        "model_write": 50.612746,
+        "historical_collector_write": 0.0,
+        "tournament_observation": 0.0,
+        "tiny_shadow_schema": 0.0,
+        "sqlite_execute": 125.81899
+      },
+      "worker_active_pre_admission_exposure_ms": 164.259526
+    }
+  ],
+  "scope": "Complete retained joins only. Exposures overlap and omit evicted spans. Phase quantiles describe marginal distributions and cannot be added."
+}

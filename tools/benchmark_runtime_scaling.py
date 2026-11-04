@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import queue
 from pathlib import Path
 import sys
 import tempfile
@@ -24,9 +25,15 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
         candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None,
-        event_timeout=30.):
+        event_timeout=30., matched_updates=0, matched_writes=1, correct_every=25, candidate_limit=None):
     if not 30. <= event_timeout <= 120.:
         raise ValueError('event observation timeout must be 30..120 seconds')
+    if not 0 <= matched_updates <= 256 or not 0 <= matched_writes <= max(1, matched_updates):
+        raise ValueError('bounded matched workload required')
+    if matched_updates and (not training or not count or events + warmup > 100):
+        raise ValueError('matched workload requires training, agents and at most 100 steps')
+    if correct_every < 1 or (candidate_limit is not None and not 0 <= candidate_limit <= count):
+        raise ValueError('invalid Correct cadence or Candidate count')
     with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
@@ -127,7 +134,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         if candidates:
             from agent_candidate_lineage import _register_generation, _ensure_root
             from agent_candidates import refresh_candidate_ids_cache
-            for agent, sensors in trained:
+            for agent, sensors in trained[:candidate_limit]:
                 child = store.create_agent({**agent, 'id':None, 'mode':'paused', 'name':'Benchmark Candidate'})
                 store.save_model(child['id'], engine.models[agent['id']].serialize())
                 store.set_training_state(child['id'], 'qualified', score=1., samples=48,
@@ -150,6 +157,10 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         background_stats = dict(updates=0, model_writes=0, correct_reads=0, correct_writes=0,
                                 correct_gaps=0, errors=[])
         worker = None
+        batches = queue.Queue(maxsize=1) if matched_updates else None
+        batch_done = threading.Event()
+        matched_timeline = []
+        matched_offset_ns = time.perf_counter_ns()
         if training and trained:
             from training_budget import TRAINING_BUDGET
             agent, sensors = trained[0]
@@ -162,20 +173,38 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                 for eid in sensors:
                     frame[eid] = support.state(eid, 'on' if value else 'off', device_class='motion')
                 vectors.append(learning.features(frame, None, at_ts=time.time())[0])
+            def update(tick, write):
+                TRAINING_BUDGET.checkpoint('scaling_policy_fit')
+                learning.update(min(learning.horizons), tick%2, vectors[tick%2], 1., sample_ts=time.time())
+                background_stats['updates'] += 1
+                if write:
+                    store.save_model(trainer['id'], learning.serialize())
+                    background_stats['model_writes'] += 1
+
             def fit_background():
                 TRAINING_BUDGET.begin()
                 try:
-                    tick = 0
-                    while not background_stop.is_set():
-                        TRAINING_BUDGET.checkpoint('scaling_policy_fit')
-                        learning.update(min(learning.horizons), tick%2, vectors[tick%2], 1., sample_ts=time.time())
-                        background_stats['updates'] += 1
-                        if tick%32 == 0:
-                            store.save_model(trainer['id'], learning.serialize())
-                            background_stats['model_writes'] += 1
-                        tick += 1
+                    if batches is None:
+                        tick = 0
+                        while not background_stop.is_set():
+                            update(tick, tick % 32 == 0)
+                            tick += 1
+                    else:
+                        write_offsets = {i * matched_updates // matched_writes for i in range(matched_writes)}
+                        while True:
+                            batch = batches.get()
+                            if batch is None:
+                                break
+                            batch['trainer_start_ns'] = time.perf_counter_ns() - matched_offset_ns
+                            for i in range(matched_updates):
+                                update(batch['step'] * matched_updates + i, i in write_offsets)
+                            batch['trainer_end_ns'] = time.perf_counter_ns() - matched_offset_ns
+                            batch_done.set()
+                            if background_stop.is_set():
+                                break
                 except BaseException as exc:
                     background_stats['errors'].append(repr(exc))
+                    batch_done.set()
                 finally:
                     TRAINING_BUDGET.end()
             worker = threading.Thread(target=fit_background, name='adaptive-ai-index-scaling-fixture', daemon=True)
@@ -256,6 +285,12 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     thread_cpu_start = thread_cpu_snapshot()
                 seen.clear(); done.clear(); received[0] = time.perf_counter()
                 logical_time[0] = 1793275500.+step*.1
+                if batches is not None:
+                    batch_done.clear()
+                    batch = dict(step=step, phase='warmup' if step < warmup else 'steady',
+                                 release_ns=time.perf_counter_ns() - matched_offset_ns)
+                    matched_timeline.append(batch)
+                    batches.put_nowait(batch)
                 inputs = sorted({sensors[0] for _, sensors in trained}) or ['sensor.background_0']
                 for eid in inputs:
                     state = support.state(eid, 'on' if step%2 else 'off', device_class='motion')
@@ -269,7 +304,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                         elapsed_ms=(time.perf_counter()-received[0])*1000))
                 if not count:
                     time.sleep(.01)
-                if correct and trained and step%25 == 0:
+                if batches is not None:
+                    batch['inference_observed_ns'] = time.perf_counter_ns() - matched_offset_ns
+                if correct and trained and step % correct_every == 0:
                     stamp = time.time()
                     manager = engine.agent_candidates
                     ref = trained[0][0]['id']
@@ -287,8 +324,17 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                         background_stats['correct_writes'] += 1
                     else:
                         background_stats['correct_gaps'] += 1
+                if batches is not None:
+                    if not batch_done.wait(event_timeout) or background_stats['errors']:
+                        raise AssertionError(('matched background batch failed', batch, background_stats))
         finally:
             background_stop.set()
+            if batches is not None:
+                try:
+                    batches.put_nowait(None)
+                except queue.Full:
+                    # The pending batch belongs to an already-failed run.
+                    background_stop.set()
             if worker:
                 worker.join(10)
                 if worker.is_alive():
@@ -327,6 +373,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         ha.assert_not_called()
         if background_stats['errors']:
             raise AssertionError(background_stats['errors'])
+        if matched_updates and (background_stats['updates'], background_stats['model_writes']) != (
+                (events + warmup) * matched_updates, (events + warmup) * matched_writes):
+            raise AssertionError(('matched background counts differ from plan', background_stats))
         if training and not background_stats['updates']:
             raise AssertionError('No concurrent policy training executed')
         metrics = TELEMETRY.snapshot()
@@ -351,6 +400,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             concurrent_policy_training=training, correct_reads_enabled=correct,
             collector_enabled=collector,collector=(historical.diagnostics() if historical is not None else None),
             background_work=background_stats, candidate_count=len(candidate_ids),
+            matched_workload=(dict(updates_per_step=matched_updates, model_writes_per_step=matched_writes,
+                                   queue_capacity=1, correct_every=correct_every, batches=matched_timeline)
+                              if matched_updates else None),
             candidate_diagnostics=engine.agent_candidates.candidate_shadow_async_diagnostics(),
             input_sha256=input_digest.hexdigest(), event_clock='fixed synthetic 100ms increments; latency clocks real',
             storage_runtime=store.sqlite_snapshot(),
@@ -418,6 +470,10 @@ if __name__ == '__main__':
     p.add_argument('--collector', action='store_true', help='Opt-in historical collector; no training or HA authority')
     p.add_argument('--sensor-count',type=int,help='Exact sensor cardinality for the shared-input fixture')
     p.add_argument('--event-timeout',type=float,default=30.,help='Harness observation deadline in seconds (30..120); no runtime gate change')
+    p.add_argument('--matched-updates', type=int, default=0, help='Isolated real policy updates released per ingress step')
+    p.add_argument('--matched-writes', type=int, default=1, help='Evenly spaced model writes per matched batch')
+    p.add_argument('--correct-every', type=int, default=25)
+    p.add_argument('--candidate-limit', type=int)
     a = p.parse_args()
     if not 0 <= a.agents <= 200 or not 2 <= a.events <= 5000 or not 1 <= a.entities <= 4096:
         p.error('bounded agents/events/entities required')
@@ -429,5 +485,6 @@ if __name__ == '__main__':
         p.error('event-timeout must be 30..120 seconds')
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
-                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count,a.event_timeout))
+                  a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count,a.event_timeout,
+                  a.matched_updates,a.matched_writes,a.correct_every,a.candidate_limit))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))
