@@ -1694,6 +1694,7 @@ class Engine(threading.Thread):
         snapshot = (pass_states, pass_revision, revision_snapshot, context_revision)
         RUNTIME_DEBUG.end(snapshot_trace)
 
+        capacity_deferred = {}
         for target, target_agents in groups.items():
             target_retry = retries.pop(target, set())
             # Keep only the concrete entities that can affect this target. A burst may
@@ -1740,10 +1741,12 @@ class Engine(threading.Thread):
                 continue
             if bounded_dispatch and capacity <= 0:
                 if event_driven and target_changed:
-                    with self.lock:
-                        self.ready_target_changes.setdefault(target, set()).update(target_changed)
-                        stats = getattr(self, 'inference_scheduler', {})
-                        stats['capacity_deferrals'] = stats.get('capacity_deferrals', 0) + 1
+                    # Publish this pass's unadmitted owners together below.
+                    # Saturated fanout otherwise reacquires Engine.lock once
+                    # per waiting target on every completion-driven pass.
+                    # No worker is submitted for these owners in this pass;
+                    # callbacks and fresh ingress retain their own changes.
+                    capacity_deferred[target] = target_changed
                 elif not event_driven:
                     self._timer_capacity_pending = True
                 continue
@@ -1775,6 +1778,11 @@ class Engine(threading.Thread):
                     self.wake_event.set()
                 raise
         with self.lock:
+            for target, entities in capacity_deferred.items():
+                self.ready_target_changes.setdefault(target, set()).update(entities)
+            if capacity_deferred:
+                stats = getattr(self, 'inference_scheduler', {})
+                stats['capacity_deferrals'] = stats.get('capacity_deferrals', 0) + len(capacity_deferred)
             waiting = bool(self.ready_target_changes or getattr(self, '_timer_capacity_pending', False))
         if waiting and sum(not f.done() for f in self.in_flight.values()) < worker_limit:
             self.wake_event.set()
