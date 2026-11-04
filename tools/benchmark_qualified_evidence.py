@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+from queue import Empty, Full, Queue
 import sqlite3
 import sys
 import tempfile
@@ -135,8 +136,12 @@ def seed_candidates(scenario):
     from agent_candidate_shadow_runtime import install as install_shadow
     from agent_candidate_shadow_context import install as install_shadow_context
     store, engine = scenario.store, scenario.engine
-    manager = install(SimpleNamespace(STORE=store, ENGINE=engine, _final_explicit_http_only=True),
-                      start_worker=False)
+    def offline_http(*args):
+        raise AssertionError("Benchmark HTTP handler must never run")
+
+    handler = type("OfflineHandler", (), {"do_GET": offline_http, "do_POST": offline_http})
+    manager = install(SimpleNamespace(STORE=store, ENGINE=engine, Handler=handler,
+                                      _final_explicit_http_only=True), start_worker=False)
     install_shadow(manager)
     install_shadow_context(manager)
     for agent in scenario.agents:
@@ -157,7 +162,16 @@ def seed_candidates(scenario):
     engine.agent_candidates.invalidate_candidate_shadow_cache()
 
 
-def busy_work(scenario, stop, stats):
+def record_feedback(scenario, tick, desired, intent, *, undo=False):
+    label = f"sustained:{tick}"
+    scenario.feedback.record(agent_id=intent["agent_id"], selected_ts=intent["created_at"],
+                             source="correct", correct_action=desired, feedback_id=label,
+                             decision_id=intent["intent_id"], episode_id="continuous-stream")
+    if undo:
+        scenario.feedback.undo(label)
+
+
+def busy_work(scenario, stop, stats, feedback_jobs=None, feedback_done=None):
     from policy import MultiHorizonPolicy
     from training_budget import TRAINING_BUDGET
     engine, store = scenario.engine, scenario.store
@@ -168,7 +182,16 @@ def busy_work(scenario, stop, stats):
     tick = 0
     TRAINING_BUDGET.begin()
     try:
-        while not stop.is_set():
+        while not stop.is_set() or (feedback_jobs is not None and not feedback_jobs.empty()):
+            if feedback_jobs is not None:
+                try:
+                    job = feedback_jobs.get_nowait()
+                except Empty:
+                    pass
+                else:
+                    record_feedback(scenario, *job, undo=True)
+                    feedback_done.add(job[0])
+                    stats["correct_undo_worker"] += 1
             TRAINING_BUDGET.checkpoint("qualified_evidence_fixture")
             model.update(min(model.horizons), tick % 2, features, 1., sample_ts=time.time())
             stats["policy_updates"] += 1
@@ -197,23 +220,24 @@ def publish_event(scenario, entity, value, **attributes):
     scenario.engine.on_state_changed(dict(
         entity_id=entity, new_state=state(entity, value, stamp, **attributes),
         _hm_ws_received_ts=stamp, _hm_ws_received_perf=ingress))
-    return ingress
+    return stamp
 
 
-def stream(scenario, mode, ticks, period, writer_active):
+def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_intent=None, fanout=1):
     from settings import OPTIONS
     engine, collector = scenario.engine, scenario.collector
     timings, intents, outstanding = [], [], {}
     counters = Counter()
     event_count = 0
+    fanout = min(fanout, len(scenario.agents))
 
-    def infer(agent, frame, start):
+    def infer(agent, frame, received_ts):
         previous = engine.runtime.get(agent["id"], {}).get("last_intent")
         result = engine.process_agent(agent, frame, {"binary_sensor.motion"})
         intent = engine.runtime[agent["id"]].get("last_intent")
         if not intent or intent is previous:
             return None, None, result["status"]
-        return intent, (time.perf_counter()-start)*1000, result["status"]
+        return intent, (intent["created_at"]-received_ts)*1000, result["status"]
 
     def reap(block=False):
         for target, (future, desired, tick) in list(outstanding.items()):
@@ -224,27 +248,34 @@ def stream(scenario, mode, ticks, period, writer_active):
             if intent:
                 timings.append(latency)
                 intents.append((tick, desired, intent))
+                if on_intent is not None:
+                    on_intent(tick, desired, intent)
             del outstanding[target]
 
     begin = time.perf_counter()
     with patch.dict(OPTIONS, training_realtime_event_priority_seconds=.30):
-        for tick in range(ticks):
+        for step in range(ticks):
+            tick = step+tick_offset
             if mode != "overload":
-                time.sleep(max(0, begin+tick*period-time.perf_counter()))
+                time.sleep(max(0, begin+step*period-time.perf_counter()))
             reap()
             desired = tick % 2
             counters["ingress_while_writer_active"] += writer_active.is_set()
-            ingress = publish_event(scenario, "binary_sensor.motion", "on" if desired else "off",
+            received_ts = publish_event(scenario, "binary_sensor.motion", "on" if desired else "off",
                                     device_class="motion")
             event_count += 1
-            agent = scenario.agents[tick % len(scenario.agents)]
-            target = agent["target_entity"]
-            if target not in outstanding:
-                future = engine.control_workers.submit(infer, agent, engine.state_map.copy(), ingress)
-                engine.in_flight[target] = future
-                outstanding[target] = (future, desired, tick)
-            else:
-                counters["target_still_running"] += 1
+            frame = engine.state_map.copy()
+            for lane in range(fanout):
+                decision_index = tick*fanout+lane
+                agent = scenario.agents[decision_index % len(scenario.agents)]
+                target = agent["target_entity"]
+                if target not in outstanding:
+                    future = engine.control_workers.submit(infer, agent, frame, received_ts)
+                    engine.in_flight[target] = future
+                    outstanding[target] = (future, desired, decision_index)
+                else:
+                    counters["target_still_running"] += 1
+            counters["peak_inference_outstanding"] = max(counters["peak_inference_outstanding"], len(outstanding))
             counters["ingress_while_writer_active"] += writer_active.is_set()
             publish_event(scenario, "sensor.lux", 1000 if desired else 5, device_class="illuminance")
             event_count += 1
@@ -263,7 +294,7 @@ def stream(scenario, mode, ticks, period, writer_active):
     return event_count, intents, timings, dict(counters), ingress_seconds
 
 
-def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False):
+def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False, fanout=1):
     from storage import Store
     from telemetry import rss_mb
     from universal_history_collector import foreground_idle
@@ -284,6 +315,15 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
     with OriginalEvidenceScenario(store, sensors=sensors, devices=devices, clock=Clock()) as scenario, ExitStack() as stack:
         collector, engine = scenario.collector, scenario.engine
         background_stats = Counter()
+        feedback_done = set()
+        feedback_jobs = Queue(maxsize=32)
+
+        def submit_feedback(tick, desired, intent):
+            if tick % 8 == 0:
+                try:
+                    feedback_jobs.put_nowait((tick, desired, intent))
+                except Full:
+                    background_stats["correct_queue_full"] += 1
         if mode == "busy":
             seed_candidates(scenario)
         if mode == "off":
@@ -331,6 +371,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                 raise RuntimeError("Collector failed to start")
             stack.callback(collector.stop, 30)
 
+        initial_files = {p.name: p.stat().st_size for p in path.parent.glob(path.name+"*")}
         cpu, started, rss_before = time.process_time(), time.perf_counter(), rss_mb()
         if mode == "positive":
             count = max(128 if run_lifecycle else 8, devices)
@@ -343,7 +384,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             stop = threading.Event()
             worker = None
             if mode == "busy":
-                worker = threading.Thread(target=busy_work, args=(scenario, stop, background_stats), daemon=True)
+                worker = threading.Thread(target=busy_work, args=(scenario, stop, background_stats, feedback_jobs, feedback_done),
+                                          daemon=True)
                 worker.start()
             try:
                 lock = sqlite3.connect(path, timeout=1) if mode == "overload" else None
@@ -354,7 +396,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                         lock.execute("BEGIN IMMEDIATE")
                     try:
                         event_count, intents, timings, statuses, ingress_seconds = stream(
-                            scenario, mode, max(devices, ticks), period, writer_active)
+                            scenario, mode, max((devices+fanout-1)//fanout, ticks), period, writer_active,
+                            on_intent=submit_feedback if mode == "busy" else None, fanout=fanout)
                     finally:
                         if lock is not None:
                             lock.rollback()
@@ -381,13 +424,11 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             # All stream rows share one episode so training cannot count them
             # as independent trials based on the sampling cadence.
             for tick, desired, intent in intents:
-                label = f"sustained:{tick}"
-                scenario.feedback.record(agent_id=intent["agent_id"], selected_ts=intent["created_at"],
-                                         source="correct", correct_action=desired, feedback_id=label,
-                                         decision_id=intent["intent_id"], episode_id="continuous-stream")
-                if mode == "busy" and tick % 8 == 0:
-                    scenario.feedback.undo(label)
-                    background_stats["correct_undo"] += 1
+                if tick not in feedback_done:
+                    undo = mode == "busy" and tick % 8 == 0
+                    record_feedback(scenario, tick, desired, intent, undo=undo)
+                    if undo:
+                        background_stats["correct_undo_after_load"] += 1
         through = scenario.clock()
         before_final_drain = collector.diagnostics()
         drain_started = time.perf_counter()
@@ -418,7 +459,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             raise AssertionError(f"Overload failed to exercise fail-closed: {events}, {dataset}")
         if mode == "incomplete" and (dataset["status"] != "qualified_source" or dataset["eligible"]):
             raise AssertionError(f"Missing evidence qualified: {dataset}")
-        result = dict(mode=mode, sensors=sensors, devices=devices, active_agents=len(scenario.agents),
+        result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
+                      active_agents=len(scenario.agents),
                       candidates=devices if mode == "busy" else 0, predecision_max_agents=MAX_AGENTS,
                       prepare_error_reasons=errors, original_intents=len(intents), event=events,
                       decision_status=statuses, decision_signature=hashlib.sha256(json.dumps(signature).encode()).hexdigest(),
@@ -432,6 +474,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                       rss_before_mb=rss_before, rss_after_mb=rss_mb(),
                       load_sql_calls=load_sql_calls, total_sql_calls=sql_calls(probe),
                       store_lock_wait=snapshot.get("store_lock_wait"),
+                      sqlite_files_before_load=initial_files,
                       sqlite_files={p.name: p.stat().st_size for p in path.parent.glob(path.name+"*")},
                       ha_service_calls=scenario.ha.call_count)
         if result["ha_service_calls"]:
@@ -449,12 +492,14 @@ def main():
     parser.add_argument("--cases", default=SCALES)
     parser.add_argument("--modes", default="positive,normal,busy,overload")
     parser.add_argument("--ticks", type=int, default=24)
+    parser.add_argument("--fanout", type=int, default=1, help="Root targets admitted per motion event")
     parser.add_argument("--period", type=float, default=.4)
     parser.add_argument("--lifecycle", action="store_true")
     parser.add_argument("--output", type=Path, required=True, help="New JSONL checkpoint file")
     args = parser.parse_args()
     modes = args.modes.split(",")
-    if set(modes)-set(MODES) or not 1 <= args.ticks <= 1024 or not .01 <= args.period <= 10:
+    if (set(modes)-set(MODES) or not 1 <= args.ticks <= 1024 or not .01 <= args.period <= 10
+            or not 1 <= args.fanout <= 64 or args.ticks*args.fanout > 2048):
         parser.error("unknown mode or invalid workload bounds")
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]/"adaptive_ai/src"))
     for key in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -463,7 +508,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="hm-load-") as tmp, args.output.open("x", encoding="utf-8") as output:
         os.environ["ADAPTIVE_AI_DATA"] = str(Path(tmp)/"bootstrap")
         output.write(json.dumps(dict(scope="host synthetic", python=sys.version, platform=platform.platform(),
-                                     cpus=os.cpu_count(), ticks=args.ticks, period=args.period, lifecycle=args.lifecycle))+"\n")
+                                     cpus=os.cpu_count(), ticks=args.ticks, period=args.period, lifecycle=args.lifecycle, fanout=args.fanout))+"\n")
+        output.flush()
         for index, item in enumerate(args.cases.split(",")):
             sensors, devices = map(int, item.split(":"))
             for mode in modes:
@@ -472,7 +518,7 @@ def main():
                 folder.mkdir()
                 try:
                     row = collect_case(folder/"native.db", sensors, devices, mode, args.ticks, args.period,
-                                       run_lifecycle=args.lifecycle)
+                                       run_lifecycle=args.lifecycle, fanout=args.fanout)
                 except Exception as exc:
                     import traceback
                     traceback.print_exc()
