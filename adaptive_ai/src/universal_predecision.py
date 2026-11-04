@@ -138,8 +138,6 @@ class PredecisionEvidence:
         """At most one target per idle collector turn; no control locks held."""
         from device_agents import DeviceAgentService
         from context import action_values
-        from training_budget import TRAINING_BUDGET
-        TRAINING_BUDGET.checkpoint('universal_predecision_prepare',thread_name='adaptive-ai-index-universal-scorer')
         with self.lock:
             if not self.pending:
                 return
@@ -195,6 +193,10 @@ class PredecisionEvidence:
                 installed = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'uc_revision_%'")}
                 if not expected <= installed:
                     raise ValueError('incomplete arbiter revision contract')
+                count = c.execute('SELECT COUNT(*) FROM (SELECT 1 FROM agents LIMIT ?)',
+                                  (MAX_AGENTS + 1,)).fetchone()[0]
+                if count > MAX_AGENTS:
+                    raise ValueError('agent bound')
                 from universal_affected_sensors import latest, topology as affected_topology
                 declaration=latest(c,aid)
                 affected_scope=affected_topology(c,topology)
@@ -217,8 +219,6 @@ class PredecisionEvidence:
                             raise ValueError('arbiter table bound')
                         db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
                 configs = [self.store._agent_dict(r) for r in db.execute('SELECT * FROM agents')]
-                if len(configs) > MAX_AGENTS:
-                    raise ValueError('agent bound')
                 config = next((a for a in configs if a['id'] == aid), None)
                 if config is None or any(agent.get(k) != v for k, v in config.items()):
                     raise ValueError('RAM/durable config mismatch')

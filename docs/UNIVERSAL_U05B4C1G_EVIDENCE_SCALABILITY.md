@@ -110,3 +110,20 @@ open.
 See the [machine-readable summary](benchmarks/UNIVERSAL_U05B4C1G_SUMMARY.json),
 including detailed latencies, CPU/RSS, SQL calls, error reasons, durability
 counts and retained adverse observations.
+# U05b.4c.1g.2 comparison protocol
+
+Baseline runtime is `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`. Run the same
+g.2 harness on separate ext4 snapshots, serially, with 24 ticks, fanout 16
+and period 0.4 s. Compare Normal at 1000/200, Busy at 1000/128 plus 128
+Candidates and 1000/200 plus 56 or 200 Candidates, then OFF and incomplete
+at 1000/200. Profile separate runs including 130 roots plus 128 Candidates.
+
+Require intent signature and count parity, zero HA service calls, zero
+collector loss in supported cases, and zero qualification in OFF,
+incomplete and unsupported controls. For a throughput improvement require
+at least 2× aggregate consumed evidence and qualified/intents across the
+three supported active preparation cases, with an increase in each case.
+Report consumed/prepared per case. Screen relative latency at +10% p95 and
++15% p99 per pair, relative load CPU at +15% and RSS at +10%. One pair per
+case is descriptive. An observed breach stays visible and a production
+non-inferiority claim requires independent repetitions.

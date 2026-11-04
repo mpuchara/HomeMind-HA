@@ -15,7 +15,7 @@ from unittest.mock import patch,Mock
 import support
 from storage import Store
 from observation_contract import FeatureJournal
-from universal_history_collector import HistoricalTrainingCollector,source_from_collection,install,digest
+from universal_history_collector import HistoricalTrainingCollector,PreparationBudget,source_from_collection,install,digest
 from universal_training_data import HistoricalDecision
 from test_universal_action_runtime import FakeDeviceAgent
 
@@ -79,6 +79,55 @@ class CollectorTests(unittest.TestCase):
         self.assertTrue(foreground_idle(engine))
         engine.last_event_received=time.perf_counter()
         self.assertFalse(foreground_idle(engine))
+
+    def test_preparation_budget_only_charges_active_turns(self):
+        now = [10.]
+        budget = PreparationBudget(lambda: now[0])
+        self.assertEqual(budget.remaining(), 0.)
+        now[0] = 1000.
+        self.assertEqual(budget.remaining(), 0.)
+        started = now[0]
+        now[0] += 2.
+        self.assertEqual(budget.charge(started, .25), 2.)
+        self.assertEqual(budget.remaining(), 6.)
+        now[0] += 5.
+        self.assertEqual(budget.remaining(), 1.)
+        now[0] += 1000.
+        self.assertEqual(budget.remaining(), 0.)
+        self.assertEqual(budget.charge(now[0] - 1., .25), 1.)
+        self.assertEqual(budget.remaining(), 3.)
+
+    def test_preparation_rechecks_foreground_after_one_turn(self):
+        from concurrent.futures import Future
+        from universal_history_collector import foreground_idle
+        from training_budget import TRAINING_BUDGET
+
+        collector = self.collector
+        engine = SimpleNamespace(in_flight={}, last_event_received=0.)
+        collector.idle_ready = lambda: foreground_idle(engine)
+        future = Future()
+        now = [10.]
+        collector.preparation_budget = PreparationBudget(lambda: now[0])
+
+        def prepare():
+            now[0] += 1.
+            engine.in_flight['light.a'] = future
+
+        collector.predecision = SimpleNamespace(pending={'a', 'b'}, prepare_one=Mock(side_effect=prepare))
+        with patch.object(TRAINING_BUDGET, '_duty_cycle', .25):
+            collector._prepare_turn()
+            now[0] += 3.
+            collector._prepare_turn()
+            collector.predecision.prepare_one.assert_called_once()
+            future.set_result(None)
+            collector._prepare_turn()
+            collector._prepare_turn()
+            self.assertEqual(collector.predecision.prepare_one.call_count, 2)
+            self.assertEqual(collector.preparation_stats['budget_deferrals'], 1)
+            self.assertTrue(collector.stop())
+            now[0] += 100.
+            collector._prepare_turn()
+            self.assertEqual(collector.predecision.prepare_one.call_count, 2)
 
     def test_enabled_initialization_failure_cannot_break_runtime_startup(self):
         import settings

@@ -323,5 +323,25 @@ class PredecisionTests(unittest.TestCase):
         self.assertNotIn(agent['id'],self.evidence.prepared)
         self.assertEqual(self.evidence.stats['unsupported'],1)
 
+    def test_durable_agent_bound_checked_before_affected_sensor_reads(self):
+        def add_agents(start, stop):
+            with self.store.conn() as conn:
+                conn.executemany(
+                    'INSERT INTO agents (id,name,target_entity,target_property,min_value,max_value,created_at) '
+                    'VALUES (?, ?, ?, ?, 0, 1, ?)',
+                    [(f'extra-{i}', f'extra-{i}', f'light.extra_{i}', 'power', '2026-01-01')
+                     for i in range(start, stop)])
+
+        add_agents(1, 256)
+        self.prepare()
+        for before, after in ((256, 258), (258, 400)):
+            with self.subTest(configs=after):
+                add_agents(before, after)
+                self.evidence.request(self.agent['id'])
+                with patch('universal_affected_sensors.latest') as latest:
+                    with self.assertRaisesRegex(ValueError, '^agent bound$'):
+                        self.evidence.prepare_one()
+                    latest.assert_not_called()
+
 
 if __name__=='__main__': unittest.main()
