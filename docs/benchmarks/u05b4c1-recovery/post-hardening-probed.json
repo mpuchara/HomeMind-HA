@@ -1,0 +1,305 @@
+{
+  "scope": "Final8036 HOST largest-case original30 acceptance after session-open fault hardening",
+  "cases": [
+    {
+      "name": "current-final-1000-200-1",
+      "sensors": 1000,
+      "devices": 200,
+      "collector_enabled": true,
+      "exit_code": 0,
+      "observation_timeout_seconds": 30,
+      "events": 40,
+      "warmup_steps": 8,
+      "log_sha256": "88006c7d8563a2868e29dcdc615d4ddf732a3038c0935d42bc3acd4247d75157",
+      "status": "completed",
+      "raw_archive": "post-hardening-probed/current-final-1000-200-1.raw.json.gz",
+      "raw_sha256": "5c3d0dc6b669104be80dbd2eee9f2045e4494e7a8477015054ebe5599964b7c9",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 726.9473769999877,
+        "p95_ms": 1488.3255240001745,
+        "p99_ms": 1768.07540599998,
+        "max_ms": 1990.2767510000103
+      },
+      "prediction": {
+        "count": 4096,
+        "p50_ms": 0.170114,
+        "p95_ms": 0.579299,
+        "p99_ms": 2.428064,
+        "max_ms": 6.684194
+      },
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 858.7105199999314,
+        "p95_ms": 16133.635371999844,
+        "p99_ms": 19130.13554500003,
+        "max_ms": 19830.459105000045
+      },
+      "pipeline": {
+        "p50_ms": 732.9995319998943,
+        "p95_ms": 1495.8997300000192,
+        "p99_ms": 1777.6536839999153
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": 56763,
+      "store_lock_wait": {
+        "count": 438,
+        "p50_ms": 352.119156,
+        "p95_ms": 916.805132,
+        "p99_ms": 1254.562575,
+        "max_ms": 2084.550431
+      },
+      "executor_queue_wait": {
+        "count": 4096,
+        "p50_ms": 0.650826,
+        "p95_ms": 2.919698,
+        "p99_ms": 4.83973,
+        "max_ms": 166.500501
+      },
+      "process_cpu_ms": 81282.24694900001,
+      "wall_ms": 68891.63674099995,
+      "rss_mb": 505.66796875,
+      "peak_rss_mb": 523.87890625,
+      "collector": {
+        "queued": 9648,
+        "written": 9648,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 387,
+        "max_queue_bytes": 6268096,
+        "batches": 531,
+        "max_write_latency_ms": 2931.267825000077,
+        "last_error": null,
+        "deferred_for_foreground": 1613,
+        "foreground_batches": 511,
+        "deferred_for_sqlite": 1620,
+        "committed_after_epoch_change": 0,
+        "native_event_upserts": 67,
+        "native_seed_upserts": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "0cf9b9ca86334900bc5b6e987e59c796",
+        "worker_alive": false,
+        "by_kind": {
+          "event": {
+            "queued": 48,
+            "written": 48,
+            "dropped": 0,
+            "rejected": 0
+          },
+          "decision": {
+            "queued": 9600,
+            "written": 9600,
+            "dropped": 0,
+            "rejected": 0
+          }
+        },
+        "write_latency_p50_ms": 728.7061880001602,
+        "write_latency_p95_ms": 2154.476208999995,
+        "write_latency_p99_ms": 2727.906612000197,
+        "write_latency_sample_count": 2048,
+        "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+        "predecision": {
+          "requested": 9600,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "native_rows": {
+        "observations": 48,
+        "decisions": 9600,
+        "masks": 0,
+        "gaps": 1,
+        "segments": 0,
+        "object_page_bytes": {
+          "collector": 40505344,
+          "retention": 12288,
+          "native_observations": 36864,
+          "protection_windows": 22085632
+        },
+        "rss_after_stop_mb": 505.46875,
+        "sqlite_files": {
+          "benchmark.sqlite-wal": 425142832,
+          "benchmark.sqlite": 157642752,
+          "benchmark.sqlite-shm": 851968
+        },
+        "qualified_training_samples": null,
+        "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+      },
+      "background_work": {
+        "updates": 4152,
+        "model_writes": 130,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085",
+        "manifest": "source-de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085.json"
+      },
+      "log": "post-hardening-probed/current-final-1000-200-1.log.gz"
+    },
+    {
+      "name": "current-final-1000-200-2",
+      "sensors": 1000,
+      "devices": 200,
+      "collector_enabled": true,
+      "exit_code": 0,
+      "observation_timeout_seconds": 30,
+      "events": 40,
+      "warmup_steps": 8,
+      "log_sha256": "ebc60bc83352a086f3fe9e14db7a8bb0ef1b152aabd8d3fdbb296f08607ee562",
+      "status": "completed",
+      "raw_archive": "post-hardening-probed/current-final-1000-200-2.raw.json.gz",
+      "raw_sha256": "069cf33feb3b0474f734283c5386733d3cf1affd0ddb82a73671a74556920f7c",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 801.1177419998603,
+        "p95_ms": 1569.5245790000172,
+        "p99_ms": 1825.199227999974,
+        "max_ms": 2159.512102000008
+      },
+      "prediction": {
+        "count": 4096,
+        "p50_ms": 0.17271,
+        "p95_ms": 0.849614,
+        "p99_ms": 2.992914,
+        "max_ms": 172.188084
+      },
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 927.7784620001057,
+        "p95_ms": 19320.992488000004,
+        "p99_ms": 24836.158549000174,
+        "max_ms": 25696.733430999986
+      },
+      "pipeline": {
+        "p50_ms": 808.4100400001262,
+        "p95_ms": 1575.5516050001006,
+        "p99_ms": 1835.1148260001082
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": 56269,
+      "store_lock_wait": {
+        "count": 447,
+        "p50_ms": 347.392264,
+        "p95_ms": 894.037045,
+        "p99_ms": 1189.253272,
+        "max_ms": 1365.047927
+      },
+      "executor_queue_wait": {
+        "count": 4096,
+        "p50_ms": 0.657699,
+        "p95_ms": 3.020959,
+        "p99_ms": 5.515364,
+        "max_ms": 180.856684
+      },
+      "process_cpu_ms": 84883.364141,
+      "wall_ms": 71197.74015000007,
+      "rss_mb": 512.08203125,
+      "peak_rss_mb": 530.765625,
+      "collector": {
+        "queued": 9648,
+        "written": 9648,
+        "dropped": 0,
+        "gaps": 1,
+        "errors": 0,
+        "max_queue": 266,
+        "max_queue_bytes": 4299068,
+        "batches": 599,
+        "max_write_latency_ms": 2205.1087180000195,
+        "last_error": null,
+        "deferred_for_foreground": 1677,
+        "foreground_batches": 582,
+        "deferred_for_sqlite": 1683,
+        "committed_after_epoch_change": 0,
+        "native_event_upserts": 57,
+        "native_seed_upserts": 0,
+        "enabled": true,
+        "queue": 0,
+        "queue_bytes": 0,
+        "epoch": 0,
+        "session": "e1e26a097d554f3b82bfc5bb3d42e14e",
+        "worker_alive": false,
+        "by_kind": {
+          "event": {
+            "queued": 48,
+            "written": 48,
+            "dropped": 0,
+            "rejected": 0
+          },
+          "decision": {
+            "queued": 9600,
+            "written": 9600,
+            "dropped": 0,
+            "rejected": 0
+          }
+        },
+        "write_latency_p50_ms": 413.4665359999872,
+        "write_latency_p95_ms": 1293.7011279998387,
+        "write_latency_p99_ms": 1610.879660000137,
+        "write_latency_sample_count": 2048,
+        "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+        "predecision": {
+          "requested": 9600,
+          "prepared": 0,
+          "consumed": 0,
+          "rejected": 0,
+          "errors": 0,
+          "unsupported": 0,
+          "prepared_bytes": 0
+        }
+      },
+      "native_rows": {
+        "observations": 48,
+        "decisions": 9600,
+        "masks": 0,
+        "gaps": 1,
+        "segments": 0,
+        "object_page_bytes": {
+          "collector": 40497152,
+          "retention": 12288,
+          "native_observations": 36864,
+          "protection_windows": 22040576
+        },
+        "rss_after_stop_mb": 511.88671875,
+        "sqlite_files": {
+          "benchmark.sqlite-wal": 271363832,
+          "benchmark.sqlite": 158273536,
+          "benchmark.sqlite-shm": 557056
+        },
+        "qualified_training_samples": null,
+        "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+      },
+      "background_work": {
+        "updates": 4392,
+        "model_writes": 138,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "correct_gaps": 0,
+        "errors": []
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085",
+        "manifest": "source-de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085.json"
+      },
+      "log": "post-hardening-probed/current-final-1000-200-2.log.gz"
+    }
+  ]
+}

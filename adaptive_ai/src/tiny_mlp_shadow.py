@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import threading
 import time
 
@@ -36,6 +37,21 @@ def _parse_hidden(value):
 
 def ensure_tables(store):
     """Add isolated Stage-3 persistence without touching rl_models/Candidate storage."""
+    # Validate on a fresh connection/snapshot rather than caching an initialized
+    # flag. Ordinary inference needs neither DDL nor Store's global writer lock.
+    # Preparing this empty read checks every required column, also after external
+    # DDL, a database replacement, or an intermediate-build schema on restart.
+    # Only a missing table/column enters the serialized additive migration.
+    try:
+        with store.conn() as c:
+            c.execute("""SELECT agent_id,backend,backend_version,feature_schema_id,
+                feature_mask_id,model_json,mask_json,source_policy_revision,
+                training_json,tournament_json,selected_backend,created_ts,updated_ts
+                FROM tiny_mlp_shadow_models LIMIT 0""")
+        return
+    except sqlite3.OperationalError as exc:
+        if not str(exc).startswith(('no such table:', 'no such column:')):
+            raise
     with store.lock, store.conn() as c:
         c.executescript(
             """

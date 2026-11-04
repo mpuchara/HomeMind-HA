@@ -1,0 +1,318 @@
+[
+  {
+    "name": "recovery-initial-1000-200",
+    "log_sha256": "5057f8c815739318b2c5cc91898a02db89a1d1519282e5efdd2f3e15f6418aec",
+    "source_scope": "exploratory uncommitted candidate; not final acceptance or isolated causal attribution",
+    "reported_collector": {
+      "batches": 187,
+      "by_kind": {
+        "decision": {
+          "dropped": 8772,
+          "queued": 9583,
+          "rejected": 0,
+          "written": 828
+        },
+        "event": {
+          "dropped": 43,
+          "queued": 48,
+          "rejected": 0,
+          "written": 5
+        }
+      },
+      "committed_after_epoch_change": 0,
+      "deferred_for_foreground": 12344,
+      "deferred_for_sqlite": 0,
+      "deferred_for_store_lock": 12344,
+      "dropped": 8815,
+      "enabled": true,
+      "epoch": 17,
+      "errors": 0,
+      "foreground_batches": 181,
+      "gaps": 3,
+      "last_error": null,
+      "max_queue": 518,
+      "max_queue_bytes": 8385296,
+      "max_write_latency_ms": 4076.9164669999896,
+      "native_event_upserts": 5,
+      "native_seed_upserts": 0,
+      "predecision": {
+        "consumed": 0,
+        "errors": 0,
+        "prepared": 0,
+        "prepared_bytes": 0,
+        "rejected": 0,
+        "requested": 9600,
+        "unsupported": 0
+      },
+      "queue": 0,
+      "queue_bytes": 0,
+      "queued": 9631,
+      "session": "fcb6876508d74d4e9ca3d436119946cb",
+      "worker_alive": false,
+      "write_latency_p95_ms": 3997.2093760000007,
+      "written": 833
+    },
+    "native_rows": null,
+    "warmup_max_ms": 24728.81848999998,
+    "event_p95_ms": 1416.2070240000162
+  },
+  {
+    "name": "recovery-batched-1000-200",
+    "log_sha256": "29477a0440e9d5e916609349f23170501253bb0b27e51403260d296732d4b57f",
+    "source_scope": "exploratory uncommitted candidate; not final acceptance or isolated causal attribution",
+    "reported_collector": {
+      "batches": 595,
+      "by_kind": {
+        "decision": {
+          "dropped": 7740,
+          "queued": 9585,
+          "rejected": 0,
+          "written": 1868
+        },
+        "event": {
+          "dropped": 45,
+          "queued": 48,
+          "rejected": 0,
+          "written": 3
+        }
+      },
+      "committed_after_epoch_change": 8,
+      "deferred_for_foreground": 3072,
+      "deferred_for_sqlite": 1830,
+      "deferred_for_store_lock": 1242,
+      "dropped": 7785,
+      "enabled": true,
+      "epoch": 15,
+      "errors": 0,
+      "foreground_batches": 592,
+      "gaps": 16,
+      "last_error": null,
+      "max_queue": 518,
+      "max_queue_bytes": 8385180,
+      "max_write_latency_ms": 4325.731390999977,
+      "native_event_upserts": 3,
+      "native_seed_upserts": 0,
+      "predecision": {
+        "consumed": 0,
+        "errors": 0,
+        "prepared": 0,
+        "prepared_bytes": 0,
+        "rejected": 0,
+        "requested": 9600,
+        "unsupported": 0
+      },
+      "queue": 0,
+      "queue_bytes": 0,
+      "queued": 9633,
+      "session": "415f17b2691947a79bc29680d8a1eeee",
+      "worker_alive": false,
+      "write_latency_p95_ms": 3305.540671000017,
+      "written": 1871
+    },
+    "native_rows": null,
+    "warmup_max_ms": 8274.67725100007,
+    "event_p95_ms": 1453.5103969999454
+  },
+  {
+    "name": "recovery-bulk-1000-200",
+    "log_sha256": "2128751d52482c25547a2393a47bda24116e97a69cb21e9dff9956b8921aa3ed",
+    "source_scope": "exploratory uncommitted candidate; not final acceptance or isolated causal attribution",
+    "reported_collector": {
+      "batches": 426,
+      "by_kind": {
+        "decision": {
+          "dropped": 4644,
+          "queued": 9591,
+          "rejected": 0,
+          "written": 5161
+        },
+        "event": {
+          "dropped": 27,
+          "queued": 48,
+          "rejected": 0,
+          "written": 24
+        }
+      },
+      "committed_after_epoch_change": 208,
+      "deferred_for_foreground": 2689,
+      "deferred_for_sqlite": 816,
+      "deferred_for_store_lock": 1884,
+      "dropped": 4671,
+      "enabled": true,
+      "epoch": 9,
+      "errors": 0,
+      "foreground_batches": 392,
+      "gaps": 10,
+      "last_error": null,
+      "max_queue": 518,
+      "max_queue_bytes": 8385176,
+      "max_write_latency_ms": 4163.470596999986,
+      "native_event_upserts": 31,
+      "native_seed_upserts": 0,
+      "predecision": {
+        "consumed": 0,
+        "errors": 0,
+        "prepared": 0,
+        "prepared_bytes": 0,
+        "rejected": 0,
+        "requested": 9600,
+        "unsupported": 0
+      },
+      "queue": 0,
+      "queue_bytes": 0,
+      "queued": 9639,
+      "session": "0f79ea6abf354812897aa21598e43563",
+      "worker_alive": false,
+      "write_latency_p95_ms": 2995.4907420000154,
+      "written": 5185
+    },
+    "native_rows": null,
+    "warmup_max_ms": 9673.288638000002,
+    "event_p95_ms": 1376.73834200001
+  },
+  {
+    "name": "recovery-native-1000-200",
+    "log_sha256": "21132718780b542ef43784d6556b23f0ad79e6429d227818bc50d45988a3a91f",
+    "source_scope": "exploratory uncommitted candidate; not final acceptance or isolated causal attribution",
+    "reported_collector": {
+      "queued": 9643,
+      "written": 7055,
+      "dropped": 2593,
+      "gaps": 6,
+      "errors": 0,
+      "max_queue": 518,
+      "max_queue_bytes": 8385200,
+      "batches": 572,
+      "max_write_latency_ms": 4159.4709889999995,
+      "last_error": null,
+      "deferred_for_foreground": 1606,
+      "foreground_batches": 546,
+      "deferred_for_store_lock": 0,
+      "deferred_for_sqlite": 1612,
+      "committed_after_epoch_change": 0,
+      "native_event_upserts": 50,
+      "native_seed_upserts": 0,
+      "enabled": true,
+      "queue": 0,
+      "queue_bytes": 0,
+      "epoch": 5,
+      "session": "3d5643a15012404586c3ec399d365ba0",
+      "worker_alive": false,
+      "by_kind": {
+        "event": {
+          "queued": 48,
+          "written": 35,
+          "dropped": 13,
+          "rejected": 0
+        },
+        "decision": {
+          "queued": 9595,
+          "written": 7020,
+          "dropped": 2580,
+          "rejected": 0
+        }
+      },
+      "write_latency_p95_ms": 3415.3304440000056,
+      "predecision": {
+        "requested": 9600,
+        "prepared": 0,
+        "consumed": 0,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0,
+        "prepared_bytes": 0
+      }
+    },
+    "native_rows": {
+      "observations": 48,
+      "decisions": 7020,
+      "masks": 0,
+      "gaps": 6,
+      "segments": 0,
+      "rss_after_stop_mb": 502.53515625,
+      "sqlite_files": {
+        "benchmark.sqlite-wal": 256844952,
+        "benchmark.sqlite": 141385728,
+        "benchmark.sqlite-shm": 589824
+      },
+      "qualified_training_samples": null,
+      "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+    },
+    "warmup_max_ms": 24988.752672000002,
+    "event_p95_ms": 1575.786832999995
+  },
+  {
+    "name": "recovery-wide-1000-200",
+    "log_sha256": "005ecd46f73af5d6f2b13d7905b5797c3c5da5fca99790fbec22f4872cfb6672",
+    "source_scope": "exploratory uncommitted candidate; not final acceptance or isolated causal attribution",
+    "reported_collector": {
+      "queued": 9648,
+      "written": 9648,
+      "dropped": 0,
+      "gaps": 1,
+      "errors": 0,
+      "max_queue": 281,
+      "max_queue_bytes": 4557928,
+      "batches": 524,
+      "max_write_latency_ms": 1802.780107999979,
+      "last_error": null,
+      "deferred_for_foreground": 1596,
+      "foreground_batches": 507,
+      "deferred_for_sqlite": 1597,
+      "committed_after_epoch_change": 0,
+      "native_event_upserts": 66,
+      "native_seed_upserts": 0,
+      "enabled": true,
+      "queue": 0,
+      "queue_bytes": 0,
+      "epoch": 0,
+      "session": "3ccdcea2b635442b97a1582b85b29e52",
+      "worker_alive": false,
+      "by_kind": {
+        "event": {
+          "queued": 48,
+          "written": 48,
+          "dropped": 0,
+          "rejected": 0
+        },
+        "decision": {
+          "queued": 9600,
+          "written": 9600,
+          "dropped": 0,
+          "rejected": 0
+        }
+      },
+      "write_latency_p50_ms": 482.92876199991497,
+      "write_latency_p95_ms": 1516.0103469999058,
+      "write_latency_p99_ms": 1721.6962879999755,
+      "write_latency_sample_count": 2048,
+      "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+      "predecision": {
+        "requested": 9600,
+        "prepared": 0,
+        "consumed": 0,
+        "rejected": 0,
+        "errors": 0,
+        "unsupported": 0,
+        "prepared_bytes": 0
+      }
+    },
+    "native_rows": {
+      "observations": 48,
+      "decisions": 9600,
+      "masks": 0,
+      "gaps": 1,
+      "segments": 0,
+      "rss_after_stop_mb": 497.46484375,
+      "sqlite_files": {
+        "benchmark.sqlite-wal": 237003032,
+        "benchmark.sqlite": 158044160,
+        "benchmark.sqlite-shm": 557056
+      },
+      "qualified_training_samples": null,
+      "qualification_status": "not measured: composed fixture has no qualified topology/declarations"
+    },
+    "warmup_max_ms": 11789.818066000009,
+    "event_p95_ms": 1474.054811999963
+  }
+]

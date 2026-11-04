@@ -60,6 +60,42 @@ class SchedulerSnapshotTests(unittest.TestCase):
         self.assertEqual(task[3], {})
 
 
+    def test_saturated_fanout_publishes_deferrals_with_constant_lock_entries(self):
+        import threading
+        r = fixture(SimpleNamespace(), targets=200)
+        class CountedLock:
+            def __init__(self): self.lock=threading.RLock(); self.entries=0
+            def __enter__(self): self.entries+=1; self.lock.acquire(); return self
+            def __exit__(self,*args): self.lock.release()
+        r.lock=CountedLock(); r.control_worker_count=1
+        r.inference_scheduler={}
+        r.process(r.state_map, {'binary_sensor.shared'})
+        self.assertEqual(len(r.control_workers.tasks),1)
+        self.assertEqual(list(r.ready_target_changes),[f'light.target_{i}' for i in range(1,200)])
+        self.assertTrue(all(changes=={'binary_sensor.shared'} for changes in r.ready_target_changes.values()))
+        self.assertEqual(r.inference_scheduler['capacity_deferrals'],199)
+        self.assertLess(r.lock.entries,10)
+        # A completion after publication must wake the remaining FIFO owners.
+        r.wake_event.clear()
+        r.control_workers.tasks[0][0].set_result(None)
+        self.assertTrue(r.wake_event.is_set())
+        r.process(r.state_map,set())
+        self.assertEqual(r.control_workers.tasks[1][2][0][0]['target_entity'],'light.target_1')
+
+    def test_completion_during_pass_keeps_concurrent_ready_changes(self):
+        r=fixture(SimpleNamespace(),targets=5);r.control_worker_count=1
+        original=r.control_workers.submit
+        def submit(*args):
+            task=original(*args)
+            r.ready_target_changes['light.target_3']={'sensor.concurrent'}
+            task.set_result(None)
+            return task
+        r.control_workers.submit=submit
+        r.process(r.state_map,{'binary_sensor.shared'})
+        self.assertEqual(r.ready_target_changes['light.target_3'],{'sensor.concurrent','binary_sensor.shared'})
+        self.assertTrue(r.wake_event.is_set())
+
+
 class PerformanceTelemetryTests(unittest.TestCase):
     def test_percentiles_are_bounded_and_small_p99_is_marked(self):
         telemetry = Telemetry()

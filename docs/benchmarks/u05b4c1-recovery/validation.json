@@ -1,0 +1,38 @@
+{
+  "fullsuite": {
+    "tests": 3130,
+    "seconds": 424.341,
+    "status": "OK",
+    "log_sha256": "a54c764aa3acc3c7408e7933d4b92c230b9914a6c076be0c205d772b3c353e71"
+  },
+  "fullsuite-final": {
+    "tests": 3131,
+    "seconds": 438.2,
+    "status": "OK",
+    "log_sha256": "236ada16f10d8c2e88ee70363f0c6890a1611bc82fa80db44afb3ee74ec3b575"
+  },
+  "session_fault_test": {
+    "red_exit": 1,
+    "green_exit": 0,
+    "initial_green_mock_error": "constant positive retry.delay kept admission deferred; corrected test uses real backoff"
+  },
+  "source_archive_comparison": [
+    {
+      "commit": "42f14bb1c5050428d93a0b4ce74706ed6e6ad125",
+      "checked_files": 1258,
+      "differences": []
+    },
+    {
+      "commit": "8036a2bd64dba32490d784df2029c0818ad3edbf",
+      "checked_files": 1258,
+      "differences": []
+    }
+  ],
+  "session_hardening_scope": {
+    "changed_collector_methods": [
+      "run"
+    ],
+    "normal_write_and_proof_methods_identical": true,
+    "note": "Primary probed matrix uses42; final unprobed matrix and largest-scale probes use8036. No source relabelling."
+  }
+}

@@ -11,7 +11,7 @@ from storage_budget import StoragePressure, StorageRetry, require_storage_availa
 
 from bisect import bisect_right
 from collections import deque
-from contextlib import suppress
+from contextlib import suppress, nullcontext
 import hashlib
 import heapq
 import json
@@ -924,6 +924,9 @@ class FeatureJournal:
         self.max_windows_per_agent = int(max_windows_per_agent)
         self.global_event_limit = int(global_event_limit)
         self._writes = 0
+        self._write_count_lock = threading.Lock()
+        self._prune_pending = False
+        self._prune_entity = None
         self._migrate()
 
     def _migrate(self):
@@ -1010,7 +1013,7 @@ class FeatureJournal:
             "quality": clamp(float(quality), 0.0, 1.0),
         }
 
-    def record_batch(self, records):
+    def record_batch(self, records, *, wait_for_store=True):
         """Persist multiple high-resolution observations in one writer transaction."""
         prepared = []
         for raw in records or ():
@@ -1032,7 +1035,12 @@ class FeatureJournal:
         if not prepared:
             return []
 
-        with self.store.lock, self.store.conn() as c, c.storage_batch():
+        # The optional collector uses SQLite's native writer snapshot directly
+        # with busy_timeout=0. Protection lookup + insert remain in the SAME
+        # BEGIN IMMEDIATE transaction: another window writer cannot interleave.
+        # The default path retains its existing Store serialization.
+        admission=self.store.lock if wait_for_store else nullcontext()
+        with admission, self.store.conn() as c, c.storage_batch():
             # Read protection and insert observations in one writer snapshot.
             # Preserve the connection's normal WAL/checkpoint admission before
             # explicitly reserving the writer, including direct record() calls.
@@ -1093,13 +1101,34 @@ class FeatureJournal:
                          received_time=MIN(feature_observation_events.received_time,excluded.received_time),
                          protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
                          quality=MAX(feature_observation_events.quality,excluded.quality)''')
-            previous_writes = self._writes
-            self._writes += len(prepared)
-            should_prune = self._writes // 128 > previous_writes // 128
+            with self._write_count_lock:
+                previous_writes = self._writes
+                self._writes += len(prepared)
+                if self._writes // 128 > previous_writes // 128:
+                    self._prune_pending = True
+                    self._prune_entity = prepared[-1]['entity_id']
 
-        if should_prune:
-            self.prune(entity_id=prepared[-1]["entity_id"])
+        self.flush_pending_prune(wait_for_store=wait_for_store)
         return [row["event_key"] for row in prepared]
+
+    def flush_pending_prune(self, *, wait_for_store=True):
+        """Keep native pruning pending when optional collection cannot admit it.
+
+        No alternate cutoff/ledger is introduced. A normal writer/idle collector
+        or explicit drain retries the SAME pruning operation; storage budgets
+        continue to bound disk usage while foreground owns Store.
+        """
+        with self._write_count_lock:
+            if not self._prune_pending:return False
+            marker,entity=self._writes,self._prune_entity
+        if not self.store.lock.acquire(blocking=wait_for_store):return False
+        try:
+            self.prune(entity_id=entity)
+            with self._write_count_lock:
+                if self._writes==marker:self._prune_pending=False
+            return True
+        finally:
+            self.store.lock.release()
 
     def record(self, entity_id, state, *, event_time, received_time, source,
                event_key=None, quality=1.0):

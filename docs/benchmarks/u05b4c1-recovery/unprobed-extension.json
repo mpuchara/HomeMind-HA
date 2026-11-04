@@ -1,0 +1,403 @@
+{
+  "scope": "HOST unprobed sensitivity check. Largest baseline120 is diagnostic only, never original-deadline acceptance; all current30 unchanged.",
+  "cases": [
+    {
+      "name": "1000-200-baseline-3",
+      "sensors": 1000,
+      "devices": 200,
+      "exit_code": 0,
+      "probe_enabled": false,
+      "observation_timeout_seconds": 120,
+      "diagnostic_only": true,
+      "log_sha256": "7aa8ed833f7b58b2ab30df15d25c6fa9b2b7219929432d02bb2a58b17ee2beee",
+      "status": "completed",
+      "raw_sha256": "2b032ded328ab2335994fa23532a04b9153f6895ca4818012d0d542f57f14067",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 663.0111910000096,
+        "p95_ms": 1306.4008810000018,
+        "p99_ms": 1476.712918000004,
+        "max_ms": 1675.8920839999973
+      },
+      "prediction": null,
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 868.5141490000206,
+        "p95_ms": 19999.767122999998,
+        "p99_ms": 30293.837888000013,
+        "max_ms": 31509.748355
+      },
+      "pipeline": {
+        "p50_ms": 668.3985349999944,
+        "p95_ms": 1313.6832259999949,
+        "p99_ms": 1484.7498090000215
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": null,
+      "store_lock_wait": null,
+      "executor_queue_wait": null,
+      "process_cpu_ms": 71318.65519300001,
+      "wall_ms": 60451.613759,
+      "rss_mb": 457.25,
+      "peak_rss_mb": 469.66796875,
+      "collector": {
+        "batches": 6,
+        "deferred_for_foreground": 2126,
+        "dropped": 9335,
+        "enabled": true,
+        "epoch": 18,
+        "errors": 0,
+        "gaps": 2,
+        "last_error": null,
+        "max_queue": 518,
+        "max_queue_bytes": 8385224,
+        "max_write_latency_ms": 2846.351943000002,
+        "predecision": {
+          "consumed": 0,
+          "errors": 0,
+          "prepared": 0,
+          "prepared_bytes": 0,
+          "rejected": 0,
+          "requested": 9600,
+          "unsupported": 0
+        },
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 9630,
+        "session": "c01adcddcd6b4ef69457e2f8de223b2d",
+        "worker_alive": false,
+        "write_latency_p95_ms": 2755.0012039999956,
+        "written": 313
+      },
+      "native_rows": null,
+      "background_work": {
+        "correct_gaps": 0,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "errors": [],
+        "model_writes": 166,
+        "updates": 5281
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "4faafb165e6913def23d4678945851c26a675d1360c3afcbca18672f6104fa13",
+        "manifest": "source-4faafb165e6913def23d4678945851c26a675d1360c3afcbca18672f6104fa13.json"
+      },
+      "log": "unprobed-extension/1000-200-baseline-3.log.gz",
+      "raw_archive": "unprobed-extension/1000-200-baseline-3.raw.json.gz"
+    },
+    {
+      "name": "1000-200-current-3",
+      "sensors": 1000,
+      "devices": 200,
+      "exit_code": 0,
+      "probe_enabled": false,
+      "observation_timeout_seconds": 30,
+      "diagnostic_only": false,
+      "log_sha256": "bf98ba92ba5fb7d39c24905dcecc00974ea8d31cd3918125c0389223c349208b",
+      "status": "completed",
+      "raw_sha256": "6f4b2493f43b498aa86ab36ff5720a7f36c038ded9fbcfb67d041871c4819ddf",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 618.002692999994,
+        "p95_ms": 1246.0891320000087,
+        "p99_ms": 1421.7160989999797,
+        "max_ms": 1648.5812120000105
+      },
+      "prediction": null,
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 767.8904680000187,
+        "p95_ms": 7021.972074999951,
+        "p99_ms": 9644.471071999988,
+        "max_ms": 10345.57323599995
+      },
+      "pipeline": {
+        "p50_ms": 622.8003250000143,
+        "p95_ms": 1250.2508970000008,
+        "p99_ms": 1425.4680020000023
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": null,
+      "store_lock_wait": null,
+      "executor_queue_wait": null,
+      "process_cpu_ms": 67146.26858000002,
+      "wall_ms": 56226.28174199997,
+      "rss_mb": 438.8203125,
+      "peak_rss_mb": 464.62890625,
+      "collector": {
+        "batches": 477,
+        "by_kind": {
+          "decision": {
+            "dropped": 0,
+            "queued": 9600,
+            "rejected": 0,
+            "written": 9600
+          },
+          "event": {
+            "dropped": 0,
+            "queued": 48,
+            "rejected": 0,
+            "written": 48
+          }
+        },
+        "committed_after_epoch_change": 0,
+        "deferred_for_foreground": 1483,
+        "deferred_for_sqlite": 1486,
+        "dropped": 0,
+        "enabled": true,
+        "epoch": 0,
+        "errors": 0,
+        "foreground_batches": 455,
+        "gaps": 1,
+        "last_error": null,
+        "max_queue": 352,
+        "max_queue_bytes": 5698608,
+        "max_write_latency_ms": 2114.907900999981,
+        "native_event_upserts": 61,
+        "native_seed_upserts": 0,
+        "predecision": {
+          "consumed": 0,
+          "errors": 0,
+          "prepared": 0,
+          "prepared_bytes": 0,
+          "rejected": 0,
+          "requested": 9600,
+          "unsupported": 0
+        },
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 9648,
+        "session": "ee90cf56b636435ab4ba1b84e9a1ebd4",
+        "worker_alive": false,
+        "write_latency_p50_ms": 466.4530239999749,
+        "write_latency_p95_ms": 1792.5892209999574,
+        "write_latency_p99_ms": 2058.2701349999866,
+        "write_latency_sample_count": 2048,
+        "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+        "written": 9648
+      },
+      "native_rows": null,
+      "background_work": {
+        "correct_gaps": 0,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "errors": [],
+        "model_writes": 109,
+        "updates": 3470
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085",
+        "manifest": "source-de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085.json"
+      },
+      "log": "unprobed-extension/1000-200-current-3.log.gz",
+      "raw_archive": "unprobed-extension/1000-200-current-3.raw.json.gz"
+    },
+    {
+      "name": "1000-200-baseline-4",
+      "sensors": 1000,
+      "devices": 200,
+      "exit_code": 0,
+      "probe_enabled": false,
+      "observation_timeout_seconds": 120,
+      "diagnostic_only": true,
+      "log_sha256": "052ee518ab0aeeeb9f6fded7a7663b0a826b6365ebcc2af185082a83eb949d0f",
+      "status": "completed",
+      "raw_sha256": "17bc1adab65d380c96c793f00ba0cdf31aecc153165b7b18038186182b04c1cf",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 632.0940950000136,
+        "p95_ms": 1203.9308860000233,
+        "p99_ms": 1319.396121000068,
+        "max_ms": 1443.6915419999536
+      },
+      "prediction": null,
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 777.0831439999597,
+        "p95_ms": 18856.28262300003,
+        "p99_ms": 21254.916520999985,
+        "max_ms": 21963.861769000003
+      },
+      "pipeline": {
+        "p50_ms": 637.716184999988,
+        "p95_ms": 1209.384522999983,
+        "p99_ms": 1326.2523659999488
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": null,
+      "store_lock_wait": null,
+      "executor_queue_wait": null,
+      "process_cpu_ms": 67067.55691199999,
+      "wall_ms": 57006.24409599999,
+      "rss_mb": 442.515625,
+      "peak_rss_mb": 463.99609375,
+      "collector": {
+        "batches": 6,
+        "deferred_for_foreground": 1826,
+        "dropped": 9335,
+        "enabled": true,
+        "epoch": 18,
+        "errors": 0,
+        "gaps": 2,
+        "last_error": null,
+        "max_queue": 518,
+        "max_queue_bytes": 8385204,
+        "max_write_latency_ms": 2571.776117000013,
+        "predecision": {
+          "consumed": 0,
+          "errors": 0,
+          "prepared": 0,
+          "prepared_bytes": 0,
+          "rejected": 0,
+          "requested": 9600,
+          "unsupported": 0
+        },
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 9630,
+        "session": "f8f9fd29bb1f4ca2948413664463e375",
+        "worker_alive": false,
+        "write_latency_p95_ms": 2478.8302179999846,
+        "written": 313
+      },
+      "native_rows": null,
+      "background_work": {
+        "correct_gaps": 0,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "errors": [],
+        "model_writes": 154,
+        "updates": 4897
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "4faafb165e6913def23d4678945851c26a675d1360c3afcbca18672f6104fa13",
+        "manifest": "source-4faafb165e6913def23d4678945851c26a675d1360c3afcbca18672f6104fa13.json"
+      },
+      "log": "unprobed-extension/1000-200-baseline-4.log.gz",
+      "raw_archive": "unprobed-extension/1000-200-baseline-4.raw.json.gz"
+    },
+    {
+      "name": "1000-200-current-4",
+      "sensors": 1000,
+      "devices": 200,
+      "exit_code": 0,
+      "probe_enabled": false,
+      "observation_timeout_seconds": 30,
+      "diagnostic_only": false,
+      "log_sha256": "de83b7f76671047fd09bfb6f870695c85abf63f445808bacb88b0b5f8fa04e90",
+      "status": "completed",
+      "raw_sha256": "e874192167fb5abd33fb549b65924fb6774f40976366a5c4e4fe44413ae7170f",
+      "event_to_intent": {
+        "count": 8000,
+        "p50_ms": 662.1820640000351,
+        "p95_ms": 1267.5160659999847,
+        "p99_ms": 1493.4674300000097,
+        "max_ms": 1656.7921150000302
+      },
+      "prediction": null,
+      "warmup": {
+        "count": 1600,
+        "p50_ms": 750.9849199999508,
+        "p95_ms": 11737.773659000028,
+        "p99_ms": 14082.81084600003,
+        "max_ms": 14613.864423999985
+      },
+      "pipeline": {
+        "p50_ms": 667.1990120000828,
+        "p95_ms": 1273.9033389999577,
+        "p99_ms": 1498.0932219999659
+      },
+      "evaluated_roots": 8000,
+      "sql_api_calls": null,
+      "store_lock_wait": null,
+      "executor_queue_wait": null,
+      "process_cpu_ms": 69086.116713,
+      "wall_ms": 57744.68878000005,
+      "rss_mb": 443.10546875,
+      "peak_rss_mb": 471.74609375,
+      "collector": {
+        "batches": 523,
+        "by_kind": {
+          "decision": {
+            "dropped": 0,
+            "queued": 9600,
+            "rejected": 0,
+            "written": 9600
+          },
+          "event": {
+            "dropped": 0,
+            "queued": 48,
+            "rejected": 0,
+            "written": 48
+          }
+        },
+        "committed_after_epoch_change": 0,
+        "deferred_for_foreground": 1561,
+        "deferred_for_sqlite": 1563,
+        "dropped": 0,
+        "enabled": true,
+        "epoch": 0,
+        "errors": 0,
+        "foreground_batches": 502,
+        "gaps": 1,
+        "last_error": null,
+        "max_queue": 286,
+        "max_queue_bytes": 4624512,
+        "max_write_latency_ms": 1562.1321929999112,
+        "native_event_upserts": 57,
+        "native_seed_upserts": 0,
+        "predecision": {
+          "consumed": 0,
+          "errors": 0,
+          "prepared": 0,
+          "prepared_bytes": 0,
+          "rejected": 0,
+          "requested": 9601,
+          "unsupported": 0
+        },
+        "queue": 0,
+        "queue_bytes": 0,
+        "queued": 9648,
+        "session": "cdce9d4ae458421983edb2a105168bf1",
+        "worker_alive": false,
+        "write_latency_p50_ms": 295.9817529999782,
+        "write_latency_p95_ms": 906.9451050000907,
+        "write_latency_p99_ms": 1192.1036400000276,
+        "write_latency_sample_count": 2048,
+        "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+        "written": 9648
+      },
+      "native_rows": null,
+      "background_work": {
+        "correct_gaps": 0,
+        "correct_reads": 2,
+        "correct_writes": 2,
+        "errors": [],
+        "model_writes": 117,
+        "updates": 3720
+      },
+      "candidate_count": 200,
+      "ha_calls": 0,
+      "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+      "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+      "source_identity": {
+        "sha256": "de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085",
+        "manifest": "source-de559e9039dbcbc4ee83c64c76b1846550008cbea5772e9cc0e4b1013e645085.json"
+      },
+      "log": "unprobed-extension/1000-200-current-4.log.gz",
+      "raw_archive": "unprobed-extension/1000-200-current-4.raw.json.gz"
+    }
+  ]
+}
