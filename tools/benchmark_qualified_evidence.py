@@ -133,10 +133,12 @@ def seed_candidates(scenario):
     from agent_candidate_lineage import _ensure_root, _register_generation
     from agent_candidates import install, refresh_candidate_ids_cache
     from agent_candidate_shadow_runtime import install as install_shadow
+    from agent_candidate_shadow_context import install as install_shadow_context
     store, engine = scenario.store, scenario.engine
     manager = install(SimpleNamespace(STORE=store, ENGINE=engine, _final_explicit_http_only=True),
                       start_worker=False)
     install_shadow(manager)
+    install_shadow_context(manager)
     for agent in scenario.agents:
         child = store.create_agent({**agent, "id": None, "mode": "paused", "name": "Synthetic Candidate"})
         store.save_model(child["id"], engine.models[agent["id"]].serialize())
@@ -176,6 +178,7 @@ def busy_work(scenario, stop, stats):
                 stats["model_writes"] += 1
             if tick % 8 == 0:
                 engine.agent_candidates.drain_deferred_candidate_shadow(max_roots=4)
+                engine.agent_candidates.drain_candidate_shadow_events(max_roots=4)
             if tick % 128 == 0:
                 scenario.journal.prune()
                 stats["prune_calls"] += 1
@@ -367,6 +370,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             background_stats["candidate_shadow"] = candidate
         signature = [(tick, desired, intent["target_entity"], intent["desired_value"], intent["decision_source"])
                      for tick, desired, intent in sorted(intents, key=lambda row: row[0])]
+        collector_at_load_end = collector.diagnostics()
         load_cpu = time.process_time()-cpu
         load_seconds = time.perf_counter()-started
         finalization_started = time.perf_counter()
@@ -419,7 +423,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                       prepare_error_reasons=errors, original_intents=len(intents), event=events,
                       decision_status=statuses, decision_signature=hashlib.sha256(json.dumps(signature).encode()).hexdigest(),
                       history=counts, dataset=dataset, collector=end,
-                      collector_before_final_drain=before_final_drain, background=background_stats,
+                      collector_before_final_drain=before_final_drain, collector_at_load_end=collector_at_load_end,
+                      background=background_stats,
                       requested_start=scenario.start, requested_through=through,
                       event_to_intent=quantiles(timings), event_to_intent_count=len(timings),
                       load_seconds=load_seconds, ingress_seconds=ingress_seconds, process_cpu_seconds=load_cpu,

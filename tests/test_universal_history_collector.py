@@ -474,6 +474,25 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         self.assertEqual([r[0] for r in rows],[20.+i for i in range(20)])
         self.assertEqual([json.loads(r[1])['intent']['desired_value'] for r in rows],[float(i%2) for i in range(20)])
 
+    def test_pending_predecision_wakes_at_interactive_window_end(self):
+        from concurrent.futures import Future
+        from settings import OPTIONS
+        from universal_history_collector import foreground_idle
+
+        worker = Future()
+        engine = SimpleNamespace(last_event_received=10., in_flight={'light.fixture': worker})
+        self.collector.predecision = SimpleNamespace(engine=engine, pending={'agent': None})
+        with patch.dict(OPTIONS, training_realtime_event_priority_seconds=.30):
+            with patch('universal_history_collector.time.perf_counter', return_value=10.2):
+                self.assertAlmostEqual(self.collector._idle_wait(), .10)
+                self.assertFalse(foreground_idle(engine))
+                self.collector.predecision.pending.clear()
+                self.assertEqual(self.collector._idle_wait(), .25)
+            with patch('universal_history_collector.time.perf_counter', return_value=10.31):
+                self.assertFalse(foreground_idle(engine))
+                worker.set_result(None)
+                self.assertTrue(foreground_idle(engine))
+
     def test_threaded_foreground_writer_preserves_qualified_native_v2_v3_samples(self):
         from tools.universal_e2e_fixture import OriginalEvidenceScenario
         # Synthetic explicit declarations and original pre-predict preparation
