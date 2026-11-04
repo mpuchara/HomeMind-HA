@@ -69,3 +69,14 @@ durable configuration bound, collector contention and restart, historical
 retention and affected sensors. The implementation run passed full Python
 3.11 and 3.13 regression, the required benchmarks and image build/smoke.
 [Implementation CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41917914493)
+
+### Snapshot follow-up
+
+`3aecd8182223fa69af4578c6edbc7bbd7a1ae284` passed 106 focused tests
+in 108.094 s on WSL ext4. Seven new matched pairs preserved 384 intents
+and their signatures and recorded zero HA calls and collector drops.
+Gate D stays **BLOCKER**. All four Busy pairs met the latency margins,
+one breached the CPU margin, and Normal breached CPU and both latency
+margins. The supported cases retained the throughput gain. Gates G–J
+remain unrun and the earlier intermittent retention miss remains open.
+[Snapshot follow-up CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41922738919)

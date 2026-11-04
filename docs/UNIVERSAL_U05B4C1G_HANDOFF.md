@@ -61,6 +61,25 @@ Record service-call attempts at the transport boundary and compare HTTP
 latency during idle, sustained write load and reconnect.
 # U05b.4c.1g.2 handoff
 
+Snapshot optimization `3aecd8182223fa69af4578c6edbc7bbd7a1ae284` is
+the latest runtime checkpoint. Use the paired sources, logs, harness
+hashes and source identity in WSL under
+`~/homemind-u05b4c1g/g2opt-3aecd818-mjmqTW`.
+The follow-up cleared all four Busy latency screens and three of four
+Busy CPU screens. Normal breached p95, p99 and CPU margins in its
+follow-up pair. Use both revisions' data when selecting the next
+experiment.
+
+For the remaining cost, first measure Normal with preparation ON and
+OFF at the same revision and with identical collector writes. Join
+preparation turns to ingress intervals and split CPU between RAM
+snapshot copying, SQL, agent normalization and the original arbiter.
+Measure attempts per ingress window and the proportion consumed.
+Use a fixed, serial Busy diagnostic to separate training/Candidate
+completion-count changes from preparation CPU. Repeat the original
+natural workload independently for acceptance. Keep the existing
+throughput and latency margins.
+
 Implementation `245307f470cd710e0a3d6906934d825573d5a3d8` on Draft #369
 was compared with exact baseline `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
 Keep both archived sources under

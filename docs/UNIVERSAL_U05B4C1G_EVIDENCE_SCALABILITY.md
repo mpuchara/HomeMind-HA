@@ -203,3 +203,60 @@ At 256, the original mask's median wall time was 2.406 → 2.766 ms and
 affected-evidence preparation was 0.150 → 0.157 ms. These inclusive spans
 can overlap. The bounded copy probe combines related state and payload
 copies and does not separately attribute them.
+
+## g.2 snapshot materialization follow-up
+
+Implementation `3aecd8182223fa69af4578c6edbc7bbd7a1ae284` reads and
+normalizes agent configurations directly in the same native transaction.
+SnapshotStore already serves those configs from its detached list. The
+isolated SQLite copy still supplies the arbiter's mapping and resource
+reads and writes. Flat SQLite scalars are charged to the same structural
+byte bound without building a second recursive object tree. The original
+agent bound, revision checks and evidence timing still apply.
+
+Two serial pairs per supported Busy case used the exact #368 baseline
+`951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`, the same harness and
+alternating order on separate ext4 source snapshots. The harness now
+also records maximum event-to-intent latency.
+
+| Busy case | V3 / 384 | Consumed / prepared | p95 ms | p99 ms | Max ms | Load CPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128+128 pair 1 | 6 → 25 | 7/9 → 28/30 | 224.8 → 245.2 | 301.8 → 285.7 | 343.8 → 328.6 | +12.5% |
+| 128+128 pair 2 | 7 → 29 | 9/11 → 34/39 | 214.2 → 218.8 | 252.9 → 265.7 | 264.2 → 289.2 | +16.6% |
+| 200+56 pair 1 | 4 → 16 | 5/11 → 19/34 | 231.2 → 229.4 | 291.9 → 263.6 | 298.8 → 266.7 | +3.6% |
+| 200+56 pair 2 | 4 → 19 | 5/9 → 22/43 | 234.3 → 214.1 | 261.4 → 247.3 | 270.6 → 264.0 | +11.4% |
+
+All four supported Busy pairs cleared the registered p95 and p99
+screen. Three cleared the CPU screen and one exceeded the +15% margin.
+The measured qualification increase and the narrower CPU gap leave
+Gate D at **BLOCKER** under the existing criteria. The harness offers the
+same ingress in each pair, while the number of background policy updates
+and Candidate completions varies.
+
+Normal 200+0 increased V3 from 5 to 22 per 384 intents, with p95
+56.5 → 67.8 ms, p99 64.6 → 77.3 ms and CPU 1.318 → 2.051 s.
+All three margins were exceeded. In the same implementation, the
+incomplete control used 1.351 s CPU with the collector still writing
+and preparation disabled. Normal's preparation thread used 0.555 s CPU
+over 41 turns. This single contrast locates most of the observed CPU
+difference in or near preparation. It cannot assign the remaining
+difference to a specific worker. OFF and incomplete retained zero
+qualification.
+
+The incomplete control's p99 increased 66.6 → 77.2 ms (+15.9%),
+slightly over the +15% screen. Neither incomplete side ran preparation.
+This adds evidence of run-to-run tail variation and does not erase the
+Normal or Busy margin breaches.
+
+In a separate diagnostic at Busy 128+128, comparing the previous
+implementation `245307f4` with `3aecd818`, median preparation thread
+CPU per turn fell 24.538 → 19.173 ms and median native snapshot thread
+CPU fell 13.451 → 9.052 ms. Median preparation wall time fell
+32.102 → 23.628 ms. The probe observed 47 → 53 turns, including
+finalization. The stage timings are inclusive. This single profiled pair
+describes the cost per turn and is separate from latency acceptance.
+
+The separate 400-config control still rejected with `agent bound` and
+zero V3. Its native snapshot median was 31.773 → 0.757 ms versus #368.
+The unsupported case attempted more preparations, 14 → 165 in the
+profile, so the lower per-attempt cost does not establish lower total CPU.
