@@ -1,7 +1,7 @@
 """Measure native historical evidence on a disposable synthetic Engine/Store."""
 import argparse
 from collections import Counter
-from contextlib import closing, ExitStack, nullcontext
+from contextlib import closing, contextmanager, ExitStack, nullcontext
 import hashlib
 import json
 import os
@@ -133,7 +133,7 @@ def validate_offline(scenario, source, dataset):
     return result
 
 
-def seed_candidates(scenario):
+def seed_candidates(scenario, count=None):
     from agent_candidate_lineage import _ensure_root, _register_generation
     from agent_candidates import install, refresh_candidate_ids_cache
     from agent_candidate_shadow_runtime import install as install_shadow
@@ -147,7 +147,7 @@ def seed_candidates(scenario):
                                       _final_explicit_http_only=True), start_worker=False)
     install_shadow(manager)
     install_shadow_context(manager)
-    for agent in scenario.agents:
+    for agent in scenario.agents[:count]:
         child = store.create_agent({**agent, "id": None, "mode": "paused", "name": "Synthetic Candidate"})
         store.save_model(child["id"], engine.models[agent["id"]].serialize())
         store.set_training_state(child["id"], "qualified", score=1., samples=48,
@@ -297,7 +297,7 @@ def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_in
     return event_count, intents, timings, dict(counters), ingress_seconds
 
 
-def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False, fanout=1):
+def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False, fanout=1, candidates=None, profile_prepare=False):
     from storage import Store
     from telemetry import rss_mb
     from universal_history_collector import foreground_idle
@@ -327,8 +327,13 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                     feedback_jobs.put_nowait((tick, desired, intent))
                 except Full:
                     background_stats["correct_queue_full"] += 1
-        if mode == "busy":
-            seed_candidates(scenario)
+        candidate_count = (devices if mode == "busy" else 0) if candidates is None else candidates
+        if not 0 <= candidate_count <= devices:
+            raise ValueError("Candidate count must be between zero and the root count")
+        if mode == "busy" or candidate_count:
+            seed_candidates(scenario, candidate_count)
+        with store.conn() as conn:
+            durable_configs = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         if mode == "off":
             engine.universal_training_collector = None
             engine.executor.device_agents.universal_training_collector = None
@@ -338,13 +343,56 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             collector.capacity = 32  # Fault profile, after the original seed.
         errors = Counter()
         prepare = scenario.evidence.prepare_one
+        preparation_probe = Probe(capacity=2048)
+        if profile_prepare:
+            from device_agents import DeviceAgentService
+            from training_budget import TRAINING_BUDGET
+            import universal_predecision
+            import universal_affected_sensors
+
+            preparing = threading.local()
+
+            def observe_stage(owner, method, stage):
+                original = getattr(owner, method)
+
+                def measured(*args, **kwargs):
+                    if getattr(preparing, "active", False):
+                        with preparation_probe.span(stage):
+                            return original(*args, **kwargs)
+                    return original(*args, **kwargs)
+
+                stack.enter_context(patch.object(owner, method, measured))
+
+            conn = store.conn
+
+            @contextmanager
+            def measured_connection():
+                span = (preparation_probe.span("native_snapshot_transaction")
+                        if getattr(preparing, "active", False) else nullcontext())
+                with span, conn() as connection:
+                    yield connection
+
+            stack.enter_context(patch.object(store, "conn", measured_connection))
+            observe_stage(TRAINING_BUDGET, "checkpoint", "training_budget_checkpoint")
+            observe_stage(universal_predecision, "bounded_copy", "snapshot_and_payload_copy")
+            observe_stage(universal_affected_sensors, "latest", "affected_declaration_read")
+            observe_stage(universal_affected_sensors, "topology", "affected_topology_read")
+            observe_stage(universal_affected_sensors, "prepare", "affected_evidence")
+            observe_stage(DeviceAgentService, "legal_action_mask", "original_arbiter_mask")
 
         def observed_prepare():
             try:
+                if profile_prepare and scenario.evidence.pending:
+                    preparing.active = True
+                    with preparation_probe.span("prepare_pending_turn"):
+                        return prepare()
                 return prepare()
             except Exception as exc:
                 errors[str(exc)] += 1
                 raise
+            finally:
+                if profile_prepare:
+                    preparing.active = False
 
         scenario.evidence.prepare_one = observed_prepare
         collector.idle_ready = lambda: foreground_idle(engine)
@@ -417,6 +465,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         signature = [(tick, desired, intent["target_entity"], intent["desired_value"], intent["decision_source"])
                      for tick, desired, intent in sorted(intents, key=lambda row: row[0])]
         collector_at_load_end = collector.diagnostics()
+        with scenario.evidence.lock:
+            preparation_pending_at_load_end = len(scenario.evidence.pending)
         load_cpu = time.process_time()-cpu
         load_seconds = time.perf_counter()-started
         finalization_started = time.perf_counter()
@@ -464,7 +514,11 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             raise AssertionError(f"Missing evidence qualified: {dataset}")
         result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
                       active_agents=len(scenario.agents),
-                      candidates=devices if mode == "busy" else 0, predecision_max_agents=MAX_AGENTS,
+                      candidates=candidate_count, durable_configs=durable_configs,
+                      preparation_profile=preparation_probe.snapshot() if profile_prepare else None,
+                      preparation_pending_at_load_end=preparation_pending_at_load_end,
+                      preparation_native_sql=snapshot.get("sqlite_execute.universal_predecision.prepare_one"),
+                      predecision_max_agents=MAX_AGENTS,
                       prepare_error_reasons=errors, original_intents=len(intents), event=events,
                       decision_status=statuses, decision_signature=hashlib.sha256(json.dumps(signature).encode()).hexdigest(),
                       history=counts, dataset=dataset, collector=end,
@@ -497,6 +551,8 @@ def main():
     parser.add_argument("--ticks", type=int, default=24)
     parser.add_argument("--fanout", type=int, default=1, help="Root targets admitted per motion event")
     parser.add_argument("--period", type=float, default=.4)
+    parser.add_argument("--candidates", type=int, help="Override the number of seeded Candidate configs")
+    parser.add_argument("--profile-prepare", action="store_true", help="Record bounded per-stage preparation spans")
     parser.add_argument("--lifecycle", action="store_true")
     parser.add_argument("--output", type=Path, required=True, help="New JSONL checkpoint file")
     args = parser.parse_args()
@@ -511,7 +567,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="hm-load-") as tmp, args.output.open("x", encoding="utf-8") as output:
         os.environ["ADAPTIVE_AI_DATA"] = str(Path(tmp)/"bootstrap")
         output.write(json.dumps(dict(scope="host synthetic", python=sys.version, platform=platform.platform(),
-                                     cpus=os.cpu_count(), ticks=args.ticks, period=args.period, lifecycle=args.lifecycle, fanout=args.fanout))+"\n")
+                                     cpus=os.cpu_count(), sqlite=sqlite3.sqlite_version,
+                                     ticks=args.ticks, period=args.period, lifecycle=args.lifecycle,
+                                     fanout=args.fanout, candidates=args.candidates,
+                                     profile_prepare=args.profile_prepare))+"\n")
         output.flush()
         for index, item in enumerate(args.cases.split(",")):
             sensors, devices = map(int, item.split(":"))
@@ -521,7 +580,8 @@ def main():
                 folder.mkdir()
                 try:
                     row = collect_case(folder/"native.db", sensors, devices, mode, args.ticks, args.period,
-                                       run_lifecycle=args.lifecycle, fanout=args.fanout)
+                                       run_lifecycle=args.lifecycle, fanout=args.fanout,
+                                       candidates=args.candidates, profile_prepare=args.profile_prepare)
                 except Exception as exc:
                     import traceback
                     traceback.print_exc()
