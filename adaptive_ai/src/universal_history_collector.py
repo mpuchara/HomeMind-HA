@@ -20,6 +20,7 @@ from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_
 
 MAX_RECORD = 4 * 1024 * 1024
 MAX_ENTITIES = 10000
+PREPARATION_POLL_SECONDS = .25
 
 
 def encoded(value):
@@ -98,7 +99,11 @@ class PreparationBudget:
     def charge(self, started, duty_cycle):
         finished = self.clock()
         elapsed = finished - started
-        self.ready_at = finished + elapsed * (1. - duty_cycle) / duty_cycle
+        # Ingress and writer notifications may wake the loop several times
+        # between polls. They can advance the writer, but do not grant extra
+        # snapshot turns within the same preparation polling interval.
+        self.ready_at = max(started + PREPARATION_POLL_SECONDS,
+                            finished + elapsed * (1. - duty_cycle) / duty_cycle)
         return elapsed
 
 
@@ -629,8 +634,8 @@ class HistoricalTrainingCollector(threading.Thread):
             remaining = max(foreground_priority_remaining(evidence.engine),
                             self.preparation_budget.remaining())
             if remaining > 0:
-                return min(.25, remaining)
-        return .25
+                return min(PREPARATION_POLL_SECONDS, remaining)
+        return PREPARATION_POLL_SECONDS
 
     def _prepare_turn(self):
         evidence = getattr(self, 'predecision', None)

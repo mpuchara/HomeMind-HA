@@ -129,6 +129,25 @@ class CollectorTests(unittest.TestCase):
             collector._prepare_turn()
             self.assertEqual(collector.predecision.prepare_one.call_count, 2)
 
+    def test_writer_wakeups_cannot_grant_extra_preparation_turns(self):
+        collector = self.collector
+        now = [10.]
+        collector.preparation_budget = PreparationBudget(lambda: now[0])
+
+        def prepare():
+            now[0] += .001
+
+        evidence = SimpleNamespace(pending={'a', 'b'}, prepare_one=Mock(side_effect=prepare))
+        collector.predecision = evidence
+        collector._prepare_turn()
+        for instant in (10.01, 10.05, 10.1, 10.249):
+            now[0] = instant
+            collector._prepare_turn()
+        evidence.prepare_one.assert_called_once()
+        now[0] = 10.25
+        collector._prepare_turn()
+        self.assertEqual(evidence.prepare_one.call_count, 2)
+
     def test_enabled_initialization_failure_cannot_break_runtime_startup(self):
         import settings
         fake=SimpleNamespace(feature_journal=self.journal,executor=SimpleNamespace(device_agents=SimpleNamespace()))
