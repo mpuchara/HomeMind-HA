@@ -79,3 +79,20 @@ in fixture setup before the rollback, with `missing_historical_decision_receipt`
 The same test passed in isolation on this branch and on the exact #367
 source. The aggregate failure and both isolated results are retained.
 The reason for the one-off fixture miss remains unresolved.
+
+## Additional SQLite fault validation
+
+The closure probe against `673291f2ba0ec9980981d3810feb07f792fff44d` found
+that retries repeatedly reused a closed worker connection and that shutdown
+timed out. Commit `0b29ed013a32d45587b27237d268a9745b94b600` routes the closed
+session exception to the existing session-open retry after marking the
+write failure and dropping the uncertain envelopes. The regression verifies
+one reopened session, a subsequent committed observation, a preserved prior
+watermark, and rejection across the lost interval.
+
+A separate test holds the real metadata transaction open before sealing
+coverage. The reader sees the old committed watermark and ingress can queue
+a later event during the hold. On release the writer commits and coverage
+can advance. The collector suite passed all 41 tests in WSL, including both
+new fault regressions. The fanout numbers were recorded before the
+closed-session fix and did not exercise that exception path.

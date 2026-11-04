@@ -4,6 +4,7 @@
   "base": "c4adb44512f8c1954a8cefdd7970710b249591d2",
   "production_reference": "f7384ba5476f26155ecb138034cc3350fa5bfda2",
   "runtime_fix": "8f73b665345c19110302c0f1e57f1665aadf4527",
+  "closed_session_recovery": "0b29ed013a32d45587b27237d268a9745b94b600",
   "fanout_harness": "73836492a0ae61bb31b3c4b3111ac38a9d24079c",
   "host": {
     "cpu": "Intel Core i7-1255U",
@@ -18,8 +19,9 @@
   },
   "raw_archive": {
     "file": "UNIVERSAL_U05B4C1F_RAW.json.gz",
-    "sha256": "b8d7e5ac55efc103c1eb41c7527cc9cabad4d781eb97db03b19eeaa58a959231",
+    "sha256": "0c1db70c99b36883cf9e4612c854067211c4c827f484de1afcfc13a0ec1346cd",
     "entries": [
+      "collector-fault-tests.log",
       "fanout-16.jsonl",
       "fanout-16.log",
       "fixed-smoke.jsonl",
@@ -30,6 +32,8 @@
       "matrix-1.jsonl",
       "matrix-2.jsonl",
       "matrix-2.log",
+      "mid-session-before-fix.log",
+      "mid-session-recovery.log",
       "retention-base367-isolated.log",
       "retention-isolated.log",
       "soak-final.jsonl",
@@ -11878,6 +11882,14 @@
     "host_8h": "NOT RUN"
   },
   "tests": {
+    "collector_fault_suite_tail": [
+      "test_write_failure_keeps_old_trusted_watermark (test_universal_history_collector.CollectorTests.test_write_failure_keeps_old_trusted_watermark) ... ok",
+      "",
+      "----------------------------------------------------------------------",
+      "Ran 41 tests in 46.557s",
+      "",
+      "OK"
+    ],
     "focused_wsl_tail": [
       "AssertionError: 0 != 1 : (('feedback-v1:original-correct', 'missing_historical_decision_receipt'),)",
       "",
