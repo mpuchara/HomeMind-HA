@@ -8,13 +8,11 @@ The [preregistered protocol](UNIVERSAL_U05B4C1E_STEADY_STATE.md) and
 matched, natural and diagnostic observations. Prior #366 A–D results
 remain in [the previous recovery summary](benchmarks/UNIVERSAL_U05B4C1_RECOVERY_SUMMARY.json).
 
-## Resume the running serial experiments
+## Reproduce or resume the serial experiments
 
-Start by reading the actual WSL state. The original directory is
+Start by reading the actual WSL state. All 24 primary, four extension and six diagnostic observations have completed. The original directory is
 `/home/mpuchara/homemind-u05b4c1e`. The primary driver writes one immutable
-summary, log and raw archive per case under `primary/`. Its follow-up
-coordinator waits for all 24 primary summaries, then runs `extension/` and
-validates the small timeline fixture before `diagnostic/`. It records progress
+summary, log and raw archive per case under `primary/`. Its follow-up coordinator waited for all 24 primary summaries, then ran the extension and validated the small timeline fixture before diagnostics. It recorded progress
 in `continuation.log`. Preserve every timeout and orphaned log. Avoid launching
 another timed job while a driver or child is still running.
 
@@ -50,8 +48,7 @@ collector rows after shutdown and after the measurement window.
 
 ## Remaining acceptance
 
-Gate D stays **INCONCLUSIVE** until the independent matched and natural
-series are analyzed. The timeline has benchmark-only instrumentation.
+The preregistered relative 1000/200 comparison returned **NO_REGRESSION**. Overall acceptance remains open on scalability, qualified V2/V3 under load and hardware. The timeline has benchmark-only instrumentation.
 A causal fix requires controlled evidence beyond correlated spans.
 Current warmup, count parity and collector results must be assessed across
 the full matrix. Live Raspberry Pi and Home Assistant remain untested.
@@ -68,7 +65,7 @@ from #366 does not substitute for this experiment. Pay attention to the
 native predecision snapshot's agent limit when constructing the 200-device
 scenario with Candidate agents.
 
-Follow exact-head [checks for #367](https://github.com/mpuchara/HomeMind-HA/pull/367/checks)
+Executable checkpoint `916bf6f2` passed [CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41810235557). Follow exact-head [checks for #367](https://github.com/mpuchara/HomeMind-HA/pull/367/checks)
 for Python 3.11, Python 3.13, configured benchmarks and image smoke. The base
 [#366 run](https://github.com/mpuchara/HomeMind-HA/actions/runs/41800500067)
 only validates the base. Keep all versions and CI identities distinct.

@@ -80,3 +80,129 @@ drops. These primary counters do not independently count physical rows.
 This first pair is a measurement of the harness under the target load.
 The acceptance unit remains the independent run pair, so Gate D is
 **INCONCLUSIVE**.
+
+## Four matched pairs at 1000/200
+
+| Pair | Warmup max baseline → current ms | p95 baseline → current ms | p99 baseline → current ms |
+| --- | ---: | ---: | ---: |
+| 1 | 16,621 → 9,536 | 1,795 → 1,456 | 2,914 → 1,595 |
+| 2 | 19,920 → 13,007 | 1,405 → 1,501 | 1,579 → 1,725 |
+| 3 | 6,273 → 15,226 | 1,389 → 1,504 | 1,519 → 1,730 |
+| 4 | 16,672 → 14,848 | 1,455 → 1,492 | 1,626 → 1,628 |
+
+Every side completed 3,072 updates and 96 writes, at the same event-relative
+release points. Three of the four current p95s increased despite matching
+counts. All four paired p95 and p99 ratios remained within the registered
+margins. Four successes give a one-sided sign-test p-value of 0.0625 per
+metric, so these results do not qualify for `NO_REGRESSION`. Six matched
+pairs and natural corroboration remain required.
+
+The first three pairs' p95 direction matched the direction of the median
+trainer batch duration. Batch duration can itself be a result of contention.
+The aggregate comparison does not distinguish that from a scheduler
+bottleneck, shared SQLite work, or competition with Candidate and Shadow.
+Use the worker timeline for target-level comparisons. The benchmark
+processes ran serially, but checkpoint packaging and Git activity briefly
+shared the host. No affected attempt is excluded from the report.
+
+## Natural-workload cross-check and smaller scales
+
+| Sensors / devices | Mode | p95 baseline → current ms | p99 baseline → current ms |
+| --- | --- | ---: | ---: |
+| 1000 / 200 | Natural 1 | 1,625 → 1,398 | 2,137 → 1,601 |
+| 1000 / 200 | Natural 2 | 1,321 → 1,391 | 1,455 → 1,668 |
+| 200 / 30 | Matched | 139 → 119 | 159 → 135 |
+| 200 / 30 | Natural | 124 → 129 | 143 → 183 |
+| 50 / 10 | Matched | 79 → 48 | 104 → 59 |
+| 50 / 10 | Natural | 43 → 34 | 55 → 39 |
+| 5 / 1 | Matched | 4.67 → 7.95 | 5.43 → 13.01 |
+| 5 / 1 | Natural | 7.82 → 5.64 | 7.84 → 8.90 |
+
+Natural pair 1 used 5,280 → 4,400 updates and 165 → 138 writes. Pair 2
+used 4,385 → 3,297 updates and 138 → 104 writes. Their direction differs
+even though current completed less background training in both.
+The 200/30 natural p99 increase and the 5/1 matched increase are retained.
+The smaller scales have one independent pair per mode. Their tails
+remain descriptive, particularly the 40-sample 5/1 runs.
+
+All 24 primary observations completed under the original deadline.
+All completed comparisons preserve input and decision digests by scale
+and report zero HA calls. Current's longest warmup was 26.410 s and
+current reported zero historical collector drops. Physical counts from
+the separate traced smoke are covered in CI. The primary matrix has
+no post-run SQL count hook. Current max reached 2.545 s at 1000/200 in
+matched pair 3, so `SCALABILITY_TARGET_NOT_MET` remains separate from
+the relative performance assessment.
+
+## Registered 1000/200 comparison completed
+
+| Pair | Warmup max baseline → current ms | p95 baseline → current ms | p99 baseline → current ms |
+| --- | ---: | ---: | ---: |
+| 5 | 10,732 → 15,601 | 1,456 → 1,519 | 1,610 → 1,733 |
+| 6 | 16,452 → 6,604 | 1,436 → 1,495 | 1,578 → 1,697 |
+
+All six matched pairs were below both preregistered margins. Each one-sided
+exact paired sign test gives p = 0.015625. Both natural pairs also met the
+margins. The registered result for the 1000/200 synthetic host comparison is
+**NO_REGRESSION**. Five of six current p95 values are higher than their
+matched baseline, so there is no overall speedup claim. The 200/30 natural
+tail remains a separate unresolved one-pair observation. Current max reached
+2.824 s in pair 6. **SCALABILITY_TARGET_NOT_MET** remains open. These results
+support no production scheduler change without stronger cause evidence.
+
+## Worker timeline and SQLite diagnostics
+
+| Scale | Source | p95 ms | p99 ms | SQLite decisions / observations | Reported collector drops |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 200/30 | #364 | 150 | 172 | 410 / 48 | 1,065 |
+| 200/30 | #365 | 166 | 192 | 410 / 48 | 1,065 |
+| 200/30 | #366 | 147 | 233 | 1,440 / 48 | 0 |
+| 1000/200 | #364 | 1,633 | 2,279 | 312 / 48 | 9,335 |
+| 1000/200 | #365 | 1,569 | 1,834 | 312 / 48 | 9,335 |
+| 1000/200 | #366 | 1,581 | 1,742 | 9,600 / 48 | 0 |
+
+#365 is a single auxiliary instrumented observation per scale. The synthetic
+ingress path bypasses REST, so this comparison cannot measure the REST
+fix's cost or isolate the timing contribution of one change.
+
+The slowest retained, fully joined current 1000/200 target took 1,959.19 ms
+from Engine receipt to the first Executor submission. Its directly measured
+partition follows. Shares are of that target interval only.
+
+| Source of delay | Time ms | Share | Boundary |
+| --- | ---: | ---: | --- |
+| Ingress and scheduler before submission | 1,948.41 | 99.45% | Engine receipt to pool submit call |
+| Executor worker wait | 0.20 | 0.01% | Pool submit call to worker entry |
+| Worker entry to agent entry | 9.08 | 0.46% | Worker entry to composed agent |
+| Agent entry to Executor submission | 1.50 | 0.08% | Composed agent entry to first Executor submission |
+
+The same target's feature preparation and prediction occupied 0.52 and
+0.24 ms inside the last interval. The joined trace shows no retained
+same-thread Store-lock or SQLite span between agent entry and submission.
+Absence after ring eviction is unknown. Before submission, at least one
+control worker was active for 1,706 ms. Training updates overlapped for
+870 ms, model writes for 535 ms, collector writes for 1,325 ms and SQLite
+calls for 1,664 ms across threads. These are separately clipped union
+exposures, not additive shares or time attributed to a blocker.
+
+The corresponding slowest joined 200/30 current target spent 310 of 316 ms
+before pool submission, with 307 ms of other worker activity and 303 ms
+of collector write exposure in that interval. The 1000/200 current trace
+joined 1,748 of 8,000 steady targets and evicted 171,673 spans across
+threads. 200/30 joined all 1,200 targets, with operation-ring evictions.
+These measurements place the observed slow paths upstream of execution
+and bound the pool FIFO contribution. They do not separate the exact
+creation and retry boundaries inside the scheduler or establish which
+competing operation caused the delay. No production change is justified
+by these individual instrumented comparisons.
+
+All current traced decisions had complete physical counts. Each current
+overload database had one coverage gap, zero historical mask rows and zero
+coverage segments. This benchmark therefore establishes collector durability
+only. Qualified V2/V3 under sustained load remains untested.
+
+Executable checkpoint `916bf6f23816f8b750ab81f1333a17f5cd66908f` passed
+[exact-head CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41810235557)
+for Python 3.11 and 3.13, required benchmarks and image validation. The
+local matched/timeline smoke passed in 7.565 s. The reporting commit
+contains the 34 observations, their raw files and the derived trace joins.
