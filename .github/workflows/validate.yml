@@ -61,6 +61,9 @@ jobs:
       - name: U05b.4b.4 original V2/V3 evidence to validated offline artifact (host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_universal_e2e.py --cases 5:1,50:10
+      - name: U05b.4c.1f native V2/V3 collection and overload smoke (host only)
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_qualified_evidence.py --cases 5:1 --modes positive,incomplete,overload --ticks 8 --output /tmp/qualified-evidence.jsonl
       - name: U05b.4c.1a HA-native protocol and native journal audit smoke (offline host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_ha_native.py --cases 5:1,50:10 --events 40 --journal --output /tmp/ha-native-audit.json
