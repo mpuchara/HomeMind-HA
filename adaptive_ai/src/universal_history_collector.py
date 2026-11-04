@@ -561,8 +561,14 @@ class HistoricalTrainingCollector(threading.Thread):
             # observations. A later failure cannot rewind that durable boundary;
             # retain the existing fail-closed gap rather than replaying it as if
             # the whole metadata transaction had rolled back.
+            self.gap('write_failure')
+            if (threading.current_thread() is self and isinstance(exc, sqlite3.ProgrammingError)
+                    and str(exc) == 'Cannot operate on a closed database.'):
+                # Retry on a new worker session. Reusing this connection would
+                # keep failing even when the underlying database is available.
+                raise
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
-            self.gap('write_failure');self.retry.defer(exc)
+            self.retry.defer(exc)
             return False
         finally:
             self.writing_foreground=False
@@ -593,12 +599,23 @@ class HistoricalTrainingCollector(threading.Thread):
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
         run_connection_worker(self.store,self.halt,self._run,self.retry,report)
 
+    def _idle_wait(self):
+        evidence = getattr(self, 'predecision', None)
+        if evidence is not None and evidence.pending:
+            # The periodic poll can repeatedly miss an idle slot between state
+            # changes. Recheck admission at the end of the interactive window
+            # when preparation is queued, without preparing in foreground.
+            remaining = foreground_priority_remaining(evidence.engine)
+            if remaining > 0:
+                return min(.25, remaining)
+        return .25
+
     def _run(self):
         self.ready.set()
         while True:
             with self.cv:
                 if not self.pending and self.pending_gap is None and not self.stopping:
-                    self.cv.wait(.25)
+                    self.cv.wait(self._idle_wait())
                 if self.stopping and not self.pending and self.pending_gap is None:
                     break
             if self.retry.delay()>0:
@@ -652,12 +669,17 @@ class HistoricalTrainingCollector(threading.Thread):
         return result
 
 
+def foreground_priority_remaining(engine):
+    from settings import OPTIONS
+    window = float(OPTIONS.get('training_realtime_event_priority_seconds', .3))
+    elapsed = time.perf_counter()-float(getattr(engine, 'last_event_received', 0.) or 0.)
+    return window-elapsed
+
+
 def foreground_idle(engine):
     """Completed futures stay indexed by target; they are not foreground work."""
-    from settings import OPTIONS
-    return (not any(not future.done() for future in list(getattr(engine,'in_flight',{}).values())) and
-            time.perf_counter()-float(getattr(engine,'last_event_received',0.) or 0.) >=
-            float(OPTIONS.get('training_realtime_event_priority_seconds',.3)))
+    return (not any(not future.done() for future in list(getattr(engine, 'in_flight', {}).values()))
+            and foreground_priority_remaining(engine) <= 0)
 
 
 def install(engine, store):
