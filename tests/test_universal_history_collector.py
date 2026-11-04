@@ -6,6 +6,8 @@ import tempfile
 import subprocess
 import sys
 import time
+import threading
+import sqlite3
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch,Mock
@@ -66,6 +68,17 @@ class CollectorTests(unittest.TestCase):
         import settings
         with patch.dict(settings.OPTIONS,universal_training_collector_enabled=False):
             self.assertIsNone(install(SimpleNamespace(),None))
+
+    def test_completed_indexed_future_does_not_starve_idle_preparation(self):
+        from concurrent.futures import Future
+        from universal_history_collector import foreground_idle
+        future=Future()
+        engine=SimpleNamespace(in_flight={'light.a':future},last_event_received=0.)
+        self.assertFalse(foreground_idle(engine))
+        future.set_result(None)
+        self.assertTrue(foreground_idle(engine))
+        engine.last_event_received=time.perf_counter()
+        self.assertFalse(foreground_idle(engine))
 
     def test_enabled_initialization_failure_cannot_break_runtime_startup(self):
         import settings
@@ -288,15 +301,184 @@ with patch.object(BudgetConnection,'execute',execute):collector.drain()
         with self.store.conn() as c:
             self.assertEqual(c.execute('SELECT reason FROM universal_collection_sessions WHERE id=?',(self.collector.session,)).fetchone()[0],'clean_shutdown')
 
-    def test_foreground_activity_defers_writes_but_shutdown_can_drain(self):
+    def test_sustained_foreground_does_not_starve_native_writer(self):
         self.collector.idle_ready=lambda:False
-        self.collector.start();self.assertTrue(self.collector.ready.wait(1.))
         self.collector.event('binary_sensor.motion',dict(state='on'),event_ts=10.,received_ts=11.)
-        time.sleep(.08)
-        self.assertEqual(self.collector.stats['written'],0)
+        committed=threading.Event()
+        original=self.collector._write
+        def write(*args):
+            result=original(*args)
+            committed.set()
+            return result
+        with patch.object(self.collector,'_write',write):
+            self.collector.start();self.assertTrue(self.collector.ready.wait(1.))
+            self.assertTrue(committed.wait(3.))
         self.assertTrue(self.collector.stop(3.))
+        self.assertGreater(self.collector.stats['foreground_batches'],0)
         with self.store.conn() as c:
             self.assertEqual(c.execute("SELECT COUNT(*) FROM feature_observation_events WHERE entity_id='binary_sensor.motion'").fetchone()[0],1)
+
+    def test_busy_writer_retains_events_and_trusted_boundary_for_retry(self):
+        self.seed()
+        self.collector.event('binary_sensor.motion0',dict(state='off'),event_ts=41.,received_ts=42.)
+        self.collector.barrier(60.)
+        with self.store.conn() as blocker:
+            blocker.execute('BEGIN IMMEDIATE')
+            self.assertFalse(self.collector.drain(foreground=True))
+            self.assertEqual(len(self.collector.pending),2)
+            self.assertEqual(self.collector.stats['errors'],0)
+            self.assertEqual(self.collector.stats['dropped'],0)
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source(20.,60.)
+        self.assertTrue(self.collector.drain(foreground=True))
+        self.source(20.,60.)
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE event_time=41").fetchone()[0],1)
+
+    def test_native_foreground_write_does_not_wait_for_unrelated_store_owner(self):
+        held=threading.Event();release=threading.Event()
+        def hold():
+            with self.store.lock:
+                held.set();release.wait(3.)
+        worker=threading.Thread(target=hold);worker.start()
+        self.addCleanup(worker.join,3.);self.addCleanup(release.set)
+        self.assertTrue(held.wait(1.))
+        self.collector.event('sensor.a',dict(state='1'),event_ts=10.,received_ts=11.)
+        self.assertTrue(self.collector.drain(foreground=True))
+        self.assertFalse(self.collector.pending)
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE entity_id='sensor.a'").fetchone()[0],1)
+
+    def test_deferred_native_pruning_keeps_v3_invalidation(self):
+        self.seed();self.journal.retention_hours=0
+        held=threading.Event();release=threading.Event()
+        def hold():
+            with self.store.lock:held.set();release.wait(30.)
+        worker=threading.Thread(target=hold);worker.start()
+        self.addCleanup(worker.join,3.);self.addCleanup(release.set)
+        self.assertTrue(held.wait(1.))
+        for i in range(128):
+            self.collector.event('sensor.a',dict(state=str(i)),event_ts=41.+i,received_ts=41.+i)
+            if i%32==31:self.assertTrue(self.collector.drain(foreground=True))
+        self.assertTrue(self.journal._prune_pending)
+        self.source(20.,40.)
+        release.set();worker.join(3.)
+        self.assertTrue(self.journal.flush_pending_prune())
+        self.assertFalse(self.journal._prune_pending)
+        with self.assertRaisesRegex(ValueError,'retention'):self.source(20.,40.)
+
+    def test_foreground_batch_is_bounded_and_per_kind_counts_are_explicit(self):
+        for i in range(100):
+            self.collector.event('sensor.a',dict(state=str(i)),event_ts=10.+i,received_ts=11.+i)
+        self.assertTrue(self.collector.drain(foreground=True))
+        self.assertEqual(len(self.collector.pending),36)
+        self.collector.gap('websocket_disconnected')
+        stats=self.collector.diagnostics()
+        self.assertEqual(stats['by_kind']['event'],dict(queued=100,written=64,dropped=36,rejected=0))
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM feature_observation_events WHERE entity_id='sensor.a'").fetchone()[0],64)
+
+    def test_concurrent_gap_during_busy_retry_cannot_restore_stale_boundary(self):
+        self.seed();self.collector.barrier(70.)
+        def fail(*args):
+            self.collector.gap('websocket_disconnected')
+            raise sqlite3.OperationalError('database is locked')
+        with patch.object(self.collector,'_write',side_effect=fail):
+            self.assertFalse(self.collector.drain(foreground=True))
+        self.assertEqual(self.collector.pending_gap,'websocket_disconnected')
+        self.drain()
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source(20.,70.)
+
+    def test_committed_reserved_batch_is_not_also_counted_as_lost(self):
+        self.collector.event('sensor.a',dict(state='1'),event_ts=10.,received_ts=11.)
+        original=self.collector._write
+        def write(*args):
+            result=original(*args)
+            self.collector.gap('queue_overflow')
+            return result
+        with patch.object(self.collector,'_write',write):
+            self.assertTrue(self.collector.drain(foreground=True))
+        self.assertEqual(self.collector.stats['written'],1)
+        self.assertEqual(self.collector.stats['dropped'],0)
+        self.assertEqual(self.collector.stats['committed_after_epoch_change'],1)
+        self.assertEqual(self.collector.by_kind['event']['dropped'],0)
+        self.assertEqual(self.collector.pending_gap,'queue_overflow')
+
+    def test_busy_after_snapshot_metadata_commit_is_an_explicit_gap(self):
+        ids,states=self.seed()
+        self.collector.snapshot(states,received_ts=60.,requested_ts=59.,epoch=self.collector.epoch)
+        self.collector.barrier(80.)
+        original=self.collector._journal_rows
+        def native(rows):
+            if rows:raise sqlite3.OperationalError('database is locked')
+            return original(rows)
+        with patch.object(self.collector,'_journal_rows',native):
+            self.assertFalse(self.collector.drain(foreground=True))
+        self.assertEqual(self.collector.pending_gap,'write_failure')
+        self.assertEqual(self.collector.stats['errors'],1)
+        self.drain()
+        self.source(20.,40.)
+        with self.assertRaisesRegex(ValueError,'incomplete'):self.source(20.,80.)
+
+    def test_metadata_only_turn_does_not_wait_for_unrelated_store_owner(self):
+        held=threading.Event();release=threading.Event()
+        def hold():
+            with self.store.lock:held.set();release.wait(3.)
+        worker=threading.Thread(target=hold);worker.start()
+        self.addCleanup(worker.join,3.);self.addCleanup(release.set)
+        self.assertTrue(held.wait(1.))
+        self.collector._submit('notice','metadata turn')
+        self.assertTrue(self.collector.drain(foreground=True))
+        self.assertFalse(self.collector.pending)
+
+    def test_batched_receipts_keep_original_payloads_and_one_insert(self):
+        from storage_budget import BudgetConnection
+        queries=[];original=BudgetConnection.execute
+        def execute(c,sql,*args,**kw):
+            if sql.startswith('INSERT OR IGNORE INTO universal_collection_decisions'):queries.append(sql)
+            return original(c,sql,*args,**kw)
+        for i in range(20):
+            intent=SimpleNamespace(intent_id=f'batch-{i}',agent_id='a',created_at=20.+i,
+                target_entity='light.a',target_property='power',desired_value=float(i%2),
+                policy_version=12,model_revision='original',decision_source='policy')
+            self.assertTrue(self.collector.decision(intent,dict(id='a'),dict(state='off'),required=()))
+        with patch.object(BudgetConnection,'execute',execute):
+            self.assertTrue(self.collector.drain(foreground=True))
+        self.assertEqual(len(queries),1)
+        with self.store.conn() as c:
+            rows=c.execute('SELECT at,body FROM universal_collection_decisions ORDER BY at').fetchall()
+        self.assertEqual([r[0] for r in rows],[20.+i for i in range(20)])
+        self.assertEqual([json.loads(r[1])['intent']['desired_value'] for r in rows],[float(i%2) for i in range(20)])
+
+    def test_threaded_foreground_writer_preserves_qualified_native_v2_v3_samples(self):
+        from tools.universal_e2e_fixture import OriginalEvidenceScenario
+        # Synthetic explicit declarations and original pre-predict preparation
+        # come from the existing scenario. Only its durability barrier changes:
+        # the producer waits for the actual collector thread, never writes SQL.
+        # This is a paced correctness test, not saturated-home training yield.
+        with OriginalEvidenceScenario(self.store) as scenario:
+            collector=scenario.collector
+            collector.idle_ready=lambda:False
+            collector.start();self.assertTrue(collector.ready.wait(1.))
+            def wait_for_writer():
+                deadline=time.perf_counter()+5.
+                while True:
+                    with collector.cv:
+                        pending=bool(collector.pending) or collector.pending_gap is not None
+                    if not pending:return
+                    if time.perf_counter()>deadline:raise AssertionError(collector.diagnostics())
+                    time.sleep(.005)
+            scenario.drain=wait_for_writer
+            try:
+                scenario.collect_events(8)
+                source=scenario.source()
+                with self.store.conn() as c:
+                    c.execute('BEGIN');data=source.dataset(c)
+                self.assertEqual(len(data.samples),8,data.rejected)
+                self.assertFalse(data.rejected)
+                self.assertEqual(collector.stats['dropped'],0)
+                self.assertGreater(collector.stats['foreground_batches'],0)
+                scenario.ha.assert_not_called()
+            finally:self.assertTrue(collector.stop(5.))
 
     def test_retention_tracking_survives_restart_with_collector_disabled(self):
         self.seed()

@@ -398,6 +398,34 @@ class ObservationReplayParityTests(unittest.TestCase):
         self.assertEqual(float(rows[1]["received_time"]), 901.1)
         self.assertEqual(rows[1]["state"], "20")
 
+    def test_optional_native_writer_and_window_orders_keep_exact_protection(self):
+        import threading
+        self.journal.clock=lambda:1000.
+        held=threading.Event();write_window=threading.Event();errors=[]
+        def window_writer():
+            try:
+                with self.store.lock:
+                    held.set()
+                    if not write_window.wait(5.):raise AssertionError('native writer waited for Store')
+                    self.journal.open_window('after','a',['sensor.fast'],900.,'decision')
+            except BaseException as exc:errors.append(exc)
+        worker=threading.Thread(target=window_writer);worker.start()
+        self.addCleanup(worker.join,5.);self.addCleanup(write_window.set)
+        self.assertTrue(held.wait(1.))
+        def record(value,stamp):
+            row=dict(entity_id='sensor.fast',state=sensor_state('sensor.fast',value,stamp,unit='%'),
+                     event_time=stamp,received_time=stamp+.1,source='ha_state_changed')
+            with self.store.background_sqlite(timeout_ms=0):
+                return self.journal.record_batch([row],wait_for_store=False)[0]
+        first=record(10,900.)
+        write_window.set();worker.join(5.)
+        self.assertFalse(worker.is_alive());self.assertFalse(errors,errors)
+        second=record(20,901.)
+        with self.store.conn() as c:
+            rows=c.execute('SELECT event_key,protected_until FROM feature_observation_events ORDER BY event_time').fetchall()
+        self.assertEqual([r[0] for r in rows],[first,second])
+        self.assertEqual([r[1] for r in rows],[1000.+7*86400.]*2)
+
     def test_teach_signature_matches_live_and_replay_and_carries_versions(self):
         live = TemporalHistory(maxlen=96)
         current = None

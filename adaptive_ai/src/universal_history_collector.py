@@ -5,6 +5,7 @@ decision/mask receipts and conservative collection watermarks. No producer does
 SQLite, waits for capacity, re-evaluates a legal mask or calls HA.
 """
 from collections import deque
+from itertools import islice
 from dataclasses import asdict
 import hashlib
 import json
@@ -14,7 +15,7 @@ import time
 import uuid
 
 from storage_budget import require_storage_available, StorageRetry
-from sqlite_background import background_sqlite
+from sqlite_background import background_sqlite, is_sqlite_busy, connection_session
 
 MAX_RECORD = 4 * 1024 * 1024
 MAX_ENTITIES = 10000
@@ -104,9 +105,15 @@ class HistoricalTrainingCollector(threading.Thread):
         self.retry = StorageRetry(); self.ready = threading.Event()
         self.idle_ready=idle_ready or (lambda:True)
         self.halt=threading.Event()
+        self.writing_foreground=False
+        self.partial_metadata_commit=False
+        self.by_kind={}
         self.stats = dict(queued=0, written=0, dropped=0, gaps=0, errors=0, max_queue=0,
                           max_queue_bytes=0, batches=0, max_write_latency_ms=0., last_error=None,
-                          deferred_for_foreground=0)
+                          deferred_for_foreground=0, foreground_batches=0,
+                          deferred_for_sqlite=0,
+                          committed_after_epoch_change=0, native_event_upserts=0,
+                          native_seed_upserts=0)
         self.latencies=deque(maxlen=2048)
         self._initialize()
         self.store._universal_training_retention_changed=self.retention_changed
@@ -158,9 +165,14 @@ class HistoricalTrainingCollector(threading.Thread):
                           'queue_overflow_registry','write_failure','incomplete_registry','invalid_registry') or any(r[1]=='registry' for r in self.pending):
                 self.reset_registries_pending=True
             self.epoch += 1; self.pending_gap = str(reason)[:256]
+            for row in self.pending:self._count_kind(row[1],'dropped')
             self.stats['dropped'] += len(self.pending); self.pending.clear(); self.pending_bytes = 0
             self.cv.notify()
         return False
+
+    def _count_kind(self, kind, name, amount=1):
+        row=self.by_kind.setdefault(kind,dict(queued=0,written=0,dropped=0,rejected=0))
+        row[name]+=amount
 
     def notify(self, method, *args, **kwargs):
         try:
@@ -177,13 +189,16 @@ class HistoricalTrainingCollector(threading.Thread):
     def _submit(self, kind, payload, *, size=1024):
         with self.cv:
             if self.stopping:
+                self._count_kind(kind,'rejected')
                 return False
             if len(self.pending) >= self.capacity or self.pending_bytes + size > self.byte_capacity:
                 self.stats['dropped'] += 1
+                self._count_kind(kind,'dropped')
                 registry_loss=kind=='registry' or any(r[1]=='registry' for r in self.pending)
                 return self.gap('queue_overflow_registry' if registry_loss else 'queue_overflow')
             self.pending.append((self.epoch, kind, payload, size, time.perf_counter()))
             self.pending_bytes += size; self.stats['queued'] += 1
+            self._count_kind(kind,'queued')
             self.stats['max_queue'] = max(self.stats['max_queue'],len(self.pending))
             self.stats['max_queue_bytes'] = max(self.stats['max_queue_bytes'], self.pending_bytes)
             self.cv.notify()
@@ -309,8 +324,9 @@ class HistoricalTrainingCollector(threading.Thread):
         from training_budget import TRAINING_BUDGET
         keys=[]
         for offset in range(0,len(rows),128):
-            keys.extend(self.journal.record_batch(rows[offset:offset+128]) or ())
-            TRAINING_BUDGET.checkpoint('universal_collection_write',thread_name='adaptive-ai-index-universal-scorer')
+            keys.extend(self.journal.record_batch(rows[offset:offset+128],wait_for_store=not self.writing_foreground) or ())
+            if not self.writing_foreground:
+                TRAINING_BUDGET.checkpoint('universal_collection_write',thread_name='adaptive-ai-index-universal-scorer')
         return keys
 
     def _write(self, batch, gap, epoch, reset_registries):
@@ -326,9 +342,16 @@ class HistoricalTrainingCollector(threading.Thread):
                                          source='ha_state_changed',quality=0. if st.get('state') in (None,'unknown','unavailable') else 1.))
             else:
                 metadata.append((kind,payload))
-        self._journal_rows(observations)
+        keys=self._journal_rows(observations)
+        self.stats['native_event_upserts']+=len(keys)
         with self.store.conn() as c, c.storage_batch():
             c.execute('BEGIN IMMEDIATE')
+            decision_rows=[];mask_rows=[]
+            def flush_receipts():
+                from sqlite_bulk_rows import insert_bounded_rows
+                insert_bounded_rows(c,'INSERT OR IGNORE INTO universal_collection_decisions',decision_rows,6)
+                insert_bounded_rows(c,'INSERT OR IGNORE INTO universal_collection_masks',mask_rows,5)
+                decision_rows.clear();mask_rows.clear()
             if gap:
                 self._close(c,gap)
                 if reset_registries:
@@ -374,11 +397,14 @@ class HistoricalTrainingCollector(threading.Thread):
                     # Seed values stay in native FeatureJournal, committed BEFORE proof.
                     # Use a separate connection; metadata transaction has not written
                     # for this snapshot path after _close only if no previous segment.
+                    flush_receipts()
                     c.commit()
+                    self.partial_metadata_commit=True
                     from universal_retention import origin
                     with self.store.conn() as boundary:
                         tracker,origin_rev=origin(boundary)
                     seed_keys=self._journal_rows(seedrows)
+                    self.stats['native_seed_upserts']+=len(seed_keys)
                     c.execute('BEGIN IMMEDIATE')
                     current=c.execute('SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone()[0]
                     if current!=retention or origin(c)!=(tracker,origin_rev) or len(seed_keys)!=len(seeds):
@@ -450,12 +476,11 @@ class HistoricalTrainingCollector(threading.Thread):
                             payload['receipt']=None
                             payload['missing_proof']='stale_or_invalid_predecision_evidence'
                     body=encoded(payload);intent=payload['intent']
-                    c.execute('INSERT OR IGNORE INTO universal_collection_decisions VALUES(?,?,?,?,?,?)',
-                              (intent['intent_id'],intent['agent_id'],intent['created_at'],self.topology,body,digest(body)))
+                    decision_rows.append((intent['intent_id'],intent['agent_id'],intent['created_at'],self.topology,body,digest(body)))
                 elif kind=='mask':
                     body=encoded(payload)
-                    c.execute('INSERT OR IGNORE INTO universal_collection_masks VALUES(?,?,?,?,?)',
-                              (digest(body),payload['decision_id'],payload['at'],body,digest(body)))
+                    mask_rows.append((digest(body),payload['decision_id'],payload['at'],body,digest(body)))
+            flush_receipts()
             if self.epoch==epoch and self.pending_gap is None:
                 for sid,at in advances.items():
                     row=c.execute('SELECT start,through,topology,retention_epoch,proof_hash FROM universal_collection_segments WHERE id=?',(sid,)).fetchone()
@@ -468,32 +493,79 @@ class HistoricalTrainingCollector(threading.Thread):
             if self.epoch!=epoch:
                 self._close(c,'concurrent_gap')
         self.stats['written']+=len(batch);self.stats['batches']+=1
+        with self.cv:
+            for row in batch:self._count_kind(row[1],'written')
         if batch:
             self.stats['max_write_latency_ms']=max(self.stats['max_write_latency_ms'],(time.perf_counter()-batch[0][-1])*1000)
             with self.cv:
                 self.latencies.extend((time.perf_counter()-r[-1])*1000 for r in batch)
 
-    def drain(self):
+    def drain(self, *, foreground=False):
         """Single-writer batch, also used by deterministic tests."""
+        # A short foreground turn may make progress without waiting for Store or
+        # SQLite. Admission never acquires Engine/context locks or blocks ingress.
+        # No training-budget sleep is allowed while this writer owns Store.lock.
         with self.cv:
-            batch=[self.pending.popleft() for _ in range(min(self.batch_size,len(self.pending)))]
-            self.pending_bytes-=sum(r[3] for r in batch)
+            limit=min(self.batch_size,64) if foreground else self.batch_size
+            batch=list(islice(self.pending,limit))
+            if foreground:
+                # At most 1 MiB of structural payload estimates per turn, or
+                # one already-bounded snapshot/receipt. Queue bounds are unchanged.
+                used=0; bounded=[]
+                for row in batch:
+                    if bounded and used+row[3]>1048576:break
+                    bounded.append(row);used+=row[3]
+                batch=bounded
             gap=self.pending_gap; self.pending_gap=None;epoch=self.epoch
             reset_registries=self.reset_registries_pending;self.reset_registries_pending=False
-        if not batch and gap is None:return True
+        # Retain pending capacity/bytes until commit. A concurrent overflow/gap
+        # invalidates this epoch as before; SQLITE_BUSY never creates a data gap.
+        saved=(dict(self.registries),self.connected,self.topology,self.topology_at,self.segment)
+        self.partial_metadata_commit=False
         try:
+            if not batch and gap is None:return True
             # Admission is BEFORE any native write or SQLite transaction. Fresh
             # HA work gets its existing interactive CPU window; overload burns
             # coverage instead of pushing latency back onto inference.
             from training_budget import TRAINING_BUDGET
-            TRAINING_BUDGET.checkpoint('universal_collection_admission',thread_name='adaptive-ai-index-universal-scorer')
-            with background_sqlite(self.store):
+            if not foreground:
+                TRAINING_BUDGET.checkpoint('universal_collection_admission',thread_name='adaptive-ai-index-universal-scorer')
+            self.writing_foreground=foreground
+            scope=self.store.background_sqlite(timeout_ms=0) if foreground else background_sqlite(self.store)
+            with scope:
                 self._write(batch,gap,epoch,reset_registries)
+            with self.cv:
+                if self.epoch==epoch:
+                    for _ in batch:self.pending.popleft()
+                    self.pending_bytes-=sum(r[3] for r in batch)
+                else:
+                    # gap() invalidated/cleared this still-reserved batch while
+                    # SQLite was writing. Its completed commit is observable,
+                    # even though coverage is invalid. Do not count those same
+                    # envelopes as both committed and lost.
+                    self.stats['dropped']-=len(batch)
+                    for row in batch:self._count_kind(row[1],'dropped',-1)
+                    self.stats['committed_after_epoch_change']+=len(batch)
+            if foreground:self.stats['foreground_batches']+=1
             self.retry.recovered()
         except Exception as exc:
+            if is_sqlite_busy(exc) and not self.partial_metadata_commit:
+                self.stats['deferred_for_sqlite']+=1
+                self.registries,self.connected,self.topology,self.topology_at,self.segment=saved
+                with self.cv:
+                    if self.epoch==epoch:
+                        self.pending_gap=gap
+                        self.reset_registries_pending=reset_registries
+                return False
+            # Snapshot seeding has an explicit metadata commit before native
+            # observations. A later failure cannot rewind that durable boundary;
+            # retain the existing fail-closed gap rather than replaying it as if
+            # the whole metadata transaction had rolled back.
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
             self.gap('write_failure');self.retry.defer(exc)
             return False
+        finally:
+            self.writing_foreground=False
         return True
 
     def retention_changed(self,c):
@@ -514,6 +586,11 @@ class HistoricalTrainingCollector(threading.Thread):
                       'WHERE ended<? AND NOT EXISTS(SELECT 1 FROM universal_collection_segments s WHERE s.session=x.id) LIMIT 32)',(cutoff,))
 
     def run(self):
+        # Short conn() transactions retain their independent commit boundaries.
+        with connection_session(self.store):
+            self._run()
+
+    def _run(self):
         self.ready.set()
         while True:
             with self.cv:
@@ -524,10 +601,18 @@ class HistoricalTrainingCollector(threading.Thread):
             if self.retry.delay()>0:
                 with self.cv:self.cv.wait(min(.5,self.retry.delay()))
             elif not self.stopping and not self.idle_ready():
-                # Same foreground futures and realtime window as the shipped
-                # runtime. Never turn a bounded data backlog into UI contention.
-                self.stats['deferred_for_foreground']+=1
-                self.halt.wait(.05)
+                # Waiting for *all* futures starved this queue under sustained
+                # inference. Offer a bounded, non-waiting writer turn instead.
+                # Expensive mask preparation and housekeeping remain idle-only.
+                if not self.drain(foreground=True):
+                    self.stats['deferred_for_foreground']+=1
+                try:
+                    with self.store.background_sqlite(timeout_ms=0):
+                        self.journal.flush_pending_prune(wait_for_store=False)
+                except Exception as exc:
+                    if not is_sqlite_busy(exc):
+                        self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
+                self.halt.wait(.005)
             else:
                 self.drain()
                 evidence=getattr(self,'predecision',None)
@@ -551,13 +636,25 @@ class HistoricalTrainingCollector(threading.Thread):
         with self.cv:
             latencies=list(self.latencies)
             result=dict(self.stats,enabled=True,queue=len(self.pending),queue_bytes=self.pending_bytes,
-                        epoch=self.epoch,session=self.session,worker_alive=self.is_alive())
+                        epoch=self.epoch,session=self.session,worker_alive=self.is_alive(),
+                        by_kind={kind:dict(row) for kind,row in self.by_kind.items()})
         latencies.sort()
-        result['write_latency_p95_ms']=latencies[int(.95*(len(latencies)-1))] if latencies else None
+        for p in (50,95,99):
+            result[f'write_latency_p{p}_ms']=latencies[int(p/100*(len(latencies)-1))] if latencies else None
+        result['write_latency_sample_count']=len(latencies)
+        result['write_latency_scope']='bounded tail of completed envelope turns, not unique native rows'
         evidence=getattr(self,'predecision',None)
         if evidence is not None:
             result['predecision']=dict(evidence.stats,prepared_bytes=evidence.prepared_bytes)
         return result
+
+
+def foreground_idle(engine):
+    """Completed futures stay indexed by target; they are not foreground work."""
+    from settings import OPTIONS
+    return (not any(not future.done() for future in list(getattr(engine,'in_flight',{}).values())) and
+            time.perf_counter()-float(getattr(engine,'last_event_received',0.) or 0.) >=
+            float(OPTIONS.get('training_realtime_event_priority_seconds',.3)))
 
 
 def install(engine, store):
@@ -568,11 +665,7 @@ def install(engine, store):
     if previous is not None:return previous
     service=getattr(engine.executor,'device_agents',None)
     try:
-        def idle_ready():
-            return (not bool(getattr(engine,'in_flight',{})) and
-                    time.perf_counter()-float(getattr(engine,'last_event_received',0.) or 0.) >=
-                    float(OPTIONS.get('training_realtime_event_priority_seconds',.3)))
-        collector=HistoricalTrainingCollector(store,engine.feature_journal,idle_ready=idle_ready)
+        collector=HistoricalTrainingCollector(store,engine.feature_journal,idle_ready=lambda:foreground_idle(engine))
         if service is not None:
             from universal_predecision import PredecisionEvidence
             collector.predecision=PredecisionEvidence(engine,store,collector)
