@@ -6,6 +6,7 @@ boundary. The WebSocket transport itself is covered separately by fake-WS tests.
 import argparse
 from contextlib import closing, ExitStack
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -31,14 +32,20 @@ def sqlite_sizes(path):
     return {p.name: p.stat().st_size for p in path.parent.glob(path.name+"*")}
 
 
-def label_intents(scenario, intents):
-    for tick, desired, intent in intents:
+def label_intents(scenario, intents, limit):
+    count = min(len(intents), limit)
+    positions = [(i+1)*len(intents)//count-1 for i in range(count)]
+    event_ids = set()
+    for index, position in enumerate(positions):
+        tick, desired, intent = intents[position]
         label = f"soak:{tick}"
         scenario.feedback.record(agent_id=intent["agent_id"], selected_ts=intent["created_at"],
                                  source="correct", correct_action=desired, feedback_id=label,
                                  decision_id=intent["intent_id"], episode_id="continuous-soak")
-        if tick % 8 == 0:
+        if index == 0 and count > 1:
             scenario.feedback.undo(label)
+        event_ids.add("feedback-v1:"+label)
+    return event_ids
 
 
 def rotate_collector(scenario):
@@ -87,12 +94,15 @@ def rotate_collector(scenario):
     return dict(seconds=time.perf_counter()-started, crossing_rejected=crossing["reason"])
 
 
-def window(scenario, index, tick_offset, seconds):
+def window_profile(seconds):
+    return seconds*.12, max(1, int(seconds*.75/.4))
+
+
+def window(scenario, index, tick_offset, seconds, label_limit):
     from telemetry import rss_mb
     store, engine, collector = scenario.store, scenario.engine, scenario.collector
     started, cpu = time.perf_counter(), time.process_time()
-    idle_seconds = seconds*.12
-    ticks = max(1, int(seconds*.75/.4))
+    idle_seconds, ticks = window_profile(seconds)
     stop = threading.Event()
     stats = dict(policy_updates=0, model_writes=0, prune_calls=0)
     worker = threading.Thread(target=busy_work, args=(scenario, stop, stats), daemon=True)
@@ -113,8 +123,13 @@ def window(scenario, index, tick_offset, seconds):
         try:
             for index_in_burst in range(16):
                 publish_event(scenario, "sensor.outdoor", index_in_burst, device_class="temperature")
-            # Deliberate SQLite busy window. No drain or durability wait during ingress.
-            time.sleep(.08)
+            # Hold the independent transaction until the writer observes the
+            # fault. The producer already submitted the entire burst.
+            deadline = time.perf_counter()+2
+            while collector.stats["deferred_for_sqlite"] <= before_busy["deferred_for_sqlite"]:
+                if time.perf_counter() >= deadline:
+                    raise RuntimeError("Native collector did not observe SQLite busy")
+                time.sleep(.005)
         finally:
             lock.rollback()
     events += 16
@@ -123,7 +138,7 @@ def window(scenario, index, tick_offset, seconds):
     candidate = engine.agent_candidates.candidate_shadow_async_diagnostics()
     drain_started = time.perf_counter()
     store._flush_all_provenance()
-    label_intents(scenario, intents)
+    labels = label_intents(scenario, intents, label_limit)
     through = scenario.clock()
     collector.barrier(through)
     wait_for_writer(collector)
@@ -132,9 +147,11 @@ def window(scenario, index, tick_offset, seconds):
     event = final["by_kind"].get("event", {})
     if events != sum(event.get(key, 0) for key in ("written", "dropped", "rejected")):
         raise AssertionError(f"Unaccounted events in window {index}: {event}")
-    dataset = qualify(scenario, through)
+    dataset = qualify(scenario, through, current_labels=labels)
     if final["dropped"] and dataset["status"] != "rejected_source":
         raise AssertionError(f"Coverage accepted across dropped envelopes in window {index}")
+    if not final["dropped"] and dataset["status"] != "qualified_source":
+        raise AssertionError(f"Coverage failed to recover in window {index}: {dataset}")
     result = dict(index=index, elapsed_seconds=time.perf_counter()-started,
                   cpu_seconds=time.process_time()-cpu, rss_mb=rss_mb(), threads=threading.active_count(),
                   active_futures=sum(not f.done() for f in futures),
@@ -144,7 +161,8 @@ def window(scenario, index, tick_offset, seconds):
                   collector_after_drain=final, candidate=candidate, sqlite=store.sqlite_snapshot(),
                   sqlite_files=sqlite_sizes(Path(store.path)), dataset=dataset,
                   event_to_intent=quantiles(latencies), event_to_intent_count=len(latencies),
-                  statuses=statuses, events=events, intents=len(intents), training=stats, drain_seconds=drain)
+                  statuses=statuses, events=events, intents=len(intents), labels=len(labels),
+                  training=stats, drain_seconds=drain)
     if not intents or final["queue"] or result["active_futures"] or scenario.ha.call_count:
         raise AssertionError(f"Lost processing capacity or safety invariant in window {index}")
     return result, ticks
@@ -166,6 +184,8 @@ def trend(rows):
             failures.append(f"worker_errors:{idx}")
         if any(size > LIMITS["wal_bytes"] for name, size in row["sqlite_files"].items() if name.endswith("-wal")):
             failures.append(f"wal_size:{idx}")
+    if rows and not rows[-1]["candidate"]["processed"]:
+        failures.append("candidate_worker_made_no_progress")
     rss = [r["rss_mb"] for r in rows if r["rss_mb"] is not None]
     if rss and max(rss)-rss[0] > LIMITS["rss_growth_mb"]:
         failures.append("rss_growth")
@@ -209,6 +229,12 @@ def trend(rows):
 def run(path, output, args):
     from storage import Store
     from universal_history_collector import foreground_idle
+    from universal_training_data import MAX_SAMPLES
+    idle_seconds, ticks = window_profile(args.window)
+    max_windows = args.cycles or math.ceil(args.duration/(idle_seconds+(ticks-1)*.4))
+    label_limit = min(8, MAX_SAMPLES//max_windows)
+    if label_limit < 2:
+        raise ValueError("Increase window length to keep Correct and Undo within the native supervision bound")
     base = ProducerClock()
     anchor = None
 
@@ -237,21 +263,22 @@ def run(path, output, args):
             rows, tick_offset = [], 0
             start = time.perf_counter()
             while (len(rows) < args.cycles if args.cycles else time.perf_counter()-start < args.duration):
-                result, ticks = window(scenario, len(rows), tick_offset, args.window)
-                result["since_start_seconds"] = time.perf_counter()-start
+                result, ticks = window(scenario, len(rows), tick_offset, args.window, label_limit)
                 try:
                     result["recovery"] = rotate_collector(scenario)
                 except Exception as exc:
+                    result["since_start_seconds"] = time.perf_counter()-start
                     result["recovery"] = dict(error=repr(exc))
                     output.write(json.dumps(result)+"\n")
                     output.flush()
                     raise
+                result["since_start_seconds"] = time.perf_counter()-start
                 output.write(json.dumps(result)+"\n")
                 output.flush()
                 rows.append(result)
                 tick_offset += ticks
             summary = trend(rows)
-            summary.update(elapsed_seconds=time.perf_counter()-start, completed_windows=len(rows),
+            summary.update(elapsed_seconds=time.perf_counter()-start, completed_windows=len(rows), labels_per_window_limit=label_limit,
                            ha_service_calls=scenario.ha.call_count)
             output.write(json.dumps(dict(summary=summary))+"\n")
             output.flush()

@@ -44,3 +44,9 @@ python tools/benchmark_qualified_soak.py --duration 28800 --window 45 --output s
 Use fresh output paths. The runner flushes complete windows to JSONL so an
 interrupted process retains its completed measurements. The 4-hour and
 8-hour variants are **NOT RUN**. See the handoff for short-run status.
+
+The multi-hour profile samples explicit Correct labels within the existing
+2,048-fact supervision cap, retaining the original label and decision clocks.
+Each window reports rejection reasons for its sampled labels separately from
+historical labels belonging to prior windows. The persistent Store retains
+all native observation and decision activity through the sampled windows.

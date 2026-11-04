@@ -78,7 +78,7 @@ def inventory(scenario):
     return dict(counts=counts, missing_proof=reasons, segments=segments, gaps=gaps, retention_epoch=retention_epoch)
 
 
-def qualify(scenario, through, *, run_lifecycle=False):
+def qualify(scenario, through, *, run_lifecycle=False, current_labels=None):
     from universal_history_collector import source_from_collection
     started = time.perf_counter()
     try:
@@ -98,6 +98,9 @@ def qualify(scenario, through, *, run_lifecycle=False):
                 dataset_id=dataset.dataset_id, supervision_revision=dataset.supervision_revision,
                 source_id=source.source_id, export_ms=export_ms,
                 elapsed_ms=(time.perf_counter()-started)*1000)
+    if current_labels is not None:
+        result["current_window_rejected"] = Counter(
+            reason for event_id, reason in dataset.rejected if event_id in current_labels)
     if run_lifecycle:
         result["lifecycle"] = validate_offline(scenario, source, dataset)
     return result

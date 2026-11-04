@@ -33,7 +33,9 @@ synthetic seed. Incomplete uses the same topology and writes with preparation
 disabled. This matched negative control differs from #367's sparse composed
 fixture. Busy adds real Candidate/Shadow evaluation, fitting of a disposable
 copy of an existing policy, SQLite model writes, retention and Correct/Undo.
-It is a deliberately different workload and must be compared with that label.
+The fixture pumps the native Candidate queue from its background worker.
+Candidate timing and drops therefore belong to this profile's worker cadence.
+Busy is a different workload and its timings carry that label.
 Overload reduces queue capacity to 32 after seeding and uses an independent
 SQLite writer lock and unpaced event bursts.
 
@@ -72,3 +74,57 @@ evidence to train and validate a checkpoint.
 See the [measurement checkpoint](benchmarks/UNIVERSAL_U05B4C1F_SUMMARY.json)
 and [handoff](UNIVERSAL_U05B4C1F_HANDOFF.md) for measured results and execution
 scope.
+
+## Observed yield
+
+The WSL fanout sweep uses one synthetic pulse every 400 ms, 24 paced pulses,
+and up to 16 concurrent targets per pulse. The paced profiles generate 48
+sensor event envelopes per case. The counts below use original intents as
+the denominator. The controlled positive schedules its own sequence.
+
+| Sensors/devices | Positive eligible/intents | Normal eligible/intents | Busy eligible/intents | Overload source |
+| --- | ---: | ---: | ---: | --- |
+| 5/1 | 8/8 | 17/24 | 16/24 | Rejected |
+| 50/10 | 10/10 | 92/240 | 77/240 | Rejected |
+| 200/30 | 30/30 | 52/384 | 45/384 | Rejected |
+| 1000/200 | 200/200 | 4/384 | 0/384 | Rejected |
+
+Each normal and busy case wrote every original decision and all 48 event
+envelopes. The 1000/200 normal source exported four V2 receipts and U05a
+rejected 380 labels for missing historical decision receipts. In busy,
+15 preparation attempts raised `agent bound` with 400 durable configs.
+Correct/Undo revoked 48 labels. The other 336 had no historical receipt.
+The Candidate queue processed 276 jobs, dropped 92 and retained 16 at the
+measurement boundary. That queue is distinct from the historical collector,
+which dropped zero envelopes in the busy case.
+
+All overload cases dropped 240 sensor event envelopes and refused native
+export of the requested V3 window. At 1000/200 overload, 200 original intents
+were observed and two decisions were durably written. The collector dropped
+462 envelopes in total, including decisions and watermarks. The overload
+profile restricts capacity after seed and deliberately holds a separate
+SQLite write transaction. These are fail-closed results under injection.
+
+The fixed 5/1 lifecycle smoke admitted 128/128 controlled samples, published a
+validated offline artifact and loaded it through guarded ranking. The 12-tick
+sustained run admitted 11 normal and 10 busy samples. Native rebuild returned
+`need_train_and_future_holdout` for both sources.
+
+## Observed latency
+
+Values are p95/p99 in milliseconds from synthetic event receipt to the
+original ActionIntent creation clock. BUSY carries extra work.
+
+| Sensors/devices | OFF | ON incomplete | ON normal | ON busy |
+| --- | ---: | ---: | ---: | ---: |
+| 5/1 | 1.18/1.21 | 1.94/2.59 | 2.81/2.81 | 2.76/2.76 |
+| 50/10 | 5.65/27.44 | 7.01/36.16 | 6.89/32.16 | 7.61/124.93 |
+| 200/30 | 23.24/60.88 | 28.87/64.54 | 28.68/61.96 | 78.54/183.98 |
+| 1000/200 | 56.67/62.78 | 65.23/82.90 | 62.26/73.58 | 164.03/186.39 |
+
+This is one measured sweep. Native coverage/provenance, decision signatures,
+p50, queue residence, CPU, RSS, SQLite and SQL measurements are retained in the
+JSON checkpoint. The observed root policies emitted synthetic intents that
+the executor rejected. Zero service calls and matched intent signatures cover
+this workload's functional comparison. Existing dispatch and control tests
+cover additional safety paths.
