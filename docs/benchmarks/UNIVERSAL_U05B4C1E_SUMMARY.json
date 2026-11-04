@@ -1,0 +1,1635 @@
+{
+  "stage": "U05b.4c.1e",
+  "baseline_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+  "audit_sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2",
+  "current_sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+  "production_change": false,
+  "series": {
+    "primary": {
+      "plan_size": 24,
+      "completed_attempts": 3,
+      "cases": [
+        {
+          "name": "matched-1000-200-1-baseline",
+          "mode": "matched",
+          "sensors": 1000,
+          "agents": 200,
+          "probe": false,
+          "deadline_seconds": 30,
+          "exit_code": 0,
+          "log_sha256": "45bf054be07c7cb7a632aa86004c0405efe6856ab8a274cfc6329ca4e3dd5934",
+          "command": [
+            "/home/mpuchara/homemind-perf-venv/bin/python",
+            "/mnt/c/Users/mpuch/OneDrive/Dokumenty/HomeMind/HomeMind-HA-universal-232/tools/benchmark_runtime_scaling.py",
+            "--source-root",
+            "/home/mpuchara/homemind-u05b4c1-recovery/base364",
+            "--agents",
+            "200",
+            "--sensor-count",
+            "1000",
+            "--warmup",
+            "8",
+            "--events",
+            "40",
+            "--candidates",
+            "--correct",
+            "--training",
+            "--collector",
+            "--matched-updates",
+            "64",
+            "--matched-writes",
+            "2"
+          ],
+          "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+          "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+          "background_work": {
+            "correct_gaps": 0,
+            "correct_reads": 2,
+            "correct_writes": 2,
+            "errors": [],
+            "model_writes": 96,
+            "updates": 3072
+          },
+          "candidate_count": 200,
+          "ha_calls": 0,
+          "process_cpu_ms": 104030.373551,
+          "wall_ms": 87250.55715099999,
+          "rss_mb": 477.6796875,
+          "peak_rss_mb": 477.21484375,
+          "collector": {
+            "batches": 6,
+            "deferred_for_foreground": 2284,
+            "dropped": 9335,
+            "enabled": true,
+            "epoch": 18,
+            "errors": 0,
+            "gaps": 2,
+            "last_error": null,
+            "max_queue": 518,
+            "max_queue_bytes": 8385200,
+            "max_write_latency_ms": 4107.59568200001,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9630,
+            "session": "d67d050208e34fe18f9e884639bc043a",
+            "worker_alive": false,
+            "write_latency_p95_ms": 3983.556415999999,
+            "written": 313
+          },
+          "matched_workload": {
+            "batches": [
+              {
+                "inference_observed_ns": 16700968333,
+                "phase": "warmup",
+                "release_ns": 80046745,
+                "step": 0,
+                "trainer_end_ns": 958475165,
+                "trainer_start_ns": 80201618
+              },
+              {
+                "inference_observed_ns": 21299117615,
+                "phase": "warmup",
+                "release_ns": 18566937438,
+                "step": 1,
+                "trainer_end_ns": 19586396639,
+                "trainer_start_ns": 18568249997
+              },
+              {
+                "inference_observed_ns": 22772899708,
+                "phase": "warmup",
+                "release_ns": 21300585888,
+                "step": 2,
+                "trainer_end_ns": 22967849576,
+                "trainer_start_ns": 21300841238
+              },
+              {
+                "inference_observed_ns": 24211925813,
+                "phase": "warmup",
+                "release_ns": 22969936979,
+                "step": 3,
+                "trainer_end_ns": 24583357477,
+                "trainer_start_ns": 22970760724
+              },
+              {
+                "inference_observed_ns": 26022102571,
+                "phase": "warmup",
+                "release_ns": 24583422791,
+                "step": 4,
+                "trainer_end_ns": 26237472838,
+                "trainer_start_ns": 24587725815
+              },
+              {
+                "inference_observed_ns": 27556761987,
+                "phase": "warmup",
+                "release_ns": 26237546790,
+                "step": 5,
+                "trainer_end_ns": 28153353211,
+                "trainer_start_ns": 26238372637
+              },
+              {
+                "inference_observed_ns": 29578718183,
+                "phase": "warmup",
+                "release_ns": 28153419186,
+                "step": 6,
+                "trainer_end_ns": 29949786816,
+                "trainer_start_ns": 28154528368
+              },
+              {
+                "inference_observed_ns": 31317005075,
+                "phase": "warmup",
+                "release_ns": 29949891585,
+                "step": 7,
+                "trainer_end_ns": 31558296157,
+                "trainer_start_ns": 29950149762
+              },
+              {
+                "inference_observed_ns": 33016331032,
+                "phase": "steady",
+                "release_ns": 31642074262,
+                "step": 8,
+                "trainer_end_ns": 33704428429,
+                "trainer_start_ns": 31643930146
+              },
+              {
+                "inference_observed_ns": 35358411888,
+                "phase": "steady",
+                "release_ns": 33704628780,
+                "step": 9,
+                "trainer_end_ns": 35603405975,
+                "trainer_start_ns": 33705772079
+              },
+              {
+                "inference_observed_ns": 36756986106,
+                "phase": "steady",
+                "release_ns": 35603480927,
+                "step": 10,
+                "trainer_end_ns": 37294624259,
+                "trainer_start_ns": 35606549938
+              },
+              {
+                "inference_observed_ns": 38882326013,
+                "phase": "steady",
+                "release_ns": 37294720368,
+                "step": 11,
+                "trainer_end_ns": 39144696185,
+                "trainer_start_ns": 37295578761
+              },
+              {
+                "inference_observed_ns": 40346627934,
+                "phase": "steady",
+                "release_ns": 39144911639,
+                "step": 12,
+                "trainer_end_ns": 40979586456,
+                "trainer_start_ns": 39146996621
+              },
+              {
+                "inference_observed_ns": 42439866788,
+                "phase": "steady",
+                "release_ns": 40979669351,
+                "step": 13,
+                "trainer_end_ns": 42743617534,
+                "trainer_start_ns": 40982433759
+              },
+              {
+                "inference_observed_ns": 44003352768,
+                "phase": "steady",
+                "release_ns": 42743792986,
+                "step": 14,
+                "trainer_end_ns": 44493102776,
+                "trainer_start_ns": 42883288697
+              },
+              {
+                "inference_observed_ns": 45991196468,
+                "phase": "steady",
+                "release_ns": 44493178142,
+                "step": 15,
+                "trainer_end_ns": 46275660837,
+                "trainer_start_ns": 44494834961
+              },
+              {
+                "inference_observed_ns": 47729348009,
+                "phase": "steady",
+                "release_ns": 46275764866,
+                "step": 16,
+                "trainer_end_ns": 47897173036,
+                "trainer_start_ns": 46276752248
+              },
+              {
+                "inference_observed_ns": 49061369075,
+                "phase": "steady",
+                "release_ns": 47897471966,
+                "step": 17,
+                "trainer_end_ns": 49681399241,
+                "trainer_start_ns": 47899661045
+              },
+              {
+                "inference_observed_ns": 51379201491,
+                "phase": "steady",
+                "release_ns": 49681483858,
+                "step": 18,
+                "trainer_end_ns": 51252502393,
+                "trainer_start_ns": 49682257493
+              },
+              {
+                "inference_observed_ns": 52986100177,
+                "phase": "steady",
+                "release_ns": 51379248581,
+                "step": 19,
+                "trainer_end_ns": 53536399188,
+                "trainer_start_ns": 51380385486
+              },
+              {
+                "inference_observed_ns": 55051577408,
+                "phase": "steady",
+                "release_ns": 53536469487,
+                "step": 20,
+                "trainer_end_ns": 55142872834,
+                "trainer_start_ns": 53537927835
+              },
+              {
+                "inference_observed_ns": 56415220671,
+                "phase": "steady",
+                "release_ns": 55143207092,
+                "step": 21,
+                "trainer_end_ns": 56996934138,
+                "trainer_start_ns": 55145440201
+              },
+              {
+                "inference_observed_ns": 58676511419,
+                "phase": "steady",
+                "release_ns": 56999157103,
+                "step": 22,
+                "trainer_end_ns": 59037033000,
+                "trainer_start_ns": 57001277304
+              },
+              {
+                "inference_observed_ns": 60450382789,
+                "phase": "steady",
+                "release_ns": 59037125806,
+                "step": 23,
+                "trainer_end_ns": 60731235065,
+                "trainer_start_ns": 59038069902
+              },
+              {
+                "inference_observed_ns": 61887179601,
+                "phase": "steady",
+                "release_ns": 60732424845,
+                "step": 24,
+                "trainer_end_ns": 62376197729,
+                "trainer_start_ns": 60736153451
+              },
+              {
+                "inference_observed_ns": 63796935007,
+                "phase": "steady",
+                "release_ns": 62376315116,
+                "step": 25,
+                "trainer_end_ns": 64013627355,
+                "trainer_start_ns": 62377093736
+              },
+              {
+                "inference_observed_ns": 72632064226,
+                "phase": "steady",
+                "release_ns": 69104075291,
+                "step": 26,
+                "trainer_end_ns": 72670172320,
+                "trainer_start_ns": 69106846460
+              },
+              {
+                "inference_observed_ns": 74612013287,
+                "phase": "steady",
+                "release_ns": 72671681477,
+                "step": 27,
+                "trainer_end_ns": 75283950975,
+                "trainer_start_ns": 72672821222
+              },
+              {
+                "inference_observed_ns": 77390839620,
+                "phase": "steady",
+                "release_ns": 75284057033,
+                "step": 28,
+                "trainer_end_ns": 77773883326,
+                "trainer_start_ns": 75285208129
+              },
+              {
+                "inference_observed_ns": 79370898382,
+                "phase": "steady",
+                "release_ns": 77773981554,
+                "step": 29,
+                "trainer_end_ns": 80078155766,
+                "trainer_start_ns": 77776360334
+              },
+              {
+                "inference_observed_ns": 81750240170,
+                "phase": "steady",
+                "release_ns": 80078281180,
+                "step": 30,
+                "trainer_end_ns": 82117232398,
+                "trainer_start_ns": 80079097565
+              },
+              {
+                "inference_observed_ns": 84772452714,
+                "phase": "steady",
+                "release_ns": 82117332272,
+                "step": 31,
+                "trainer_end_ns": 85335311360,
+                "trainer_start_ns": 82118645903
+              },
+              {
+                "inference_observed_ns": 88468646864,
+                "phase": "steady",
+                "release_ns": 85335424489,
+                "step": 32,
+                "trainer_end_ns": 88260774616,
+                "trainer_start_ns": 85336567898
+              },
+              {
+                "inference_observed_ns": 90213545921,
+                "phase": "steady",
+                "release_ns": 88468668369,
+                "step": 33,
+                "trainer_end_ns": 91069457228,
+                "trainer_start_ns": 88469648538
+              },
+              {
+                "inference_observed_ns": 93969918344,
+                "phase": "steady",
+                "release_ns": 91069530394,
+                "step": 34,
+                "trainer_end_ns": 94089808060,
+                "trainer_start_ns": 91070589348
+              },
+              {
+                "inference_observed_ns": 95953660273,
+                "phase": "steady",
+                "release_ns": 94089941113,
+                "step": 35,
+                "trainer_end_ns": 96543265208,
+                "trainer_start_ns": 94091258609
+              },
+              {
+                "inference_observed_ns": 97990157708,
+                "phase": "steady",
+                "release_ns": 96543383427,
+                "step": 36,
+                "trainer_end_ns": 98231897346,
+                "trainer_start_ns": 96544230471
+              },
+              {
+                "inference_observed_ns": 99459585911,
+                "phase": "steady",
+                "release_ns": 98231988952,
+                "step": 37,
+                "trainer_end_ns": 100026254429,
+                "trainer_start_ns": 98233076214
+              },
+              {
+                "inference_observed_ns": 101745327091,
+                "phase": "steady",
+                "release_ns": 100026408490,
+                "step": 38,
+                "trainer_end_ns": 101891152091,
+                "trainer_start_ns": 100028146352
+              },
+              {
+                "inference_observed_ns": 103452203715,
+                "phase": "steady",
+                "release_ns": 101892371386,
+                "step": 39,
+                "trainer_end_ns": 104087478015,
+                "trainer_start_ns": 101894330089
+              },
+              {
+                "inference_observed_ns": 105817895273,
+                "phase": "steady",
+                "release_ns": 104087683257,
+                "step": 40,
+                "trainer_end_ns": 106036443090,
+                "trainer_start_ns": 104088844520
+              },
+              {
+                "inference_observed_ns": 107527066821,
+                "phase": "steady",
+                "release_ns": 106036516439,
+                "step": 41,
+                "trainer_end_ns": 107755651663,
+                "trainer_start_ns": 106038641831
+              },
+              {
+                "inference_observed_ns": 109181091197,
+                "phase": "steady",
+                "release_ns": 107758247400,
+                "step": 42,
+                "trainer_end_ns": 109342919033,
+                "trainer_start_ns": 107758546566
+              },
+              {
+                "inference_observed_ns": 110956801433,
+                "phase": "steady",
+                "release_ns": 109343112472,
+                "step": 43,
+                "trainer_end_ns": 111273117030,
+                "trainer_start_ns": 109343936130
+              },
+              {
+                "inference_observed_ns": 112858128396,
+                "phase": "steady",
+                "release_ns": 111273529801,
+                "step": 44,
+                "trainer_end_ns": 112889113488,
+                "trainer_start_ns": 111274477613
+              },
+              {
+                "inference_observed_ns": 114288788820,
+                "phase": "steady",
+                "release_ns": 112889381367,
+                "step": 45,
+                "trainer_end_ns": 114655399077,
+                "trainer_start_ns": 112891083174
+              },
+              {
+                "inference_observed_ns": 116163711196,
+                "phase": "steady",
+                "release_ns": 114655741519,
+                "step": 46,
+                "trainer_end_ns": 116830796889,
+                "trainer_start_ns": 114656835687
+              },
+              {
+                "inference_observed_ns": 118523815520,
+                "phase": "steady",
+                "release_ns": 116830911530,
+                "step": 47,
+                "trainer_end_ns": 118808939203,
+                "trainer_start_ns": 116832011728
+              }
+            ],
+            "correct_every": 25,
+            "model_writes_per_step": 2,
+            "queue_capacity": 1,
+            "updates_per_step": 64
+          },
+          "warmup": {
+            "count": 1600,
+            "p50_ms": 932.9200610000044,
+            "p95_ms": 10523.155059999994,
+            "p99_ms": 16168.990889000013,
+            "max_ms": 16620.852571
+          },
+          "event_to_intent": {
+            "count": 8000,
+            "p50_ms": 841.3320500000054,
+            "p95_ms": 1795.2364939999939,
+            "p99_ms": 2914.489532999994,
+            "max_ms": 3514.242172999957
+          },
+          "raw_sha256": "5c3ccf2b0b1e05f0fcbbb2857830fb0b583ce1d5c875ef30bdfbd419bc48c41b",
+          "status": "completed",
+          "log": "u05b4c1e/primary/matched-1000-200-1-baseline.log.gz",
+          "raw": "u05b4c1e/primary/matched-1000-200-1-baseline.json.gz"
+        },
+        {
+          "name": "matched-1000-200-1-current",
+          "mode": "matched",
+          "sensors": 1000,
+          "agents": 200,
+          "probe": false,
+          "deadline_seconds": 30,
+          "exit_code": 0,
+          "log_sha256": "cc5c920384bffda30e124bb1b09c719a5bdfa84e21827b823d00c5e8d82c125e",
+          "command": [
+            "/home/mpuchara/homemind-perf-venv/bin/python",
+            "/mnt/c/Users/mpuch/OneDrive/Dokumenty/HomeMind/HomeMind-HA-universal-232/tools/benchmark_runtime_scaling.py",
+            "--source-root",
+            "/home/mpuchara/homemind-u05b4c1e/current",
+            "--agents",
+            "200",
+            "--sensor-count",
+            "1000",
+            "--warmup",
+            "8",
+            "--events",
+            "40",
+            "--candidates",
+            "--correct",
+            "--training",
+            "--collector",
+            "--matched-updates",
+            "64",
+            "--matched-writes",
+            "2"
+          ],
+          "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+          "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+          "background_work": {
+            "correct_gaps": 0,
+            "correct_reads": 2,
+            "correct_writes": 2,
+            "errors": [],
+            "model_writes": 96,
+            "updates": 3072
+          },
+          "candidate_count": 200,
+          "ha_calls": 0,
+          "process_cpu_ms": 90776.15670400001,
+          "wall_ms": 75232.397338,
+          "rss_mb": 473.5390625,
+          "peak_rss_mb": 478.7421875,
+          "collector": {
+            "batches": 770,
+            "by_kind": {
+              "decision": {
+                "dropped": 0,
+                "queued": 9600,
+                "rejected": 0,
+                "written": 9600
+              },
+              "event": {
+                "dropped": 0,
+                "queued": 48,
+                "rejected": 0,
+                "written": 48
+              }
+            },
+            "committed_after_epoch_change": 0,
+            "deferred_for_foreground": 1583,
+            "deferred_for_sqlite": 1583,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "foreground_batches": 707,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 201,
+            "max_queue_bytes": 3256132,
+            "max_write_latency_ms": 1179.8732319999772,
+            "native_event_upserts": 57,
+            "native_seed_upserts": 0,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9600,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9648,
+            "session": "025a19dde04447a9a533a9d83a56729f",
+            "worker_alive": false,
+            "write_latency_p50_ms": 187.24154099999168,
+            "write_latency_p95_ms": 796.4616149999983,
+            "write_latency_p99_ms": 1039.9365679999732,
+            "write_latency_sample_count": 2048,
+            "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+            "written": 9648
+          },
+          "matched_workload": {
+            "batches": [
+              {
+                "inference_observed_ns": 9705140573,
+                "phase": "warmup",
+                "release_ns": 168639409,
+                "step": 0,
+                "trainer_end_ns": 1035460570,
+                "trainer_start_ns": 168830848
+              },
+              {
+                "inference_observed_ns": 13762676507,
+                "phase": "warmup",
+                "release_ns": 11690388097,
+                "step": 1,
+                "trainer_end_ns": 13255039504,
+                "trainer_start_ns": 11693439736
+              },
+              {
+                "inference_observed_ns": 15083926908,
+                "phase": "warmup",
+                "release_ns": 13762706170,
+                "step": 2,
+                "trainer_end_ns": 15763189190,
+                "trainer_start_ns": 13763523963
+              },
+              {
+                "inference_observed_ns": 17340485421,
+                "phase": "warmup",
+                "release_ns": 15763328679,
+                "step": 3,
+                "trainer_end_ns": 17621370302,
+                "trainer_start_ns": 15764829371
+              },
+              {
+                "inference_observed_ns": 19153825343,
+                "phase": "warmup",
+                "release_ns": 17621734222,
+                "step": 4,
+                "trainer_end_ns": 19388486457,
+                "trainer_start_ns": 17622726231
+              },
+              {
+                "inference_observed_ns": 20970708589,
+                "phase": "warmup",
+                "release_ns": 19388783445,
+                "step": 5,
+                "trainer_end_ns": 21406834878,
+                "trainer_start_ns": 19393423052
+              },
+              {
+                "inference_observed_ns": 22984909178,
+                "phase": "warmup",
+                "release_ns": 21406910473,
+                "step": 6,
+                "trainer_end_ns": 22861956386,
+                "trainer_start_ns": 21407687034
+              },
+              {
+                "inference_observed_ns": 24232523017,
+                "phase": "warmup",
+                "release_ns": 22984927129,
+                "step": 7,
+                "trainer_end_ns": 24666468625,
+                "trainer_start_ns": 22987580083
+              },
+              {
+                "inference_observed_ns": 26194019736,
+                "phase": "steady",
+                "release_ns": 24672917391,
+                "step": 8,
+                "trainer_end_ns": 26335028119,
+                "trainer_start_ns": 24673692908
+              },
+              {
+                "inference_observed_ns": 27724995166,
+                "phase": "steady",
+                "release_ns": 26335228676,
+                "step": 9,
+                "trainer_end_ns": 28284413311,
+                "trainer_start_ns": 26336383650
+              },
+              {
+                "inference_observed_ns": 29700449293,
+                "phase": "steady",
+                "release_ns": 28285535148,
+                "step": 10,
+                "trainer_end_ns": 30043169022,
+                "trainer_start_ns": 28286357194
+              },
+              {
+                "inference_observed_ns": 31951572573,
+                "phase": "steady",
+                "release_ns": 30043255052,
+                "step": 11,
+                "trainer_end_ns": 31883881430,
+                "trainer_start_ns": 30044147558
+              },
+              {
+                "inference_observed_ns": 33532507754,
+                "phase": "steady",
+                "release_ns": 31951600522,
+                "step": 12,
+                "trainer_end_ns": 33953034190,
+                "trainer_start_ns": 31952507098
+              },
+              {
+                "inference_observed_ns": 35539536463,
+                "phase": "steady",
+                "release_ns": 33953108313,
+                "step": 13,
+                "trainer_end_ns": 35683015092,
+                "trainer_start_ns": 33953958891
+              },
+              {
+                "inference_observed_ns": 37138020467,
+                "phase": "steady",
+                "release_ns": 35683122969,
+                "step": 14,
+                "trainer_end_ns": 37374469453,
+                "trainer_start_ns": 35683420251
+              },
+              {
+                "inference_observed_ns": 38774243837,
+                "phase": "steady",
+                "release_ns": 37374554444,
+                "step": 15,
+                "trainer_end_ns": 38852304358,
+                "trainer_start_ns": 37375418735
+              },
+              {
+                "inference_observed_ns": 40379758351,
+                "phase": "steady",
+                "release_ns": 38852508484,
+                "step": 16,
+                "trainer_end_ns": 40566724793,
+                "trainer_start_ns": 38853288328
+              },
+              {
+                "inference_observed_ns": 41850716968,
+                "phase": "steady",
+                "release_ns": 40566850012,
+                "step": 17,
+                "trainer_end_ns": 42275899530,
+                "trainer_start_ns": 40567729476
+              },
+              {
+                "inference_observed_ns": 43833363872,
+                "phase": "steady",
+                "release_ns": 42275971785,
+                "step": 18,
+                "trainer_end_ns": 44010074249,
+                "trainer_start_ns": 42276876236
+              },
+              {
+                "inference_observed_ns": 45536233818,
+                "phase": "steady",
+                "release_ns": 44011096557,
+                "step": 19,
+                "trainer_end_ns": 45757596197,
+                "trainer_start_ns": 44012069033
+              },
+              {
+                "inference_observed_ns": 47506862976,
+                "phase": "steady",
+                "release_ns": 45757675785,
+                "step": 20,
+                "trainer_end_ns": 47586855669,
+                "trainer_start_ns": 45758487868
+              },
+              {
+                "inference_observed_ns": 48655584098,
+                "phase": "steady",
+                "release_ns": 47586929101,
+                "step": 21,
+                "trainer_end_ns": 49225902141,
+                "trainer_start_ns": 47591010460
+              },
+              {
+                "inference_observed_ns": 50778925607,
+                "phase": "steady",
+                "release_ns": 49225985117,
+                "step": 22,
+                "trainer_end_ns": 51087250456,
+                "trainer_start_ns": 49226776478
+              },
+              {
+                "inference_observed_ns": 52321037296,
+                "phase": "steady",
+                "release_ns": 51087326902,
+                "step": 23,
+                "trainer_end_ns": 52977160616,
+                "trainer_start_ns": 51088462958
+              },
+              {
+                "inference_observed_ns": 54529351708,
+                "phase": "steady",
+                "release_ns": 52977232183,
+                "step": 24,
+                "trainer_end_ns": 54738954337,
+                "trainer_start_ns": 52979944978
+              },
+              {
+                "inference_observed_ns": 56392419390,
+                "phase": "steady",
+                "release_ns": 54739213086,
+                "step": 25,
+                "trainer_end_ns": 56725206413,
+                "trainer_start_ns": 54740104925
+              },
+              {
+                "inference_observed_ns": 61598647915,
+                "phase": "steady",
+                "release_ns": 59913348967,
+                "step": 26,
+                "trainer_end_ns": 61863960744,
+                "trainer_start_ns": 59914477378
+              },
+              {
+                "inference_observed_ns": 63454716531,
+                "phase": "steady",
+                "release_ns": 61864160779,
+                "step": 27,
+                "trainer_end_ns": 63575122059,
+                "trainer_start_ns": 61865243429
+              },
+              {
+                "inference_observed_ns": 64818288107,
+                "phase": "steady",
+                "release_ns": 63575203073,
+                "step": 28,
+                "trainer_end_ns": 65266913308,
+                "trainer_start_ns": 63577780422
+              },
+              {
+                "inference_observed_ns": 66893191309,
+                "phase": "steady",
+                "release_ns": 65267128267,
+                "step": 29,
+                "trainer_end_ns": 67182568027,
+                "trainer_start_ns": 65267981203
+              },
+              {
+                "inference_observed_ns": 68446263542,
+                "phase": "steady",
+                "release_ns": 67182856179,
+                "step": 30,
+                "trainer_end_ns": 68912663769,
+                "trainer_start_ns": 67183108435
+              },
+              {
+                "inference_observed_ns": 70411984719,
+                "phase": "steady",
+                "release_ns": 68912741326,
+                "step": 31,
+                "trainer_end_ns": 70640839692,
+                "trainer_start_ns": 68913647178
+              },
+              {
+                "inference_observed_ns": 72256271160,
+                "phase": "steady",
+                "release_ns": 70642155905,
+                "step": 32,
+                "trainer_end_ns": 72576061340,
+                "trainer_start_ns": 70644190388
+              },
+              {
+                "inference_observed_ns": 74273725497,
+                "phase": "steady",
+                "release_ns": 72576122842,
+                "step": 33,
+                "trainer_end_ns": 74613503142,
+                "trainer_start_ns": 72577805720
+              },
+              {
+                "inference_observed_ns": 75922521128,
+                "phase": "steady",
+                "release_ns": 74613567842,
+                "step": 34,
+                "trainer_end_ns": 76457239813,
+                "trainer_start_ns": 74615379442
+              },
+              {
+                "inference_observed_ns": 77834752904,
+                "phase": "steady",
+                "release_ns": 76457315881,
+                "step": 35,
+                "trainer_end_ns": 78088672941,
+                "trainer_start_ns": 76458209507
+              },
+              {
+                "inference_observed_ns": 79690056569,
+                "phase": "steady",
+                "release_ns": 78088829767,
+                "step": 36,
+                "trainer_end_ns": 80047528022,
+                "trainer_start_ns": 78089752164
+              },
+              {
+                "inference_observed_ns": 81551458124,
+                "phase": "steady",
+                "release_ns": 80048771573,
+                "step": 37,
+                "trainer_end_ns": 81853423873,
+                "trainer_start_ns": 80050421020
+              },
+              {
+                "inference_observed_ns": 83431518649,
+                "phase": "steady",
+                "release_ns": 81853746367,
+                "step": 38,
+                "trainer_end_ns": 83663790319,
+                "trainer_start_ns": 81854627561
+              },
+              {
+                "inference_observed_ns": 85183739886,
+                "phase": "steady",
+                "release_ns": 83664120180,
+                "step": 39,
+                "trainer_end_ns": 85502977880,
+                "trainer_start_ns": 83665794524
+              },
+              {
+                "inference_observed_ns": 87025344495,
+                "phase": "steady",
+                "release_ns": 85503077656,
+                "step": 40,
+                "trainer_end_ns": 87434301633,
+                "trainer_start_ns": 85504262559
+              },
+              {
+                "inference_observed_ns": 88942594753,
+                "phase": "steady",
+                "release_ns": 87434408331,
+                "step": 41,
+                "trainer_end_ns": 89181092704,
+                "trainer_start_ns": 87435254894
+              },
+              {
+                "inference_observed_ns": 90361131340,
+                "phase": "steady",
+                "release_ns": 89181393944,
+                "step": 42,
+                "trainer_end_ns": 90787562998,
+                "trainer_start_ns": 89183461697
+              },
+              {
+                "inference_observed_ns": 92218459345,
+                "phase": "steady",
+                "release_ns": 90787651061,
+                "step": 43,
+                "trainer_end_ns": 92751749891,
+                "trainer_start_ns": 90788482537
+              },
+              {
+                "inference_observed_ns": 94000213818,
+                "phase": "steady",
+                "release_ns": 92751929459,
+                "step": 44,
+                "trainer_end_ns": 94322594428,
+                "trainer_start_ns": 92753051885
+              },
+              {
+                "inference_observed_ns": 95687548993,
+                "phase": "steady",
+                "release_ns": 94322724704,
+                "step": 45,
+                "trainer_end_ns": 96082194058,
+                "trainer_start_ns": 94323578075
+              },
+              {
+                "inference_observed_ns": 97667538229,
+                "phase": "steady",
+                "release_ns": 96082525277,
+                "step": 46,
+                "trainer_end_ns": 97891109327,
+                "trainer_start_ns": 96083408858
+              },
+              {
+                "inference_observed_ns": 99433862992,
+                "phase": "steady",
+                "release_ns": 97891328725,
+                "step": 47,
+                "trainer_end_ns": 99899031556,
+                "trainer_start_ns": 97892269824
+              }
+            ],
+            "correct_every": 25,
+            "model_writes_per_step": 2,
+            "queue_capacity": 1,
+            "updates_per_step": 64
+          },
+          "warmup": {
+            "count": 1600,
+            "p50_ms": 865.3308669999547,
+            "p95_ms": 7465.155707000008,
+            "p99_ms": 9169.207583999992,
+            "max_ms": 9536.146255999995
+          },
+          "event_to_intent": {
+            "count": 8000,
+            "p50_ms": 760.3029709999873,
+            "p95_ms": 1455.949945000043,
+            "p99_ms": 1594.5604560000106,
+            "max_ms": 1904.8774130000083
+          },
+          "raw_sha256": "a2a3538ebc0f220984317d566c365ee531288e521a47b79a7422d272b96679ad",
+          "status": "completed",
+          "log": "u05b4c1e/primary/matched-1000-200-1-current.log.gz",
+          "raw": "u05b4c1e/primary/matched-1000-200-1-current.json.gz"
+        },
+        {
+          "name": "matched-1000-200-2-current",
+          "mode": "matched",
+          "sensors": 1000,
+          "agents": 200,
+          "probe": false,
+          "deadline_seconds": 30,
+          "exit_code": 0,
+          "log_sha256": "a756a2a582f36511108233b303ae231a5638a4abe29d10871d3f99e0bf921422",
+          "command": [
+            "/home/mpuchara/homemind-perf-venv/bin/python",
+            "/mnt/c/Users/mpuch/OneDrive/Dokumenty/HomeMind/HomeMind-HA-universal-232/tools/benchmark_runtime_scaling.py",
+            "--source-root",
+            "/home/mpuchara/homemind-u05b4c1e/current",
+            "--agents",
+            "200",
+            "--sensor-count",
+            "1000",
+            "--warmup",
+            "8",
+            "--events",
+            "40",
+            "--candidates",
+            "--correct",
+            "--training",
+            "--collector",
+            "--matched-updates",
+            "64",
+            "--matched-writes",
+            "2"
+          ],
+          "input_sha256": "8b70e4c289dced5c3947d39e1d39a2065354cb9a08fdb906a3f903224ea8ff53",
+          "decisions_sha256": "cb4657fa8bc2848484a2817ee97e938cff6d6c6475d12750c014bb373d8445f2",
+          "background_work": {
+            "correct_gaps": 0,
+            "correct_reads": 2,
+            "correct_writes": 2,
+            "errors": [],
+            "model_writes": 96,
+            "updates": 3072
+          },
+          "candidate_count": 200,
+          "ha_calls": 0,
+          "process_cpu_ms": 95882.51456799998,
+          "wall_ms": 79376.43847599998,
+          "rss_mb": 472.13671875,
+          "peak_rss_mb": 480.4453125,
+          "collector": {
+            "batches": 824,
+            "by_kind": {
+              "decision": {
+                "dropped": 0,
+                "queued": 9600,
+                "rejected": 0,
+                "written": 9600
+              },
+              "event": {
+                "dropped": 0,
+                "queued": 48,
+                "rejected": 0,
+                "written": 48
+              }
+            },
+            "committed_after_epoch_change": 0,
+            "deferred_for_foreground": 1676,
+            "deferred_for_sqlite": 1676,
+            "dropped": 0,
+            "enabled": true,
+            "epoch": 0,
+            "errors": 0,
+            "foreground_batches": 758,
+            "gaps": 1,
+            "last_error": null,
+            "max_queue": 128,
+            "max_queue_bytes": 2068056,
+            "max_write_latency_ms": 759.8508749999837,
+            "native_event_upserts": 55,
+            "native_seed_upserts": 0,
+            "predecision": {
+              "consumed": 0,
+              "errors": 0,
+              "prepared": 0,
+              "prepared_bytes": 0,
+              "rejected": 0,
+              "requested": 9601,
+              "unsupported": 0
+            },
+            "queue": 0,
+            "queue_bytes": 0,
+            "queued": 9648,
+            "session": "63406c6a3a8442028ff337fcee1c7922",
+            "worker_alive": false,
+            "write_latency_p50_ms": 130.37131200007934,
+            "write_latency_p95_ms": 379.93698299999323,
+            "write_latency_p99_ms": 531.7081839999673,
+            "write_latency_sample_count": 2048,
+            "write_latency_scope": "bounded tail of completed envelope turns, not unique native rows",
+            "written": 9648
+          },
+          "matched_workload": {
+            "batches": [
+              {
+                "inference_observed_ns": 13165531612,
+                "phase": "warmup",
+                "release_ns": 158299747,
+                "step": 0,
+                "trainer_end_ns": 1212001357,
+                "trainer_start_ns": 159456188
+              },
+              {
+                "inference_observed_ns": 17367906754,
+                "phase": "warmup",
+                "release_ns": 14958146308,
+                "step": 1,
+                "trainer_end_ns": 17011140569,
+                "trainer_start_ns": 14959988580
+              },
+              {
+                "inference_observed_ns": 18624801981,
+                "phase": "warmup",
+                "release_ns": 17367959576,
+                "step": 2,
+                "trainer_end_ns": 19158930080,
+                "trainer_start_ns": 17368370973
+              },
+              {
+                "inference_observed_ns": 20646787376,
+                "phase": "warmup",
+                "release_ns": 19158993170,
+                "step": 3,
+                "trainer_end_ns": 20867327596,
+                "trainer_start_ns": 19159776889
+              },
+              {
+                "inference_observed_ns": 22194619398,
+                "phase": "warmup",
+                "release_ns": 20867441170,
+                "step": 4,
+                "trainer_end_ns": 22917149618,
+                "trainer_start_ns": 20868437990
+              },
+              {
+                "inference_observed_ns": 24403624586,
+                "phase": "warmup",
+                "release_ns": 22917238698,
+                "step": 5,
+                "trainer_end_ns": 24634037634,
+                "trainer_start_ns": 22918173032
+              },
+              {
+                "inference_observed_ns": 25909329568,
+                "phase": "warmup",
+                "release_ns": 24634148336,
+                "step": 6,
+                "trainer_end_ns": 26324438599,
+                "trainer_start_ns": 24636571845
+              },
+              {
+                "inference_observed_ns": 27863211657,
+                "phase": "warmup",
+                "release_ns": 26324536358,
+                "step": 7,
+                "trainer_end_ns": 28035738194,
+                "trainer_start_ns": 26325350880
+              },
+              {
+                "inference_observed_ns": 29582712963,
+                "phase": "steady",
+                "release_ns": 28117234708,
+                "step": 8,
+                "trainer_end_ns": 30131806183,
+                "trainer_start_ns": 28118135673
+              },
+              {
+                "inference_observed_ns": 31560248535,
+                "phase": "steady",
+                "release_ns": 30131910781,
+                "step": 9,
+                "trainer_end_ns": 31906435063,
+                "trainer_start_ns": 30133162821
+              },
+              {
+                "inference_observed_ns": 33780248086,
+                "phase": "steady",
+                "release_ns": 31906710629,
+                "step": 10,
+                "trainer_end_ns": 34207262085,
+                "trainer_start_ns": 31907688111
+              },
+              {
+                "inference_observed_ns": 35509717865,
+                "phase": "steady",
+                "release_ns": 34207373599,
+                "step": 11,
+                "trainer_end_ns": 36055705951,
+                "trainer_start_ns": 34208481234
+              },
+              {
+                "inference_observed_ns": 37500503084,
+                "phase": "steady",
+                "release_ns": 36055796136,
+                "step": 12,
+                "trainer_end_ns": 37769658998,
+                "trainer_start_ns": 36056620662
+              },
+              {
+                "inference_observed_ns": 39424844229,
+                "phase": "steady",
+                "release_ns": 37769831981,
+                "step": 13,
+                "trainer_end_ns": 39665800651,
+                "trainer_start_ns": 37773006818
+              },
+              {
+                "inference_observed_ns": 41432473893,
+                "phase": "steady",
+                "release_ns": 39665882460,
+                "step": 14,
+                "trainer_end_ns": 41346216560,
+                "trainer_start_ns": 39667861147
+              },
+              {
+                "inference_observed_ns": 42622029703,
+                "phase": "steady",
+                "release_ns": 41432515825,
+                "step": 15,
+                "trainer_end_ns": 43375654769,
+                "trainer_start_ns": 41433352755
+              },
+              {
+                "inference_observed_ns": 44883141324,
+                "phase": "steady",
+                "release_ns": 43375764190,
+                "step": 16,
+                "trainer_end_ns": 45026997290,
+                "trainer_start_ns": 43376511287
+              },
+              {
+                "inference_observed_ns": 46408250026,
+                "phase": "steady",
+                "release_ns": 45027147124,
+                "step": 17,
+                "trainer_end_ns": 46887647010,
+                "trainer_start_ns": 45028058535
+              },
+              {
+                "inference_observed_ns": 48505516661,
+                "phase": "steady",
+                "release_ns": 46887717413,
+                "step": 18,
+                "trainer_end_ns": 48609040682,
+                "trainer_start_ns": 46888506701
+              },
+              {
+                "inference_observed_ns": 50250219818,
+                "phase": "steady",
+                "release_ns": 48609265792,
+                "step": 19,
+                "trainer_end_ns": 50658873808,
+                "trainer_start_ns": 48610236078
+              },
+              {
+                "inference_observed_ns": 52341403744,
+                "phase": "steady",
+                "release_ns": 50660731731,
+                "step": 20,
+                "trainer_end_ns": 52485575871,
+                "trainer_start_ns": 50663379613
+              },
+              {
+                "inference_observed_ns": 54011411496,
+                "phase": "steady",
+                "release_ns": 52485661300,
+                "step": 21,
+                "trainer_end_ns": 54209566591,
+                "trainer_start_ns": 52487639204
+              },
+              {
+                "inference_observed_ns": 55692453895,
+                "phase": "steady",
+                "release_ns": 54209664332,
+                "step": 22,
+                "trainer_end_ns": 56098050064,
+                "trainer_start_ns": 54211060164
+              },
+              {
+                "inference_observed_ns": 57601307649,
+                "phase": "steady",
+                "release_ns": 56099764345,
+                "step": 23,
+                "trainer_end_ns": 58120558915,
+                "trainer_start_ns": 56102156876
+              },
+              {
+                "inference_observed_ns": 59720037898,
+                "phase": "steady",
+                "release_ns": 58120659431,
+                "step": 24,
+                "trainer_end_ns": 59979278331,
+                "trainer_start_ns": 58120916434
+              },
+              {
+                "inference_observed_ns": 61737170261,
+                "phase": "steady",
+                "release_ns": 59979605952,
+                "step": 25,
+                "trainer_end_ns": 62153132224,
+                "trainer_start_ns": 59981830445
+              },
+              {
+                "inference_observed_ns": 67154573033,
+                "phase": "steady",
+                "release_ns": 65091610907,
+                "step": 26,
+                "trainer_end_ns": 67279096950,
+                "trainer_start_ns": 65093005481
+              },
+              {
+                "inference_observed_ns": 68747582703,
+                "phase": "steady",
+                "release_ns": 67279688106,
+                "step": 27,
+                "trainer_end_ns": 69381312068,
+                "trainer_start_ns": 67280950288
+              },
+              {
+                "inference_observed_ns": 70980571604,
+                "phase": "steady",
+                "release_ns": 69381377152,
+                "step": 28,
+                "trainer_end_ns": 71287488336,
+                "trainer_start_ns": 69382207511
+              },
+              {
+                "inference_observed_ns": 72909798568,
+                "phase": "steady",
+                "release_ns": 71287563419,
+                "step": 29,
+                "trainer_end_ns": 73100953325,
+                "trainer_start_ns": 71288384782
+              },
+              {
+                "inference_observed_ns": 74244853459,
+                "phase": "steady",
+                "release_ns": 73101028681,
+                "step": 30,
+                "trainer_end_ns": 74890971045,
+                "trainer_start_ns": 73103066604
+              },
+              {
+                "inference_observed_ns": 76515669881,
+                "phase": "steady",
+                "release_ns": 74891052468,
+                "step": 31,
+                "trainer_end_ns": 76634170933,
+                "trainer_start_ns": 74891891392
+              },
+              {
+                "inference_observed_ns": 78193176178,
+                "phase": "steady",
+                "release_ns": 76634334031,
+                "step": 32,
+                "trainer_end_ns": 78700348271,
+                "trainer_start_ns": 76635246168
+              },
+              {
+                "inference_observed_ns": 80211019640,
+                "phase": "steady",
+                "release_ns": 78700424150,
+                "step": 33,
+                "trainer_end_ns": 80727037967,
+                "trainer_start_ns": 78701289006
+              },
+              {
+                "inference_observed_ns": 82113904395,
+                "phase": "steady",
+                "release_ns": 80727181431,
+                "step": 34,
+                "trainer_end_ns": 82449400485,
+                "trainer_start_ns": 80728287966
+              },
+              {
+                "inference_observed_ns": 83899191960,
+                "phase": "steady",
+                "release_ns": 82449739214,
+                "step": 35,
+                "trainer_end_ns": 84289801894,
+                "trainer_start_ns": 82451196330
+              },
+              {
+                "inference_observed_ns": 86048049586,
+                "phase": "steady",
+                "release_ns": 84290204882,
+                "step": 36,
+                "trainer_end_ns": 86229193646,
+                "trainer_start_ns": 84291175556
+              },
+              {
+                "inference_observed_ns": 87553840967,
+                "phase": "steady",
+                "release_ns": 86229301773,
+                "step": 37,
+                "trainer_end_ns": 88084295673,
+                "trainer_start_ns": 86230291706
+              },
+              {
+                "inference_observed_ns": 89510463139,
+                "phase": "steady",
+                "release_ns": 88084935259,
+                "step": 38,
+                "trainer_end_ns": 89881385822,
+                "trainer_start_ns": 88085867585
+              },
+              {
+                "inference_observed_ns": 91633757959,
+                "phase": "steady",
+                "release_ns": 89881850077,
+                "step": 39,
+                "trainer_end_ns": 91862004634,
+                "trainer_start_ns": 89888160295
+              },
+              {
+                "inference_observed_ns": 93779235189,
+                "phase": "steady",
+                "release_ns": 91862111565,
+                "step": 40,
+                "trainer_end_ns": 93875922304,
+                "trainer_start_ns": 91864117125
+              },
+              {
+                "inference_observed_ns": 95502562813,
+                "phase": "steady",
+                "release_ns": 93876001234,
+                "step": 41,
+                "trainer_end_ns": 96043518166,
+                "trainer_start_ns": 93877143992
+              },
+              {
+                "inference_observed_ns": 97400310233,
+                "phase": "steady",
+                "release_ns": 96043593962,
+                "step": 42,
+                "trainer_end_ns": 97727764285,
+                "trainer_start_ns": 96044499647
+              },
+              {
+                "inference_observed_ns": 99207738227,
+                "phase": "steady",
+                "release_ns": 97727932500,
+                "step": 43,
+                "trainer_end_ns": 99667176983,
+                "trainer_start_ns": 97728813859
+              },
+              {
+                "inference_observed_ns": 101280113544,
+                "phase": "steady",
+                "release_ns": 99667253083,
+                "step": 44,
+                "trainer_end_ns": 101443484784,
+                "trainer_start_ns": 99668188746
+              },
+              {
+                "inference_observed_ns": 103235463928,
+                "phase": "steady",
+                "release_ns": 101443562187,
+                "step": 45,
+                "trainer_end_ns": 103437105033,
+                "trainer_start_ns": 101444461587
+              },
+              {
+                "inference_observed_ns": 104807635938,
+                "phase": "steady",
+                "release_ns": 103437190282,
+                "step": 46,
+                "trainer_end_ns": 105648603685,
+                "trainer_start_ns": 103439309345
+              },
+              {
+                "inference_observed_ns": 107165021819,
+                "phase": "steady",
+                "release_ns": 105648757290,
+                "step": 47,
+                "trainer_end_ns": 107412820601,
+                "trainer_start_ns": 105651134585
+              }
+            ],
+            "correct_every": 25,
+            "model_writes_per_step": 2,
+            "queue_capacity": 1,
+            "updates_per_step": 64
+          },
+          "warmup": {
+            "count": 1600,
+            "p50_ms": 868.2487290000154,
+            "p95_ms": 9497.53213300005,
+            "p99_ms": 12531.548762000057,
+            "max_ms": 13007.029491000027
+          },
+          "event_to_intent": {
+            "count": 8000,
+            "p50_ms": 787.8505500000301,
+            "p95_ms": 1500.6261429999768,
+            "p99_ms": 1725.0707460000285,
+            "max_ms": 2044.6324990000448
+          },
+          "raw_sha256": "15e1466109c6009e5d1debcf200346638d10608f9f9a7d21f89b9eb3e3a90739",
+          "status": "completed",
+          "log": "u05b4c1e/primary/matched-1000-200-2-current.log.gz",
+          "raw": "u05b4c1e/primary/matched-1000-200-2-current.json.gz"
+        }
+      ],
+      "plan": "u05b4c1e/primary/plan.json"
+    }
+  },
+  "run_pairs": [
+    {
+      "name": "matched-1000-200-1",
+      "ratios": {
+        "p95_ms": 0.8110073240300606,
+        "p99_ms": 0.5471148336424696,
+        "p50_ms": 0.9036895373235602,
+        "max_ms": 0.5420450040794703
+      },
+      "observed_parity": true
+    }
+  ],
+  "gate_d": "INCONCLUSIVE",
+  "matched_large_tests": {
+    "p95_ms": {
+      "independent_pairs": 1,
+      "margin_ratio": 1.1,
+      "within": 1,
+      "above": 0,
+      "noninferiority_p": 0.5,
+      "regression_p": 1.0
+    },
+    "p99_ms": {
+      "independent_pairs": 1,
+      "margin_ratio": 1.15,
+      "within": 1,
+      "above": 0,
+      "noninferiority_p": 0.5,
+      "regression_p": 1.0
+    }
+  },
+  "qualified_evidence_under_load": "NOT TESTED",
+  "hardware": "NOT TESTED",
+  "prior_recovery": "UNIVERSAL_U05B4C1_RECOVERY_SUMMARY.json",
+  "limitations": [
+    "Physical collector rows and V2/V3 qualification require a separate experiment.",
+    "Natural-mode training counts and actual CPU overlap are measured outcomes.",
+    "Decision hash covers observed outcomes and intent status in the fixture."
+  ],
+  "initial_matched_smoke": {
+    "runtime_source": "8036a2bd64dba32490d784df2029c0818ad3edbf",
+    "agents": 1,
+    "sensors": 5,
+    "background": {
+      "correct_gaps": 0,
+      "correct_reads": 1,
+      "correct_writes": 1,
+      "errors": [],
+      "model_writes": 10,
+      "updates": 80
+    },
+    "matched": {
+      "batches": [
+        {
+          "inference_observed_ns": 46733583,
+          "phase": "warmup",
+          "release_ns": 26567539,
+          "step": 0,
+          "trainer_end_ns": 323823330,
+          "trainer_start_ns": 27123182
+        },
+        {
+          "inference_observed_ns": 639547345,
+          "phase": "warmup",
+          "release_ns": 622703113,
+          "step": 1,
+          "trainer_end_ns": 781165636,
+          "trainer_start_ns": 623262423
+        },
+        {
+          "inference_observed_ns": 812846693,
+          "phase": "steady",
+          "release_ns": 783055288,
+          "step": 2,
+          "trainer_end_ns": 916259405,
+          "trainer_start_ns": 783588474
+        },
+        {
+          "inference_observed_ns": 944776088,
+          "phase": "steady",
+          "release_ns": 916428829,
+          "step": 3,
+          "trainer_end_ns": 1098141452,
+          "trainer_start_ns": 917156877
+        },
+        {
+          "inference_observed_ns": 1128911086,
+          "phase": "steady",
+          "release_ns": 1098274755,
+          "step": 4,
+          "trainer_end_ns": 1261672185,
+          "trainer_start_ns": 1098947413
+        }
+      ],
+      "correct_every": 25,
+      "model_writes_per_step": 2,
+      "queue_capacity": 1,
+      "updates_per_step": 16
+    },
+    "ha_calls": 0,
+    "log": "u05b4c1e/matched-smoke.log.gz"
+  },
+  "base_ci": {
+    "sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+    "run": 41800500067,
+    "conclusion": "success"
+  },
+  "validation": {
+    "benchmark_ci_sha": "550332d61f2213e63d720964c8a0cce929825b6c",
+    "benchmark_ci_run": 41809401478,
+    "note": "See the exact head checks on PR #367 for reporting and benchmark tooling commits."
+  }
+}

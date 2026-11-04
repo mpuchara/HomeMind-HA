@@ -61,3 +61,22 @@ cannot distinguish a ready task's exact creation or each failed admission
 attempt within an Engine pass. Executor submission bounds intent availability
 and does not expose the exact constructor timestamp. Ring drops and thread
 limits are explicit, so an absent span in a truncated trace is unknown.
+
+## First matched pair at 1000/200
+
+| Source | Warmup max ms | p50 ms | p95 ms | p99 ms | Max ms | Process CPU s | Peak RSS MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| #364 | 16,621 | 841 | 1,795 | 2,914 | 3,514 | 104.0 | 477.2 |
+| #366 | 9,536 | 760 | 1,456 | 1,595 | 1,905 | 90.8 | 478.7 |
+
+Both runs performed 3,072 updates, 96 model writes and two Correct/Undo
+operations, with matching input and decision digests and zero HA calls.
+The trainer started before the observation boundary in all 40 steady steps
+in both runs. Training finished after the last observed target in 38 of 40
+baseline steps and 39 of 40 current steps. This checks the planned overlap
+at the event boundary. It cannot resolve variation within individual target
+intervals. The collector reported 9,335 baseline drops and zero current
+drops. These primary counters do not independently count physical rows.
+This first pair is a measurement of the harness under the target load.
+The acceptance unit remains the independent run pair, so Gate D is
+**INCONCLUSIVE**.

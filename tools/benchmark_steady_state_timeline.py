@@ -46,6 +46,7 @@ class TimelineProbe:
         self.thread_limit = thread_limit
         self.local = threading.local()
         self.rings = []
+        self.native_rows = None
         self.start_ns = time.perf_counter_ns()
 
     def append(self, kind, start, end, **details):
@@ -107,6 +108,23 @@ class TimelineProbe:
         collector = getattr(engine, 'universal_training_collector', None)
         if collector is not None:
             self.wrap(stack, collector, '_write', 'historical_collector_write')
+            stop = collector.stop
+
+            @wraps(stop)
+            def stop_and_count(*args, **kwargs):
+                stopped = stop(*args, **kwargs)
+                if stopped:
+                    with store.conn() as conn:
+                        self.native_rows = {name: conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
+                                            for name, table in (
+                                                ('observations', 'feature_observation_events'),
+                                                ('decisions', 'universal_collection_decisions'),
+                                                ('masks', 'universal_collection_masks'),
+                                                ('segments', 'universal_collection_segments'),
+                                                ('gaps', 'universal_collection_gaps'))}
+                return stopped
+
+            stack.enter_context(patch.object(collector, 'stop', stop_and_count))
         tournament = getattr(engine, 'context_tournament', None)
         if tournament is not None:
             self.wrap(stack, tournament._deferred_observations, '_execute', 'tournament_observation')
@@ -171,12 +189,14 @@ def main():
         parser.error('bounded agent and sensor counts required')
     if not 0 <= args.warmup <= 8 or not 2 <= args.events <= 40:
         parser.error('timeline requires at most 8 warmup and 40 steady steps')
-    with patch.object(harness, 'Probe', TimelineProbe):
+    timeline = TimelineProbe()
+    with patch.object(harness, 'Probe', return_value=timeline):
         result = harness.run(args.source_root, args.agents, args.events, warmup=args.warmup,
                              sensor_count=args.sensor_count, candidates=args.candidates,
                              correct=args.correct, training=args.training, collector=args.collector,
                              probe=True, matched_updates=args.matched_updates,
                              matched_writes=args.matched_writes)
+    result['collector_native_rows'] = timeline.native_rows
     print('SCALING_JSON='+json.dumps(result, sort_keys=True))
 
 

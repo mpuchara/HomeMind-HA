@@ -42,6 +42,9 @@ class MatchedWorkloadTests(unittest.TestCase):
                 latest = max(batch['trainer_end_ns'], batch['inference_observed_ns'])
         for key in ('input_sha256', 'decisions_sha256'):
             self.assertEqual(plain[key], traced[key])
+        self.assertEqual(traced['collector']['dropped'], 0)
+        self.assertEqual(traced['collector_native_rows']['decisions'], 3)
+        self.assertEqual(traced['collector_native_rows']['observations'], 3)
         rows = [row for thread in traced['probe']['threads'] for row in thread['rows']]
         kinds = {row[0] for row in rows}
         self.assertTrue({'ingress', 'submit_call', 'executor_queue', 'worker_active', 'agent',
@@ -52,4 +55,3 @@ class MatchedWorkloadTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -43,6 +43,9 @@ def run_case(root, out, name, mode, sensors, agents, probe=False):
         row.update({key: data[key] for key in ('input_sha256', 'decisions_sha256', 'background_work',
                    'candidate_count', 'ha_calls', 'process_cpu_ms', 'wall_ms', 'rss_mb', 'peak_rss_mb',
                    'collector', 'matched_workload')})
+        row['observed_steady_intents'] = sum(decision[-1] is not None
+                                             for step in data['decision_rows'] for decision in step)
+        row['collector_native_rows'] = data.get('collector_native_rows')
         row['warmup'] = quantiles(data['warmup_pipeline_samples_ms'])
         row['event_to_intent'] = quantiles(data['telemetry_raw_ms']['event_to_intent'])
         row['raw_sha256'] = hashlib.sha256(encoded).hexdigest()
@@ -59,10 +62,11 @@ def main():
     for arg in ('baseline', 'audit', 'current', 'output'):
         parser.add_argument('--' + arg, type=Path, required=True)
     parser.add_argument('--series', choices=('primary', 'extension', 'diagnostic'), default='primary')
+    parser.add_argument('--resume', action='store_true', help='Resume only after the previous serial driver stopped')
     args = parser.parse_args()
     roots = {name: getattr(args, name).resolve() for name in ('baseline', 'audit', 'current')}
     out = args.output.resolve()
-    out.mkdir(parents=True, exist_ok=False)
+    out.mkdir(parents=True, exist_ok=args.resume)
     if args.series == 'primary':
         groups = [('matched', 1000, 200, i) for i in range(1, 5)]
         groups += [('natural', 1000, 200, i) for i in range(1, 3)]
@@ -82,12 +86,29 @@ def main():
             plan.append(dict(name=name, variant=variant, mode=mode, sensors=sensors, agents=agents))
     harness = Path(__file__).with_name('benchmark_runtime_scaling.py')
     timeline = harness.with_name('benchmark_steady_state_timeline.py')
-    write_json(out / 'plan.json', dict(series=args.series, cases=plan,
-               timeline_sha256=hashlib.sha256(timeline.read_bytes()).hexdigest() if args.series == 'diagnostic' else None,
-               harness_sha256=hashlib.sha256(harness.read_bytes()).hexdigest(),
-               sources={name: source_identity(root) for name, root in roots.items()}))
+    metadata = dict(series=args.series, cases=plan,
+                    timeline_sha256=hashlib.sha256(timeline.read_bytes()).hexdigest()
+                    if args.series == 'diagnostic' else None,
+                    harness_sha256=hashlib.sha256(harness.read_bytes()).hexdigest(),
+                    sources={name: source_identity(root) for name, root in roots.items()})
+    plan_file = out / 'plan.json'
+    if args.resume:
+        recorded = json.loads(plan_file.read_text(encoding='utf-8'))
+        if any(recorded.get(key) != value for key, value in metadata.items()):
+            parser.error('resume requires the original source trees, harness, and plan')
+    else:
+        write_json(plan_file, metadata)
     for case in plan:
-        run_case(roots[case['variant']], out, case['name'], case['mode'], case['sensors'],
+        base_name = case['name']
+        name = base_name
+        attempt = 1
+        while args.resume and (out / (name + '.log')).exists() and not (out / (name + '.summary.json')).exists():
+            # An interrupted attempt remains on disk with its original name.
+            attempt += 1
+            name = f'{base_name}-attempt-{attempt}'
+        if args.resume and (out / (name + '.summary.json')).exists():
+            continue
+        run_case(roots[case['variant']], out, name, case['mode'], case['sensors'],
                  case['agents'], probe=args.series == 'diagnostic')
 
 
