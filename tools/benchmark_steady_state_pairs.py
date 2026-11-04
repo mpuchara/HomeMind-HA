@@ -18,13 +18,12 @@ def write_json(path, data):
 
 def run_case(root, out, name, mode, sensors, agents, probe=False):
     log = out / (name + '.log')
-    args = [sys.executable, str(Path(__file__).with_name('benchmark_runtime_scaling.py')),
+    script = 'benchmark_steady_state_timeline.py' if probe else 'benchmark_runtime_scaling.py'
+    args = [sys.executable, str(Path(__file__).with_name(script)),
             '--source-root', str(root), '--agents', str(agents), '--sensor-count', str(sensors),
             '--warmup', '8', '--events', '40', '--candidates', '--correct', '--training', '--collector']
     if mode == 'matched':
         args += ['--matched-updates', '64', '--matched-writes', '2']
-    if probe:
-        args += ['--probe']
     with log.open('xb') as stream:
         try:
             code = subprocess.run(args, stdout=stream, stderr=subprocess.STDOUT, timeout=900).returncode
@@ -37,9 +36,9 @@ def run_case(root, out, name, mode, sensors, agents, probe=False):
     encoded = next((line.partition(b'=')[2] for line in text.splitlines()
                     if line.startswith(b'SCALING_JSON=')), None)
     if code == 0 and encoded:
-        with gzip.GzipFile(filename='', mode='wb', fileobj=(out / (name + '.json.gz')).open('xb'),
-                           mtime=0) as stream:
-            stream.write(encoded)
+        with (out / (name + '.json.gz')).open('xb') as archive:
+            with gzip.GzipFile(filename='', mode='wb', fileobj=archive, mtime=0) as stream:
+                stream.write(encoded)
         data = json.loads(encoded)
         row.update({key: data[key] for key in ('input_sha256', 'decisions_sha256', 'background_work',
                    'candidate_count', 'ha_calls', 'process_cpu_ms', 'wall_ms', 'rss_mb', 'peak_rss_mb',
@@ -82,7 +81,9 @@ def main():
             name = f'{mode}-{sensors}-{agents}-{pair}-{variant}'
             plan.append(dict(name=name, variant=variant, mode=mode, sensors=sensors, agents=agents))
     harness = Path(__file__).with_name('benchmark_runtime_scaling.py')
+    timeline = harness.with_name('benchmark_steady_state_timeline.py')
     write_json(out / 'plan.json', dict(series=args.series, cases=plan,
+               timeline_sha256=hashlib.sha256(timeline.read_bytes()).hexdigest() if args.series == 'diagnostic' else None,
                harness_sha256=hashlib.sha256(harness.read_bytes()).hexdigest(),
                sources={name: source_identity(root) for name, root in roots.items()}))
     for case in plan:

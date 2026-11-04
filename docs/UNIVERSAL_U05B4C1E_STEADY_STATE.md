@@ -43,3 +43,21 @@ and within the same margins. Any other evidence is `INCONCLUSIVE`
 unless independent runs support a repeated regression. Report p50, max,
 CPU and RSS separately. These margins are experimental. Multi-second
 tails remain a separate `SCALABILITY_TARGET_NOT_MET` concern.
+
+## Timeline diagnostic
+
+The opt-in companion uses bounded per-thread RAM rings and monotonic
+timestamps. It records ingress, scheduler passes, ready targets and the oldest
+receipt represented in those targets, unfinished and done futures, submission
+attempts, executor entry/exit, agent entry, selected durable config loads,
+features, prediction and Executor submission. Worker interval intersections
+measure active workers. Store acquisition, SQLite, Tiny Shadow, Candidate
+tournament execution, training updates/model writes and collector writes are
+separate inclusive exposures. They can overlap and must never be summed.
+
+The submission timestamp measures admission and the handoff to the executor.
+The event-to-submission interval includes ingress and scheduler time. It
+cannot distinguish a ready task's exact creation or each failed admission
+attempt within an Engine pass. Executor submission bounds intent availability
+and does not expose the exact constructor timestamp. Ring drops and thread
+limits are explicit, so an absent span in a truncated trace is unknown.
