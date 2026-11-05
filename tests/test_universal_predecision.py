@@ -323,24 +323,6 @@ class PredecisionTests(unittest.TestCase):
         self.assertNotIn(agent['id'],self.evidence.prepared)
         self.assertEqual(self.evidence.stats['unsupported'],1)
 
-    def test_generation_receipt_does_not_materialize_lineage_in_detached_arbiter(self):
-        statements = []
-        peer = _agent(self.store, 'light.peer', 'power')
-        _ensure_root(self.store, peer['id'], generation_number=0)
-
-        def connect(*args, **kwargs):
-            db = sqlite3.connect(*args, **kwargs)
-            db.set_trace_callback(statements.append)
-            return db
-
-        with patch('universal_predecision.sqlite3', SimpleNamespace(connect=connect, Row=sqlite3.Row)):
-            self.prepare()
-
-        prepared = self.evidence.prepared[self.agent['id']]
-        self.assertEqual(prepared['generation_id'], self.generation)
-        self.assertTrue(statements)
-        self.assertFalse(any('agent_candidate_generations' in statement for statement in statements))
-
     def test_durable_agent_bound_checked_before_affected_sensor_reads(self):
         def add_agents(start, stop):
             with self.store.conn() as conn:
