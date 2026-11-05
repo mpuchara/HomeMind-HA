@@ -219,7 +219,7 @@ class PredecisionEvidence:
                     schema = c.execute('SELECT sql FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone()
                     if schema is None:
                         raise ValueError('missing arbiter table: '+table)
-                    if table != 'agents':
+                    if table not in ('agents', 'agent_candidate_generations'):
                         db.execute(schema[0])
                     cursor = c.execute(f'SELECT * FROM {table} LIMIT 10001')
                     count = 0
@@ -235,8 +235,12 @@ class PredecisionEvidence:
                             # SnapshotStore serves configs directly to the arbiter.
                             # Read them once from the same native transaction.
                             configs.extend(self.store._agent_dict(row) for row in rows)
-                        else:
+                        elif table != 'agent_candidate_generations':
                             db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
+                # Only the receipt consumes lineage. Read it from this same
+                # native snapshot while retaining the table's structural bound.
+                generation = c.execute('SELECT generation_id FROM agent_candidate_generations WHERE agent_id=?',
+                                       (aid,)).fetchone()
                 config = next((a for a in configs if a['id'] == aid), None)
                 if config is None or any(agent.get(k) != v for k, v in config.items()):
                     raise ValueError('RAM/durable config mismatch')
@@ -256,7 +260,6 @@ class PredecisionEvidence:
             at = time.time()
             mask = service.legal_action_mask(agent, state, values,
                 runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)
-            generation = db.execute('SELECT generation_id FROM agent_candidate_generations WHERE agent_id=?', (aid,)).fetchone()
             if generation is None:
                 raise ValueError('missing generation')
             deadlines = [at+5.]
