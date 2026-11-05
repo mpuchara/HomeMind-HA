@@ -292,3 +292,166 @@ two observations (2.863 and 2.047 s). The observations establish that
 the cadence bound reduces turn count under this offered load relative to
 the preceding implementation's 41-turn Normal observation. They leave
 Normal performance acceptance open.
+
+
+## U05b.4c.1g.2d — Normal Performance Recovery
+
+Gate D remains **BLOCKER**. 2 of 6 Normal pairs met all four margins.
+Both new Busy controls and both smaller scales crossed at least one margin.
+All matched workloads retained decision counts and signatures with zero HA service
+calls. Collector drops were zero and the ON arms exported coverage version 3. Supported cases consumed 43 → 113 prepared
+proofs and qualified 40 → 108 V3 samples in aggregate.
+Each of Normal, Busy A and Busy B improved. The candidate series used fresh
+paired baselines and consumed 35 → 86
+proofs and qualified 32 → 81 V3 samples. The 400-config fixture continued to
+fail closed with zero prepared/qualified evidence.
+
+The comparison used separate ext4 snapshots of #368 `951dcd70` and #369
+`ab7116f5` on WSL with the same Python 3.12.3 environment and identical paired
+harness. The two runtime trees and benchmark dependencies matched 255 tracked
+Git blobs each after line-ending normalization. Each arm used a new process
+and database, 24 pulses at 400 ms, and fanout 16 (bounded by root count).
+The protocol fixed the order and +10% p95, +15% p99, +15% CPU and +10% RSS
+margins before measurements. The six Normal pairs alternated baseline-first
+and current-first. CPU is process CPU during load and RSS is the post-run
+resident measurement used by the existing harness. Input hashes fingerprint
+the logical workload and fixture, with run-local clocks and generated IDs
+excluded. JSON retains full digests, SQLite counts, historical coverage, and
+Candidate counters. Timings with probes are separate.
+
+| Pair | Δ p95 | Δ p99 | Δ CPU | Δ RSS | Margins exceeded |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Busy A | +11.5% | +7.2% | +3.8% | +1.5% | P95 |
+| Busy B | +19.2% | +36.9% | +13.1% | +0.6% | P95, P99 |
+| candidate-busy128 | +11.4% | +24.5% | +11.6% | +0.6% | P95, P99 |
+| candidate-busy56 | +16.2% | +25.3% | +16.1% | +0.5% | P95, P99, CPU |
+| candidate-normal-1 | -16.4% | -47.3% | -1.4% | +0.9% | None |
+| candidate-normal-2 | +11.4% | +10.9% | +25.9% | +0.5% | P95, CPU |
+| candidate-normal-3 | +1.8% | +9.3% | +21.8% | +0.7% | CPU |
+| candidate-normal-4 | -0.3% | -26.2% | +17.2% | +0.9% | CPU |
+| candidate-small:0 | +1.3% | +10.2% | +13.4% | +1.7% | None |
+| candidate-small:1 | +16.9% | +8.3% | +18.7% | +1.2% | P95, CPU |
+| candidate-unsupported | +2.7% | -3.9% | +1.9% | -1.4% | None |
+| normal-1 | +9.9% | -0.8% | +24.9% | +1.2% | CPU |
+| normal-2 | -4.7% | -9.2% | +5.5% | +1.3% | None |
+| normal-3 | -15.0% | -30.5% | +1.8% | +0.7% | None |
+| normal-4 | +5.7% | +9.7% | +30.6% | +1.3% | CPU |
+| normal-5 | -1.6% | +17.5% | +11.8% | +0.5% | P99 |
+| normal-6 | +8.8% | +5.5% | +19.1% | +0.6% | CPU |
+| 50/10 | +21.9% | +37.5% | +43.6% | +9.4% | P95, P99, CPU |
+| 200/30 | -30.6% | -17.3% | +15.9% | +8.0% | CPU |
+| Unsupported | -15.2% | -13.4% | -9.3% | -0.7% | None |
+
+| Ablation | p50 ms | p95 ms | p99 ms | max ms | CPU s | RSS MiB | SQL calls | Consumed | V3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1-off | 12.49 | 101.39 | 121.14 | 142.06 | 2.13 | 55.88 | 4101 | 0 | 0 |
+| 1-incomplete | 15.18 | 105.95 | 120.95 | 135.02 | 2.08 | 75.46 | 5307 | 0 | 0 |
+| 1-normal | 23.40 | 123.53 | 144.77 | 145.64 | 3.49 | 79.00 | 5642 | 13 | 13 |
+| 2-normal | 11.73 | 66.42 | 78.69 | 85.86 | 1.81 | 78.58 | 5626 | 13 | 13 |
+| 2-incomplete | 10.16 | 69.48 | 92.61 | 108.46 | 1.63 | 75.59 | 5171 | 0 | 0 |
+| 2-off | 10.00 | 78.82 | 97.71 | 103.38 | 1.49 | 55.94 | 4108 | 0 | 0 |
+
+Preparation ON increased load SQLite calls by 335 and 455. The two process
+CPU differences against `incomplete` were +1.408 s and +0.180 s. Preparation
+accounting measured 0.772 s and 0.491 s of collector-thread CPU respectively.
+The second preparation CPU total exceeded its entire paired process CPU delta.
+The OFF and incomplete controls also varied across orders. These comparisons
+cannot attribute the full process difference or latency tail to preparation.
+
+### Preparation phases and inference overlap
+
+The corrected profiles retained 384 original decisions each and qualified 13
+samples in each ON run. Two earlier ON traces were invalid because the SQLite
+probe lacked the `Row` attribute. Those traces are retained in the archive.
+They are excluded from the phase and overlap comparison.
+
+The following cells give **calls / inclusive wall ms / inclusive thread CPU ms**
+over the recorded profile, including finalization. The preparation-turn interval
+and overlap analysis below are restricted to load. Native transaction,
+normalization, table copy, and arbiter spans can nest. Their times cannot be
+added as independent contributions.
+
+| Phase | Current 1 | Current 2 | Candidate |
+| --- | ---: | ---: | ---: |
+| foreground_idle_check | 233 / 27.1 / 26.7 | 244 / 28.3 / 28.1 | 210 / 19.8 / 19.6 |
+| registry_snapshot | 32 / 32.0 / 32.0 | 32 / 34.4 / 34.4 | 30 / 24.3 / 24.3 |
+| ram_snapshot_copy | 32 / 180.4 / 178.4 | 32 / 145.6 / 144.2 | 30 / 158.6 / 158.6 |
+| native_snapshot_transaction | 32 / 373.9 / 321.6 | 32 / 398.8 / 347.7 | 30 / 272.5 / 245.7 |
+| native_sql_execute | 608 / 35.2 / 31.5 | 608 / 61.6 / 58.1 | 600 / 28.3 / 26.0 |
+| sqlite_row_accounting | 832 / 22.1 / 21.8 | 832 / 21.4 / 21.0 | 780 / 16.1 / 16.0 |
+| agent_normalization | 6400 / 72.0 / 72.0 | 6400 / 75.1 / 75.1 | 6000 / 58.3 / 58.3 |
+| detached_sql_connect | 32 / 5.7 / 2.7 | 32 / 2.5 / 2.5 | 30 / 2.1 / 1.9 |
+| detached_sql_execute | 960 / 121.8 / 100.1 | 960 / 125.1 / 101.2 | 840 / 69.7 / 61.2 |
+| detached_sql_insert_batch | 416 / 33.7 / 27.3 | 416 / 29.0 / 22.8 | 0 / 0.0 / 0.0 |
+| original_arbiter_mask | 32 / 102.1 / 91.2 | 32 / 96.7 / 85.0 | 30 / 61.3 / 57.7 |
+| affected_declaration_read | 32 / 2.1 / 1.8 | 32 / 2.5 / 2.3 | 30 / 1.5 / 1.4 |
+| affected_topology_read | 32 / 26.9 / 26.5 | 32 / 27.7 / 26.8 | 30 / 50.5 / 49.9 |
+| affected_evidence | 32 / 6.3 / 6.3 | 32 / 7.2 / 7.1 | 30 / 5.1 / 5.0 |
+| bounded_evidence_copy | 32 / 5.6 / 5.6 | 32 / 5.5 / 5.5 | 30 / 4.3 / 4.3 |
+| prepare_pending_turn | 32 / 783.7 / 707.8 | 32 / 772.5 / 698.3 | 30 / 584.2 / 550.9 |
+
+The current profiles processed 1,200 state entries and 1,200 registry entries
+per turn, plus 200 normalized durable configs. The fixture has 1,000 sensors
+and 200 target states. The full RAM copy accounted for about 2.96 MB of
+structural budget per turn. This is conservative accounting for traversal and
+copying, distinct from peak resident memory. The native snapshot visited 400
+rows per turn and accounted for about 0.97 MB. Each current turn inserted
+all 200 generation rows into the detached store and copied about 0.12 MB of
+bounded receipt structure. The original arbiter accounted for about 2.7–2.9 ms
+CPU per turn. The engine-lock span around the registry and RAM snapshot took
+approximately 5.7–6.8 ms wall per turn in the two current profiles.
+
+Both corrected current profiles saw 23 load turns. All began approximately
+300–301 ms after the preceding ingress. The longest turn lasted 41.4 ms.
+Across 46 turns, none crossed the next motion or lux ingress and none
+intersected an ingress-to-intent window. The overlap group is empty, so it
+has no p95/p99 or agent CPU comparison. The corrected `incomplete` profile
+had no preparation turns. The Normal fixture did not start the Busy
+Candidate/Correct worker. Thread accounting observed the control workers,
+history worker, provenance writer and main thread.
+
+Collector writes intersected 368/384 ingress-to-intent windows in each ON
+profile and 384/384 in the instrumented OFF-preparation control. These
+overlap groups are confounded by position within each 16-target pulse.
+The timelines show concurrency with writes and the measured CPU shows real
+preparation cost. They provide no evidence of preparation stealing inference
+time at the 400 ms cadence or of a foreground-admission priority violation.
+The six uninstrumented #368 Normal baselines varied from 62.5 to 109.6 ms
+p95 and 1.469 to 2.404 s process CPU. Host and scheduler variation cannot be
+separated further from this run series.
+
+### Isolated lineage experiment
+
+Candidate `cf0099e7` removes detached materialization of generation rows.
+It obtains the selected generation from the existing native read transaction.
+The schema, row count, structural byte bounds and revision triggers are still
+checked. The original arbiter still executes against its detached database.
+The targeted regression first failed against the old path, then passed with
+the candidate alongside 15 other predecision tests.
+
+The candidate profile eliminated all 6,400 detached row inserts seen in each
+current profile. All three profiles ran 23 preparation turns during load.
+Their measured preparation-thread CPU was 437.6 ms, 426.7 ms and 400.6 ms,
+respectively. The 26–37 ms difference is an observed profile difference.
+The isolated operation is confirmed redundant, and the process-level paired
+runs determine whether removing it clears the Gate D margins.
+
+The candidate failed the CPU margin in three of four fresh Normal pairs.
+One also exceeded the p95 margin. The candidate was reverted in `948b58c9`.
+The paired results and raw probe output are retained, including controls
+completed after the revert in the separate candidate snapshot.
+
+
+Focused WSL suites on the measured runtime reported 295 OK, 35 OK, 237 OK, 184 FAILED (errors=1). The 184-test
+Correct discovery initially had one import error in the standalone invocation.
+Adding `tests:adaptive_ai/src` to `PYTHONPATH` alone exposed the missing
+temporary Store setup. Importing the test support module before discovery
+fixed both issues. The final Correct suites for current and candidate
+passed 186 tests each. The candidate's 16
+predecision tests passed, including the detached lineage regression. The diagnostic
+harness is `000f8ca06af4f43a04176240bce19c1d0928cf58`. The prior workflow `41932360794` verified
+`d101d831`. Workflow `41970285551` reported `success` for `948b58c9`, which contains the measured runtime and the final diagnostic harness.
+
+The raw archive is [UNIVERSAL_U05B4C1G2D_RAW.json.gz](benchmarks/UNIVERSAL_U05B4C1G2D_RAW.json.gz).
+The original evidence and timeline files are also under
+`~/homemind-u05b4c1g/g2d-3M0JRY`.

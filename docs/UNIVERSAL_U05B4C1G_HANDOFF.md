@@ -132,3 +132,35 @@ source ~/homemind-perf-venv/bin/activate
 python tools/benchmark_qualified_soak.py --duration 14400 --window 45 \
   --output ~/homemind-u05b4c1g/soak-4h-final.jsonl
 ```
+
+
+## U05b.4c.1g.2d — Normal Performance Recovery
+
+Gate D remains **BLOCKER**. The active runtime is `ab7116f5`. The branch
+contains opt-in benchmark diagnostics and records the failed candidate
+`cf0099e7`, reverted by `948b58c9`. Normal qualified 13 versus 5 per
+paired run. There was no preparation-to-inference overlap in 46 current
+turns across two complete profiles at 400 ms cadence. There were repeated
+CPU breaches with both the current runtime and the lineage candidate.
+
+Resume from the existing Draft PR #369. The ext4 experiment folder is
+`~/homemind-u05b4c1g/g2d-3M0JRY`. It contains the baseline, current, probe,
+and candidate snapshots, registered protocol, hash manifests, raw JSONL,
+and `analyze.py`. The committed compressed JSON archive preserves the raw
+timelines, rejected trials, matched runs, and local test logs. Use the same
+Python environment and serialize all performance work.
+
+The next experiment should isolate the RAM-copy cost. Instrument the
+original detached descriptor's state reads for the target, same-device
+entities, and entities added or excluded by explicit mappings from the
+same SQLite revision. Include same-device siblings, explicit remaps,
+registry changes, and a state change during preparation. Preserve the
+full snapshot until those tests prove a smaller read set safe. Also run
+alternating same-revision Normal pairs to quantify host variance at the
+registered margins before attributing a tail change to a code change.
+Evaluate one candidate against fresh baseline pairs and keep the V2/V3
+throughput and signature checks. The current diagnostics do not support
+another cadence adjustment.
+
+Candidate Recovery, Production Composition with HTTP, the four-hour
+soak, and Pi / live HA acceptance remain pending.

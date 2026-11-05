@@ -92,3 +92,13 @@ Busy pairs and first Normal pair met the registered performance margins.
 The second Normal pair exceeded p95 and CPU. The registered throughput
 screen passed. Gates G–J remain unrun for this checkpoint.
 [Cadence CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/41931141100)
+
+
+## U05b.4c.1g.2d — Normal Performance Recovery
+
+Gate D is **BLOCKER**. The alternating Normal series cleared all margins in
+2/6 pairs. Both new Busy controls and the smaller controls
+had breaches. Functional signatures, collector integrity, V2/V3 and the
+unsupported bound are tracked in the [performance report](UNIVERSAL_U05B4C1G_EVIDENCE_SCALABILITY.md).
+Candidate Recovery, Production Composition, and the four-hour stability test
+remain pending at this gate.
