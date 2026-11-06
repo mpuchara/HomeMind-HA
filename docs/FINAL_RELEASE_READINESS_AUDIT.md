@@ -20,6 +20,15 @@ Exact starting HEAD CI completed successfully:
 [41971791244](https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244).
 These runs do not validate subsequent commits or physical HA.
 
+Check-runs were also fetched for **every saved open PR HEAD** in
+[FINAL_RELEASE_PR_CHECKS.json](benchmarks/FINAL_RELEASE_PR_CHECKS.json).
+No check-runs were returned for #346/#347; this is missing evidence, not PASS.
+#316's HEAD has a failed 3.13 run and a cancelled 3.11 run alongside successful
+runs for the same SHA. Preserve the distinction between individual workflow
+attempts; do not describe the entire draft stack as uniformly green. All other
+saved heads returned successful Python 3.11/3.13 and image checks. Package jobs
+were skipped for these branch checks.
+
 `python tools/audit_release_dependencies.py --output NEW_FILE.json` verified
 every base is an ancestor of its own PR head. All open heads except #347 are
 ancestors of #369. The machine-readable result is
