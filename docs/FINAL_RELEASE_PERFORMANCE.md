@@ -1,3 +1,34 @@
+# Gate D — reusable snapshot checkpoint, 2026-11-06
+
+**BLOCKER** on measured source `cf09e214b4a97f367e8a7ca9169b2f30273b2c63`,
+against exact #368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+[Root cause, architecture, complete matrix and rejected attempts](FINAL_RELEASE_GATE_D_ROOT_CAUSE.md)
+is the current report; older evidence below remains historical.
+
+Revision-validated detached SQLite reuse reduces lightweight preparation CPU
+16.75 → 9.92 ms/turn, while preserving fresh full RAM and original arbitration.
+All 26 arms of the registered 13-pair matrix completed. Five of six Normal
+pairs pass, as do both Busy cases, OFF and incomplete. Normal 4 exceeds CPU
+(+16.75%); unsupported 400 and 50/10 exceed CPU/p95/p99; 200/30 exceeds CPU
+(+15.69%). RSS stays inside +10% in every pair. No failed pair is waived.
+Original inputs/counts/signatures match throughout, with zero HA calls,
+collector errors/drops or unexplained losses. Negative controls stay unqualified.
+
+Primary aggregate consumed 46 → 106 and qualified 43 → 102 clear the original
+2x throughput screen; every supported case improves. Including smaller controls,
+consumed 190 → 395 and qualified 187 → 391 also exceed 2x. Throughput does not
+waive latency, CPU, RSS or fail-closed criteria. Cadence, persistence, workload,
+training/control and qualification thresholds remain unchanged.
+
+Final lifecycle code is `eb6650e2`; the 26 acceptance arms and 12 same-revision
+arms remain measured on `cf09e214`. One same-revision pair also breaches tails;
+none of the failed baseline comparisons are waived. Supplemental light profiling
+locates the main 50/10 CPU delta in native collector writes, not preparation. The
+small full-copy prototype was not adopted. See the root-cause report for complete
+remaining-cost and allocation evidence and the exact next implementation unit.
+
+## Previous checkpoint (historical)
+
 # Gate D — finalization checkpoint
 
 **BLOCKER**. Margins remain +10% p95, +15% p99, +15% load process CPU,

@@ -1,3 +1,42 @@
+# Current readiness — reusable arbiter snapshot, 2026-11-06
+
+**Overall BLOCKER; Gate D remains BLOCKER.** PR #369 remains Draft.
+No merge, release, ZIP, version change or deployment was performed.
+
+Final code `eb6650e2ba90a9e53470178386e623dd73bd4501`, add-on tree
+`3fc56e32a4001fd2c2cc7a36716d4c18f0944b67`, version **0.14.232** unchanged.
+Performance source `cf09e214b4a97f367e8a7ca9169b2f30273b2c63`.
+Later code adds stop-before-thread-start cleanup and optional lifecycle support
+for cache-free adapters. The timing matrix was not repeated after these lifecycle
+fixes. Reporting HEAD is recorded in PR #369; compare production against
+`eb6650e2` before resuming a docs/tools-only reporting checkpoint.
+
+Implemented one bounded revision/schema/trigger-validated durable snapshot,
+fresh full RAM each turn, original arbitration inside a rollback savepoint,
+and independent native writer revision/schema verification. Final focused
+validation passes 36 tests. The intermediate 295-test lifecycle run had one
+adapter error and is retained; final full regression and CI status are recorded
+in the current root-cause report.
+
+All 26 acceptance arms completed. Nine of 13 pairs clear every margin; Normal 4,
+unsupported 400, 50/10 and 200/30 fail. Every fingerprint, original decision count
+and signature matches. Native persistence and collector accounting pass, with
+zero unauthorized HA calls or collector errors/drops. Throughput clears 2x.
+The separate same-revision series has one tail failure and waives no limit.
+
+See the [current root-cause report](FINAL_RELEASE_GATE_D_ROOT_CAUSE.md) and
+[performance report](FINAL_RELEASE_PERFORMANCE.md) for profiles, raw results,
+rejected experiments, limitations and the next writer optimization unit.
+Candidate Recovery, Production Composition, actual-data migration, inherited
+retention regression and four-hour soak remain open. Pi/live HA is NOT RUN.
+Collector remains disabled by default.
+
+Final code `eb6650e2` local results: 295 Universal PASS (182.977s), 36 focused
+PASS (35.017s). Measured-source CI `42235276985` passed; final-code CI
+`42237574777` remains in progress at the saved receipt.
+
+## Prior readiness checkpoint (historical)
+
 # Final release readiness — development checkpoint, 2026-11-06
 
 **Overall: BLOCKER. The requested final release is not complete and must not be

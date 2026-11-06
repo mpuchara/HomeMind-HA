@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+import statistics
 
 
 def profile(path):
@@ -64,6 +65,44 @@ def main():
     result['gate_d']='PASS' if (len(result['matrix'])==13 and throughput and
         all(r['status']=='PASS' for r in result['matrix']) and
         all(r['pass_screen'] for r in validations)) else 'BLOCKER'
+    supplement=root/'supplement'
+    diagnostics={}
+    for path in sorted(supplement.glob('[0-7]-*.jsonl')):
+        row=json.loads(path.read_text().splitlines()[-1])
+        if 'error' in row:
+            diagnostics[path.stem]=row
+            continue
+        timeline=row['timeline']
+        start=next(r[2] for r in timeline if r[0]=='load_started')
+        end=next(r[2] for r in timeline if r[0]=='load_finished')
+        cpu={name:sum(r[4] for r in timeline if r[0]==name and start<=r[2]<=r[3]<=end)/1e6
+             for name in ('preparation_turn','collector_write')}
+        cpu['original_agent_processing']=sum(r[3] for r in timeline
+            if r[0]=='agent_finished' and start<=r[2]<=end)/1e6
+        process=row['process_cpu_seconds']*1000
+        diagnostics[path.stem]=dict(process_cpu_ms=process,disjoint_load_thread_cpu_ms=cpu,
+            outside_these_complete_spans_cpu_ms=process-sum(cpu.values()),
+            counts=row['history']['counts'],background=row['background'],
+            collector_errors=row['collector']['errors'],collector_drops=row['collector']['dropped'],
+            profile=profile(path),writer_cpu_functions=row.get('collector_cpu_functions'))
+    allocations={}
+    for path in supplement.glob('*-memory.json'):
+        rows=json.loads(path.read_text())['rows']
+        allocations[path.stem]=dict(windows=len(rows),
+            max_process_python_peak_growth_bytes=max(r['peak_growth_bytes'] for r in rows),
+            max_sqlite_retained_page_bytes=max(r['sqlite_retained_page_bytes'] for r in rows),
+            scope='process-wide Python allocation windows include concurrent work; SQLite pages separate')
+    result['supplement']=diagnostics
+    result['allocations']=allocations
+    experiment=supplement/'copy-experiment.json'
+    if experiment.exists():
+        data=json.loads(experiment.read_text())
+        old=[r['bounded_copy'] for r in data['observations']]
+        new=[r['copy_snapshot'] for r in data['observations']]
+        result['copy_experiment']=dict(random_differential_cases=data['random_differential_cases'],
+            mean_cpu_ms=[statistics.mean(old),statistics.mean(new)],
+            median_cpu_ms=[statistics.median(old),statistics.median(new)],
+            slower_pairs=sum(b>a for a,b in zip(old,new)),adopted=False)
     with args.output.open('x') as stream:json.dump(result,stream,indent=2)
     print(result['gate_d'], result['throughput'])
     for name,row in result['profiles'].items():

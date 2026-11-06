@@ -1,3 +1,59 @@
+# Current continuation — Gate D snapshot implementation, 2026-11-06
+
+**BLOCKER.** Resume Draft PR #369 on
+`codex/universal-u05b4c1g-evidence-scalability` in this worktree.
+Final code `eb6650e2ba90a9e53470178386e623dd73bd4501`, add-on tree
+`3fc56e32a4001fd2c2cc7a36716d4c18f0944b67`. Measured performance source
+`cf09e214b4a97f367e8a7ca9169b2f30273b2c63`; baseline exact #368
+`951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`. Reporting HEAD is recorded in
+PR #369. Verify clean state/remote refs and compare production against `eb6650e2`;
+for docs/tools-only reporting changes, do not repeat the earlier PR inventory.
+Version stays 0.14.232. Do not merge, publish, create a ZIP or deploy.
+
+Completed code: `51b49b91` implements bounded revision/schema/trigger-validated
+snapshot reuse with isolated savepoint evaluations and independent writer schema
+verification. `cf09e214` bounds decoded configs. `57575bda`/`eb6650e2` complete
+stop-before-start cleanup and cache-free adapter compatibility. Final local tests:
+295 Universal PASS (182.977s), 36 focused PASS (35.017s). The intermediate
+295-test run with one adapter error is retained. Measured-source CI `42235276985`
+passed; final-code CI `42237574777` was in progress at the saved receipt.
+The full timing matrix has not been repeated after the lifecycle-only fixes.
+
+Preparation CPU/turn fell 16.75 → 9.92 ms with one durable materialization across
+unchanged revisions. Full RAM snapshots remain fresh. Gate D stays BLOCKER:
+Normal 4 (+16.75% CPU), unsupported 400, 50/10 and 200/30 breach margins.
+Five other Normal pairs, both Busy cases, OFF and incomplete pass. All 26 arms
+preserve inputs/original signatures/native persistence with zero HA calls or
+collector errors/drops. Throughput clears 2x: qualified 43 → 102, consumed
+46 → 106 in the primary workloads. Six same-revision Normal pairs preserve
+signatures; one breaches tails. None of the registered failures is waived.
+
+Read [the current root-cause report](FINAL_RELEASE_GATE_D_ROOT_CAUSE.md) for the
+complete matrix, profiles, allocation windows, rejected attempts and next step.
+Environment: WSL Ubuntu/ext4, `~/homemind-perf-venv`, root
+`~/homemind-gated-20261106`. `source` is immutable measured `cf09e214`, `base`
+is exact #368 with the common corrected fixture/harness, and `before` is the
+reporting predecessor. `source-51b49b91` is retained. `verification-final` is a
+mutable test copy matching final production code. `profiles`, `matrix`, `variance`
+and `supplement` retain commands, outputs and source/harness manifests. Never
+replace old results. The committed raw archive contains 219 files plus an adjacent
+SHA-256; its summary/CI receipt are linked from the report.
+
+First unfinished implementation unit: optimize proven native collector writer
+cost inside one independently verified native transaction, then freeze source
+and rerun the full original registered protocol. Supplemental 50/10 writer CPU
+80.77 → 155.45 ms accounts for 74.69 of 95.59 extra process CPU ms; preparation
+is already lower than #368. Profile protection/setup, revision/schema reads,
+per-decision validation and serialization before selecting one safe operation.
+Keep independent revision/schema and all per-decision/causal/retention guards.
+Reset any transaction-local reuse on own writes/DDL, commit, rollback, snapshot
+boundary and exceptions. Do not change cadence, workload, evidence or training.
+The full-copy RAM prototype was rejected (only ~4.1% mean component improvement);
+cross-turn registry reuse is not proven safe. Candidate Recovery and every later
+release gate remain pending.
+
+## Earlier continuation (historical)
+
 # Final release continuation — 2026-11-06
 
 Overall **BLOCKER**. No deployment, main merge, release/tag or installable package.
