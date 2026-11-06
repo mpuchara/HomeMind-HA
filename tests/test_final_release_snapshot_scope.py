@@ -1,8 +1,10 @@
 """Read-set oracle before considering any reduction of the full RAM snapshot."""
 from copy import deepcopy
+import gc
 from unittest.mock import patch
 import time
 import unittest
+import weakref
 
 import support
 import test_universal_predecision as base
@@ -131,3 +133,20 @@ class SnapshotScopeTests(unittest.TestCase):
         self.assertEqual(evidence['descriptor'], self.service.descriptor(self.agent))
         self.prepare()
         self.assertEqual(self.evidence.stats['prepared'], 2)
+
+    def test_detached_service_and_full_snapshot_do_not_wait_for_cyclic_gc(self):
+        original = DeviceAgentService.descriptor
+        references = []
+        def traced(service, agent):
+            references.append(weakref.ref(service))
+            return original(service, agent)
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            with patch.object(DeviceAgentService, 'descriptor', traced):
+                self.prepare()
+            self.assertEqual(len(references), 1)
+            self.assertIsNone(references[0](), 'Detached service retains the full snapshot in a reference cycle')
+        finally:
+            if was_enabled:
+                gc.enable()

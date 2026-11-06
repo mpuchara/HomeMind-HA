@@ -264,9 +264,15 @@ class PredecisionEvidence:
                 return desc if candidate == agent else original_descriptor(candidate)
 
             service.descriptor = detached_descriptor
-            at = time.time()
-            mask = service.legal_action_mask(agent, state, values,
-                runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)
+            try:
+                at = time.time()
+                mask = service.legal_action_mask(agent, state, values,
+                    runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)
+            finally:
+                # The closure owns a bound original method. Drop the instance
+                # override even on failure so it cannot retain the entire RAM
+                # snapshot through service -> closure -> bound method -> service.
+                del service.descriptor
             generation = db.execute('SELECT generation_id FROM agent_candidate_generations WHERE agent_id=?', (aid,)).fetchone()
             if generation is None:
                 raise ValueError('missing generation')
