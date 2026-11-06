@@ -706,7 +706,13 @@ class HistoricalTrainingCollector(threading.Thread):
         with self.cv:self.stopping=True;self.cv.notify_all()
         self.halt.set()
         if self.is_alive():self.join(timeout)
-        return not self.is_alive()
+        stopped = not self.is_alive()
+        if stopped:
+            # Also dispose a baseline prepared synchronously before start().
+            evidence = getattr(self, 'predecision', None)
+            if evidence is not None:
+                evidence.close()
+        return stopped
 
     def diagnostics(self):
         with self.cv:

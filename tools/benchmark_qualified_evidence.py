@@ -370,6 +370,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         materialization = Counter()
         descriptor_state_reads = Counter()
         cpu_profiles = []
+        writer_cpu_profiles = []
         source_revisions = []
         if profile_prepare:
             from device_agents import DeviceAgentService
@@ -447,7 +448,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             observe_stage(DeviceAgentService, "_persist_runtime_manual_holds", "manual_override")
             observe_stage(engine.context, "resolved_registry", "registry_snapshot")
             observe_stage(store, "_agent_dict", "agent_normalization")
-            native_row_bytes = universal_predecision._sqlite_row_bytes
+            native_row_bytes = getattr(universal_predecision, '_sqlite_row_bytes', None)
 
             def measured_row_bytes(rows):
                 with preparation_probe.span("sqlite_row_accounting"):
@@ -456,7 +457,9 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                 materialization["native_snapshot_structural_bytes"] += size
                 return size
 
-            stack.enter_context(patch.object(universal_predecision, "_sqlite_row_bytes", measured_row_bytes))
+            # #368 predates this accounting helper. Installing a dormant probe
+            # there preserves its original copy path and permits diagnostics.
+            stack.enter_context(patch.object(universal_predecision, "_sqlite_row_bytes", measured_row_bytes, create=True))
 
             native_copy = universal_predecision.bounded_copy
 
@@ -575,11 +578,18 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
 
         def observed_write(*args):
             writer_active.set()
+            writer_profiler = None
             if profile_prepare:
                 wall, cpu = time.perf_counter_ns(), time.thread_time_ns()
+                if os.environ.get('HOMEMIND_COLLECTOR_CPU_PROFILE') == '1':
+                    writer_profiler = PreparationCPUProfile()
+                    writer_profiler.enable()
             try:
                 return native_write(*args)
             finally:
+                if writer_profiler is not None:
+                    writer_profiler.disable()
+                    writer_cpu_profiles.append(writer_profiler.stats)
                 if profile_prepare:
                     timeline.append(("collector_write", None, wall, time.perf_counter_ns(),
                                      time.thread_time_ns()-cpu))
@@ -694,6 +704,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             raise AssertionError(f"Missing evidence qualified: {dataset}")
         result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
                       preparation_cpu_functions=(cpu_function_rows(cpu_profiles) if profile_prepare else None),
+                      collector_cpu_functions=(cpu_function_rows(writer_cpu_profiles) if profile_prepare else None),
                       preparation_source_revisions=source_revisions if profile_prepare else None,
                       root_target_order=[a['target_entity'] for a in scenario.agents],
                       input_fingerprint=hashlib.sha256(json.dumps(dict(

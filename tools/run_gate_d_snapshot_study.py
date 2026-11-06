@@ -65,6 +65,7 @@ def compare(left, right):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('root',type=Path);p.add_argument('--phase',choices=('profiles','matrix','variance'),required=True)
+    p.add_argument('--candidate-sha', required=True)
     args=p.parse_args();root=args.root;out=root/args.phase;out.mkdir()
     trees={name:root/name for name in ('base','before','source')}
     plan=[(f'normal-{i+1}','1000:200','normal',0,bool(i%2)) for i in range(6)] + [
@@ -75,7 +76,7 @@ def main():
     if args.phase=='variance':
         plan=[(f'variance-{i+1}','1000:200','normal',0,bool(i%2)) for i in range(6)]
     save(out/'protocol.json',dict(baseline='951dcd70ed20b5f74220307cfb7411fa2c6bcc5d',
-        candidate='51b49b91',ticks=24,period=.4,fanout=16,plan=plan,
+        candidate=args.candidate_sha,ticks=24,period=.4,fanout=16,plan=plan,
         limits=dict(p95=.10,p99=.15,cpu=.15,rss=.10),
         throughput='>=2x aggregate consumed AND qualified; improvement in every required supported case',
         profiles_separate=True,serial=True,phase=args.phase))

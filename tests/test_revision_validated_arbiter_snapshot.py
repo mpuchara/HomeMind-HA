@@ -248,6 +248,15 @@ class ReusableSnapshotTests(unittest.TestCase):
         self.assertFalse(thread.is_alive()); self.assertEqual(errors, [])
         self.assertIsNot(previous, self.evidence.arbiter_snapshot.db)
 
+    def test_stop_before_worker_start_disposes_synchronous_snapshot(self):
+        self.parity()
+        db = self.evidence.arbiter_snapshot.db
+        self.assertTrue(self.collector.stop())
+        self.assertIsNone(self.evidence.arbiter_snapshot.db)
+        self.assertEqual(self.evidence.stats['arbiter_snapshot_memory_bytes'], 0)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            db.execute('SELECT 1')
+
 
 if __name__ == '__main__':
     unittest.main()
