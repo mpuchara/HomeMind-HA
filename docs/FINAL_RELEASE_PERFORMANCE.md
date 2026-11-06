@@ -85,6 +85,35 @@ Future comparisons must require matching input fingerprints **before** checking
 decision signatures or applying the unchanged performance margins. Previous
 mismatched rows are not retrospectively counted as passing.
 
-Post-order-fix measurements are recorded separately when available. Full production
+## Input-order repair confirmation (`84563536`)
+
+Seven new pairs completed with the same unmodified load sizes, ticks, cadence,
+fanout and margins, using an identical corrected fixture/harness in both trees.
+Every pair matched input fingerprints and original signatures; all 14 arms
+produced 384 original intents, with zero HA calls and zero collector errors/drops.
+Enabled collectors persisted every offered event and every original decision.
+
+| Case | p95 | p99 | CPU | RSS | V3 baseline→candidate | Screen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Normal forward | +20.6% | +24.8% | +39.1% | +0.8% | 5→13 | FAIL |
+| Normal reverse | +8.3% | +6.5% | +27.0% | −0.0% | 5→13 | FAIL: CPU |
+| Busy 128+128 | −0.1% | +5.5% | +6.4% | +0.6% | 7→16 | PASS (one pair) |
+| Busy 200+56 reverse | +5.8% | +2.3% | +10.3% | +0.9% | 6→11 | PASS (one pair) |
+| OFF | −11.2% | −31.2% | −11.3% | −0.4% | 0→0 | PASS (control) |
+| Incomplete reverse | +3.1% | +0.1% | +1.9% | −0.6% | 0→0 | PASS (control) |
+| Unsupported 400 configs | −5.0% | −1.9% | +8.8% | −1.5% | 0→0 | PASS (fail-closed control) |
+
+This is confirmation of the input-order repair and a negative performance screen,
+not a substitute for the complete registered acceptance repetition. Normal still
+fails CPU in both orders; Gate D remains **BLOCKER**. Qualification gain is not
+a waiver of CPU/latency or safety criteria. Unsupported remains `agent bound`.
+
+All protocols, complete raw data, rejected/incomplete attempts and analysis drivers
+are in [raw evidence](benchmarks/FINAL_RELEASE_CHECKPOINT_RAW.json.gz); its checksum
+is [recorded separately](benchmarks/FINAL_RELEASE_CHECKPOINT_RAW.json.gz.sha256).
+The parsed [summary](benchmarks/FINAL_RELEASE_PERFORMANCE_SUMMARY.json) separates
+the initial rejected, corrected and input-ordered series.
+
+Full production
 composition, Candidate recovery acceptance, four-hour soak and Pi/live HA remain
 **NOT RUN** at this performance checkpoint.
