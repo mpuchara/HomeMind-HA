@@ -671,6 +671,12 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         if mode == "incomplete" and (dataset["status"] != "qualified_source" or dataset["eligible"]):
             raise AssertionError(f"Missing evidence qualified: {dataset}")
         result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
+                      root_target_order=[a['target_entity'] for a in scenario.agents],
+                      input_fingerprint=hashlib.sha256(json.dumps(dict(
+                          mode=mode,sensors=sensors,devices=devices,ticks=ticks,period=period,
+                          fanout=min(fanout,devices),candidates=candidate_count,
+                          root_targets=[a['target_entity'] for a in scenario.agents]),
+                          sort_keys=True).encode()).hexdigest(),
                       active_agents=len(scenario.agents),
                       candidates=candidate_count, durable_configs=durable_configs,
                       preparation_profile=preparation_probe.snapshot() if profile_prepare else None,

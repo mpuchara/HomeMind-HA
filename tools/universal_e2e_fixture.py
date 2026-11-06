@@ -87,7 +87,12 @@ class OriginalEvidenceScenario:
             self.store.update_agent(created['id'],{'mode':'shadow'})
             _ensure_root(self.store,created['id'],generation_number=0)
         self.engine.executor.device_agents.migrate_agent_identities()
-        self.agents=self.store.list_agent_configs()
+        # The workload is defined by targets, not wall-clock creation order.
+        # Store ordering uses real ISO timestamps even when the producer clock
+        # is controlled. Clock corrections must not rotate which roots receive
+        # each ingress pulse or which roots receive the Candidate fixtures.
+        by_target={a['target_entity']:a for a in self.store.list_agent_configs()}
+        self.agents=[by_target[target] for target in self.targets]
         self.engine.agent_configs={a['id']:a for a in self.agents}
         self.engine.all_agent_configs=dict(self.engine.agent_configs)
         for agent in self.agents:self.engine.policy(agent)
