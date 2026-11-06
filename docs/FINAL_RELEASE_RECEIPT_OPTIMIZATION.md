@@ -235,3 +235,13 @@ Candidate Recovery, production composition, actual-installation migration,
 inherited intermittent retention/rollback, four-hour soak, release integration
 and Pi/live HA remain open. The collector remains default-off. No version bump,
 merge, release/tag/ZIP or deployment occurred.
+
+## Checkpoint CI
+
+[Checkpoint CI 42305210953](https://github.com/mpuchara/HomeMind-HA/actions/runs/42305210953)
+is **SUCCESS for exact `56fd84f8d8bb23fdcb88e127c4f60a07594cb26b`**: 3,176 tests
+on Python 3.11 and 3,176 on 3.13, required benchmarks and image build/smoke;
+package/release is skipped. Earlier reporting `630f4453` CI `42304381708` also
+passes. [Exact CI receipt](benchmarks/FINAL_RELEASE_RECEIPT_CI.json) distinguishes
+both sources. Neither run certifies rejected experimental `4dc2d2d6` or a final
+release. Later receipt/reporting commits leave add-on, tests and tools unchanged.

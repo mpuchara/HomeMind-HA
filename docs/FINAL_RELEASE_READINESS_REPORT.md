@@ -7,6 +7,14 @@ Restoration commit `c1dbfd9fd468a9ea24c114cdaf044fbe5b0d8244` returns the add-on
 to `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`, exactly the `9c245577` production tree.
 Version **0.14.232** is unchanged. Reporting-only HEAD is recorded in PR #369.
 
+[Checkpoint CI 42305210953](https://github.com/mpuchara/HomeMind-HA/actions/runs/42305210953)
+is **SUCCESS for exact `56fd84f8d8bb23fdcb88e127c4f60a07594cb26b`**: 3,176 tests
+on Python 3.11 and 3,176 on 3.13, required benchmarks and image build/smoke;
+package/release is skipped. Earlier reporting `630f4453` CI `42304381708` also
+passes. [Exact CI receipt](benchmarks/FINAL_RELEASE_RECEIPT_CI.json) distinguishes
+both sources. Neither run certifies rejected experimental `4dc2d2d6` or a final
+release. Later receipt/reporting commits leave add-on, tests and tools unchanged.
+
 The frozen rejected candidate completed all **13 pairs / 26 arms** against exact
 #368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`: **11/13 timing screens PASS**.
 All six Normal pairs, both Busy cases and OFF/incomplete/unsupported controls
