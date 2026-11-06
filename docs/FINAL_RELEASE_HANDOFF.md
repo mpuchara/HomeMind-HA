@@ -1,3 +1,52 @@
+# Native collector writer checkpoint — 2026-11-06
+
+**Gate D remains BLOCKER: 9/13 registered pairs pass.** Measured/final production
+source is `9c245577727c93ede3c59100f11844bf336acb1a`, add-on tree
+`cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`, version **0.14.232** unchanged.
+Exact baseline remains #368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+
+Implemented a fresh, transaction-authoritative empty protection-link fast path
+in native FeatureJournal and a bounded native agent-cardinality preflight before
+RAM copying. Independent per-decision revision/schema/binding checks, receipt
+bytes, original inference, retention, cadence and native persistence remain.
+
+All 26 arms preserve inputs, original signatures, native decisions and fail-closed
+controls, with zero collector/event drops, collector errors or HA service calls.
+Normal 2/3/6 and 50/10 fail margins. Primary consumed **43 -> 112**, qualified
+**41 -> 107**; broader totals **170 -> 401** and **168 -> 396**, improving every
+active supported case. Unsupported 400 passes only its timing screen and stays
+unqualified (`agent bound`). Six same-revision pairs have two screen failures;
+the separate preflight ablation does not prove a repeatable aggregate CPU gain.
+
+Local final production: **295 Universal PASS**, 88 focused PASS, 19 observation
+contract PASS; 10 new differential/preflight PASS (overlapping runs, not additive).
+[CI 42277851913](https://github.com/mpuchara/HomeMind-HA/actions/runs/42277851913)
+is SUCCESS for exact `9c245577`, including 3.11/3.13 and image smoke.
+
+See [native writer report and complete matrix](FINAL_RELEASE_NATIVE_WRITER.md),
+[parsed evidence](benchmarks/FINAL_RELEASE_NATIVE_WRITER_SUMMARY.json) and
+[raw archive](benchmarks/FINAL_RELEASE_NATIVE_WRITER_RAW.tar.gz). Reporting HEAD
+is recorded in PR #369 and the final session reply; reporting changes after
+`9c245577` must have an empty `git diff 9c245577 HEAD -- adaptive_ai`.
+The earlier `cf09e214` matrix below remains historical and is not attributed to
+a later source SHA. PR #369 stays Draft; no merge/release/version change/deployment.
+Collector stays default-off. Other release gates remain open.
+
+Resume in `C:\Users\mpuch\OneDrive\Dokumenty\HomeMind\HomeMind-HA-universal-232`
+on `codex/universal-u05b4c1g-evidence-scalability`. Fetch origin and verify the
+reporting HEAD/worktree and unchanged add-on tree first. Frozen ext4 study:
+`/home/mpuchara/homemind-native-writer-study-20261106`; preliminary/rejected
+probes and test scratch: `/home/mpuchara/homemind-writer-20261106`.
+The writer profiling/empty-protection/preflight unit is complete. Next investigate
+remaining per-receipt/native metadata transaction CPU with a frozen oracle and
+proof of transaction-local invalidation; do not repeat snapshot optimization or
+change cadence. Retain every registered failure and rerun the matrix after an
+actual next production improvement. Candidate Recovery, production composition,
+actual-data migration, inherited retention miss, four-hour soak and Pi/HA remain
+open; no release/deployment is authorized by these results.
+
+## Earlier checkpoint (historical)
+
 # Current continuation — Gate D snapshot implementation, 2026-11-06
 
 **BLOCKER.** Resume Draft PR #369 on

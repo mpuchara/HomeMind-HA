@@ -81,8 +81,9 @@ class NativeJournalDifferentialTests(unittest.TestCase):
                 result = original(cursor, sql, parameters)
                 if sql == 'SELECT 1 FROM feature_window_entities LIMIT 1':
                     self.assertTrue(cursor.connection.in_transaction)
-                    with self.assertRaises(sqlite3.OperationalError):
+                    with self.assertRaises(sqlite3.OperationalError) as blocked:
                         other.execute("INSERT OR IGNORE INTO feature_window_entities VALUES('w','sensor.s0')")
+                    self.assertEqual(blocked.exception.sqlite_errorcode, sqlite3.SQLITE_BUSY)
                     other.rollback()
                     checks.append(True)
                 return result
@@ -95,6 +96,7 @@ class NativeJournalDifferentialTests(unittest.TestCase):
             journal.record_batch([record])
             with store.conn() as c:
                 self.assertEqual(c.execute('SELECT protected_until FROM feature_observation_events').fetchone()[0], 500.)
+            other.close()  # Release the file before TemporaryDirectory on Windows.
 
 
 if __name__ == '__main__':

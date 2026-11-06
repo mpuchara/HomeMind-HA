@@ -46,3 +46,176 @@ overhead; `harness-mismatch-profiles/` has differing harness hashes and includes
 an interrupted arm. The corrected probe excludes per-item calls, scopes to
 writer execution and requires a common harness placed inside each disposable
 source tree. Never include those rejected measurements in the acceptance matrix.
+
+## Implemented candidate and correctness
+
+Production/performance source: `9c245577727c93ede3c59100f11844bf336acb1a`.
+Add-on tree: `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`.
+Version remains **0.14.232**. PR #369 stays Draft, based on exact #368
+`951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+
+`FeatureJournal.record_batch()` implements the proven empty-link fast path.
+Nonempty tables retain the original grouped query verbatim and pay one extra
+bounded read. This optimization applies only to an actually empty native link
+table; it is not evidence of a speedup on a populated live installation.
+Observation preparation, insertion/upsert, pruning, admission, transaction
+boundaries and commit/rollback are unchanged. The frozen oracle compares every
+journal/window/link column and exact event keys/JSON strings.
+
+Preparation now reads at most 257 native agent rows before copying RAM. Paused
+Candidates count toward the existing 256 bound, even when absent from the RAM
+active-agent map. The count is never retained or used to qualify evidence; the
+original later native bound/schema/revision checks remain. No Engine/context
+lock spans this preflight. Original inference, events and collector accounting
+are unchanged. A rejected source may become supported on the very next turn.
+
+No verified-source cache was added to the writer. Independent per-decision
+revision/schema checks, affected declarations, topology/binding verification
+and receipt serialization remain. Owning BEGIN IMMEDIATE alone does not prove
+immutability across internal writes, custom triggers, DDL or partial commits;
+the profile did not justify weakening those checks. The two JSON encodings
+serve different persisted contracts and remain intact.
+
+Local WSL Python 3.12.3 validation on disposable data:
+
+- Final production: **295 Universal PASS**, 148.095 s.
+- Focused writer/predecision/snapshot/collector run: **88 PASS**, 46.516 s.
+- New differential/preflight cases including external writer exclusion:
+  **10 PASS**, 13.653 s. The external writer is denied before commit; after
+  commit its newly added link changes the next batch's protection as required.
+- Observation contract and edge cases: **19 PASS**, 1.544 s.
+
+These runs overlap; do not sum them as unique test counts. The earlier
+295-test/239.634 s run belongs to the preliminary RAM-hint preflight variant,
+not the final native-only preflight. All logs are retained.
+[CI 42277851913](https://github.com/mpuchara/HomeMind-HA/actions/runs/42277851913)
+is **SUCCESS** for exact `9c245577`: Python 3.11/3.13, required benchmarks and
+image build/smoke. The package/release job is skipped. Its receipt is adjacent
+to the raw evidence. This does not certify a later reporting SHA automatically.
+
+## Complete registered acceptance matrix
+
+All **26 arms / 13 pairs** completed on frozen ext4 trees with identical common
+harness and original fixture. Original 24 x 400 ms, fanout 16, alternating order,
+six Normal pairs, Busy 128+128 and 200+56, OFF/incomplete/400 and smaller controls
+are preserved. Limits remain +10% p95, +15% p99/CPU and +10% RSS.
+
+| Pair | CPU | p95 | p99 | RSS | Screen |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Normal 1 | +7.9% | -1.9% | -0.7% | +3.4% | PASS |
+| Normal 2, reverse | **+19.7%** | **+15.0%** | +6.6% | +1.4% | FAIL |
+| Normal 3 | **+21.3%** | **+17.8%** | +8.6% | +1.7% | FAIL |
+| Normal 4, reverse | +9.9% | -0.3% | -4.3% | +3.2% | PASS |
+| Normal 5 | +10.3% | -2.7% | -3.0% | +3.6% | PASS |
+| Normal 6, reverse | **+17.6%** | +6.0% | +5.2% | +1.3% | FAIL |
+| Busy 128+128 | +1.5% | +5.0% | +14.5% | +1.6% | PASS |
+| Busy 200+56, reverse | +4.1% | +5.1% | -4.9% | +1.4% | PASS |
+| OFF | -0.1% | +0.6% | +10.8% | -0.1% | PASS |
+| Incomplete, reverse | -7.7% | -19.9% | -35.0% | +1.2% | PASS |
+| Unsupported 400 | -1.8% | +5.8% | +8.4% | -1.1% | PASS screen, still unsupported |
+| 50/10, reverse | **+45.6%** | **+38.1%** | +1.1% | +1.4% | FAIL |
+| 200/30 | +9.1% | -24.0% | -9.0% | +0.6% | PASS |
+
+**Gate D remains BLOCKER: 9/13 screens pass.** Inputs and original signatures
+match in every pair; every arm has zero HA service calls, collector errors,
+collector drops and event drops. Native decisions remain persisted. Negative
+controls remain unqualified, including 400 with `agent bound`.
+
+Primary aggregate consumed is **43 -> 112**, qualified **41 -> 107**. Including
+smaller supported controls: consumed **170 -> 401**, qualified **168 -> 396**.
+Both totals exceed 2x and every active supported case improves. Throughput
+acceptance remains satisfied; no cadence, batching or evidence-admission
+reduction was used to obtain the writer improvement. These gains waive no margin.
+
+The previous `cf09e214` matrix and its four failures remain historical evidence;
+none of those timings is attributed to `9c245577`. Unsupported and 200/30 clear
+this new screen, but Normal failures are more frequent. Cross-series differences
+are not a causal ablation or proof that a prior failure is permanently resolved.
+
+## Bounded component diagnostics
+
+The four-arm diagnostic compares exact #368, pre-cache `4b989c69`, reporting
+source `79bf0674` (production `eb6650e2`) and candidate `9c245577`. All use the
+same compatible harness. The 16 processes exited zero. Aggregate writer CPU
+includes setup/finalization, tracing/probe overhead and unequal batch/evidence
+counts; it is **not acceptance** and does not isolate the whole process delta.
+
+| Workload | #368 writer CPU ms | Pre-cache | Current | Candidate | Current -> candidate qualified |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 50/10 | 144.03 | 224.87 | 247.70 | 201.96 | 175 -> 175 |
+| 1000/200 | 803.75 | 1005.27 | 909.58 | 864.88 | 13 -> 12 |
+| 200/30 | 250.23 | 379.65 | 366.59 | 299.20 | 114 -> 114 |
+| Unsupported 400 | 874.37 | 1053.04 | 1019.36 | 1088.89 | 0 -> 0 |
+
+The unsupported candidate has 180 writer batches versus 167 on the current
+source; do not attribute its aggregate CPU increase to one query or normalize
+away its background work. Raw per-site exclusive CPU, transaction entry/exit,
+revision/schema/declaration/topology call counts, batch sizes, traced SQL verbs,
+upserts and persisted receipts are retained. SQL trace events include trigger
+expansion; they are not SQLite VM instruction counts. Additional diagnostic
+empty checks are separately timed and are absent from acceptance runs.
+
+## Same-revision variance and independent cardinality ablation
+
+Six additional alternating Normal pairs use identical `9c245577` production.
+Four pass and two fail their individual screen:
+
+- Pair 4: CPU **+33.8%**, p95 **+42.5%**, p99 **+77.7%**.
+- Pair 5: CPU +6.0%, p95 **+11.6%**, p99 +10.2%.
+
+All inputs/signatures and safety accounting match. This is evidence of material
+run-to-run variance, not grounds to waive the registered failures.
+
+The separate 400-config ablation changes **only** `universal_predecision.py`:
+both arms have the optimized journal, and the control uses the original
+`79bf0674` predecision module. Two alternating pairs retain 24 x 400 ms/fanout 16,
+200 roots plus 200 Candidates, native persistence and all background work.
+
+| Preflight versus writer-only control | CPU | p95 | p99 | Qualified |
+| --- | ---: | ---: | ---: | ---: |
+| Pair 1 | -1.1% | +2.8% | +2.3% | 0 -> 0 |
+| Pair 2, reverse | +1.6% | -0.05% | -0.36% | 0 -> 0 |
+
+Every original decision/signature matches, rejection remains `agent bound`, and
+collector errors/drops remain zero. These results do **not** demonstrate a
+repeatable aggregate CPU improvement attributable to preflight. Tests prove
+that unsupported sources avoid RAM copying; aggregate CPU still includes real
+background work. Pair 1 policy updates/model writes/Candidate processed are
+767/24/296 -> 779/25/294; pair 2 is 703/22/281 -> 765/24/290. Bounded Candidate
+queue drops are 72 -> 78 and 87 -> 78, with zero collector drops. These are
+accounted overload behavior, not Candidate Recovery acceptance or missing
+collector events. Do not normalize the additional background work away.
+
+## Frozen-source checks and continuation
+
+Post-run checks compare **253 add-on files in each arm** against its exact Git
+archive: no differences. All prior Python runtime/tools manifests for profiles,
+matrix and variance remain identical. The cardinality ablation differs in
+exactly the predecision file, with the control matching the original current
+source. No original benchmark source snapshot was modified.
+
+The final external-writer test additionally asserts `SQLITE_BUSY` specifically
+and closes the external connection before Windows temporary-directory cleanup.
+The final rerun passes **10 tests in 3.909 s**; this test-only refinement does
+not change measured production source or the add-on tree.
+
+Reproduction tools: `profile_native_writer.py`, `run_native_writer_profiles.py`,
+`run_gate_d_snapshot_study.py`, `run_native_writer_preflight_ablation.py`,
+`analyze_native_writer_study.py`, `verify_native_writer_study.py`.
+Raw protocols, commands, manifests, logs, JSONL, rejected probes and test logs
+are in `docs/benchmarks/FINAL_RELEASE_NATIVE_WRITER_RAW.tar.gz` with adjacent
+SHA-256. Parsed results are `FINAL_RELEASE_NATIVE_WRITER_SUMMARY.json`; CI is
+`FINAL_RELEASE_NATIVE_WRITER_CI.json`. A first summary attempt failed on the
+OFF control's intentionally empty count dictionary; aggregation now handles
+that representation without changing any raw result or expected test output.
+
+This unit removes a proven redundant native protection operation and safely
+rejects unsupported cardinality before RAM preparation. It **does not close
+Gate D**. Continue with per-qualified-receipt validation/serialization and
+native metadata transaction setup costs; preserve exact receipt bytes and
+independent native verification until a strictly bounded invariant interval is
+proven, including own writes/triggers/DDL and partial commits. Do not change
+cadence, workloads, admission, throughput targets or acceptance margins.
+Candidate Recovery, full production composition, actual-data migration,
+inherited retention/rollback behavior, four-hour soak and Pi/live HA remain
+unaccepted. Collector remains default-off; no deployment or release occurred.

@@ -1,0 +1,4593 @@
+{
+  "profiles": {
+    "normal-base": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 803.752386,
+      "writer_attempts": 51,
+      "writer_committed_batches": 51,
+      "traced_begin_events": 82,
+      "native_upserts": 1048,
+      "persisted_qualified_receipts": 5,
+      "eligible_dataset_samples": 5,
+      "cpu_ms_per_writer_attempt": 15.759850705882354,
+      "cpu_ms_per_traced_begin": 9.801858365853658,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.7669392996183206,
+      "cpu_ms_per_qualified_receipt": 160.7504772,
+      "batch_sizes": {
+        "4": 3,
+        "2": 24,
+        "1": 8,
+        "3": 6,
+        "57": 4,
+        "52": 1,
+        "5": 1,
+        "16": 1,
+        "19": 2,
+        "38": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 82,
+        "PRAGMA": 736,
+        "INSERT": 12652,
+        "SELECT": 157,
+        "COMMIT": 82,
+        "DELETE": 24,
+        "UPDATE": 31
+      },
+      "protection_states": {
+        "empty": 22
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            22,
+            579827065,
+            579827065
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1048,
+            45499969,
+            33485005
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            22,
+            25982242,
+            24844917
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            51,
+            803752386,
+            19864177
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            22,
+            703196394,
+            16592721
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            51,
+            14781962,
+            14781962
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            52,
+            11249936,
+            11249936
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            22,
+            9896849,
+            9896849
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            22,
+            9001678,
+            9001678
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            51,
+            8127243,
+            8127243
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            7902869,
+            7902869
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            22,
+            6759137,
+            6759137
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            15,
+            4915594,
+            4915594
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            51,
+            3888542,
+            3888542
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            51,
+            2601555,
+            2601555
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            51,
+            2591714,
+            2591714
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            51,
+            2566972,
+            2566972
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1048,
+            2428949,
+            2428949
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1048,
+            47922991,
+            2423022
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            51,
+            1925337,
+            1925337
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+          [
+            22,
+            1253501,
+            1253501
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            22,
+            1137325,
+            1137325
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            1127462,
+            1127462
+          ]
+        ],
+        [
+          "universal_affected_sensors.topology:5:json.loads",
+          [
+            3,
+            1088277,
+            1088277
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+          [
+            15,
+            990040,
+            990040
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "normal-before": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 1005.273162,
+      "writer_attempts": 148,
+      "writer_committed_batches": 145,
+      "traced_begin_events": 191,
+      "native_upserts": 1050,
+      "persisted_qualified_receipts": 13,
+      "eligible_dataset_samples": 13,
+      "cpu_ms_per_writer_attempt": 6.792386229729729,
+      "cpu_ms_per_traced_begin": 5.2632102722513086,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.9574030114285714,
+      "cpu_ms_per_qualified_receipt": 77.32870476923077,
+      "batch_sizes": {
+        "4": 3,
+        "2": 86,
+        "1": 22,
+        "3": 25,
+        "7": 1,
+        "19": 2,
+        "16": 9
+      },
+      "sql_trace_events": {
+        "BEGIN": 191,
+        "PRAGMA": 1735,
+        "INSERT": 12756,
+        "SELECT": 311,
+        "COMMIT": 188,
+        "DELETE": 24,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 34
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            34,
+            601430156,
+            601430156
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            145,
+            41870179,
+            41870179
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            148,
+            1005273162,
+            36194905
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            34,
+            35825142,
+            33767180
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            146,
+            32366750,
+            32366750
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1052,
+            44030054,
+            31371276
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            147,
+            29564385,
+            29564385
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            35,
+            748377823,
+            18751079
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            148,
+            17135102,
+            17135102
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            14150445,
+            14150445
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            34,
+            12398386,
+            12398386
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            11330965,
+            11330965
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            34,
+            11266319,
+            11266319
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            35,
+            11133290,
+            11133290
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            147,
+            10157082,
+            10157082
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            145,
+            8822615,
+            8822615
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            147,
+            8526247,
+            8526247
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            145,
+            6751245,
+            6751245
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            145,
+            35555752,
+            2630361
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1052,
+            2567354,
+            2567354
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+          [
+            34,
+            2486631,
+            2486631
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1052,
+            46514362,
+            2484308
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            2399306,
+            2399306
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            13,
+            2388508,
+            2388508
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            35,
+            2129098,
+            2129098
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "normal-current": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 909.58305,
+      "writer_attempts": 131,
+      "writer_committed_batches": 130,
+      "traced_begin_events": 174,
+      "native_upserts": 1050,
+      "persisted_qualified_receipts": 13,
+      "eligible_dataset_samples": 13,
+      "cpu_ms_per_writer_attempt": 6.943382061068702,
+      "cpu_ms_per_traced_begin": 5.227488793103448,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.8662695714285714,
+      "cpu_ms_per_qualified_receipt": 69.96792692307692,
+      "batch_sizes": {
+        "4": 7,
+        "2": 72,
+        "1": 13,
+        "3": 26,
+        "10": 1,
+        "8": 1,
+        "16": 8,
+        "19": 3
+      },
+      "sql_trace_events": {
+        "BEGIN": 174,
+        "PRAGMA": 1607,
+        "INSERT": 12742,
+        "SELECT": 296,
+        "COMMIT": 173,
+        "DELETE": 24,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 34
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            34,
+            585559710,
+            585559710
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1050,
+            44385349,
+            31628823
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            131,
+            909583050,
+            30182152
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            34,
+            31772587,
+            29384256
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            130,
+            28150764,
+            28150764
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            131,
+            25726557,
+            25726557
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            131,
+            18638559,
+            18638559
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            34,
+            722300942,
+            18347729
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            13178065,
+            13178065
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            34,
+            10570129,
+            10570129
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            131,
+            10397957,
+            10397957
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            34,
+            9805961,
+            9805961
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            34,
+            9685762,
+            9685762
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            130,
+            6417083,
+            6417083
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            131,
+            6385308,
+            6385308
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            130,
+            5099038,
+            5099038
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            131,
+            4989850,
+            4989850
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            4889943,
+            4889943
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1050,
+            2627022,
+            2627022
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1050,
+            46826260,
+            2440911
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            34,
+            2388331,
+            2388331
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            13,
+            2250706,
+            2250706
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            130,
+            28259502,
+            2090116
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+          [
+            34,
+            2039349,
+            2039349
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            1870618,
+            1870618
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "normal-source": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 864.879719,
+      "writer_attempts": 129,
+      "writer_committed_batches": 127,
+      "traced_begin_events": 171,
+      "native_upserts": 1048,
+      "persisted_qualified_receipts": 12,
+      "eligible_dataset_samples": 12,
+      "cpu_ms_per_writer_attempt": 6.704493945736434,
+      "cpu_ms_per_traced_begin": 5.057776134502924,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.8252669074427481,
+      "cpu_ms_per_qualified_receipt": 72.07330991666667,
+      "batch_sizes": {
+        "4": 1,
+        "2": 70,
+        "1": 14,
+        "5": 1,
+        "3": 27,
+        "11": 1,
+        "14": 1,
+        "6": 1,
+        "9": 1,
+        "16": 10,
+        "19": 2
+      },
+      "sql_trace_events": {
+        "BEGIN": 171,
+        "PRAGMA": 1471,
+        "INSERT": 12724,
+        "SELECT": 255,
+        "COMMIT": 169,
+        "DELETE": 24,
+        "UPDATE": 53
+      },
+      "protection_states": {},
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+          [
+            33,
+            569759002,
+            569759002
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            129,
+            864879719,
+            31375003
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1050,
+            42678177,
+            30457412
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            127,
+            28701325,
+            28701325
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            128,
+            25158027,
+            25158027
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            128,
+            20478171,
+            20478171
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            34,
+            672463086,
+            16895367
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            12997880,
+            12997880
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            129,
+            11337433,
+            11337433
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+          [
+            33,
+            11016859,
+            11016859
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            34,
+            10754240,
+            10754240
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            33,
+            9021139,
+            9021139
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            128,
+            7461073,
+            7461073
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            127,
+            6134596,
+            6134596
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            128,
+            6055807,
+            6055807
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            127,
+            4722518,
+            4722518
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            4424684,
+            4424684
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1050,
+            2616339,
+            2616339
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1050,
+            45002211,
+            2324034
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            12,
+            2041873,
+            2041873
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            127,
+            27623423,
+            2003476
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            1794370,
+            1794370
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+          [
+            33,
+            1791170,
+            1791170
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            34,
+            1755963,
+            1755963
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+          [
+            130,
+            674917524,
+            1587385
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small200-base": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 250.230527,
+      "writer_attempts": 33,
+      "writer_committed_batches": 33,
+      "traced_begin_events": 49,
+      "native_upserts": 248,
+      "persisted_qualified_receipts": 32,
+      "eligible_dataset_samples": 32,
+      "cpu_ms_per_writer_attempt": 7.582743242424242,
+      "cpu_ms_per_traced_begin": 5.106745448979591,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.008994060483871,
+      "cpu_ms_per_qualified_receipt": 7.81970396875,
+      "batch_sizes": {
+        "4": 2,
+        "2": 13,
+        "1": 5,
+        "3": 4,
+        "57": 3,
+        "16": 2,
+        "63": 1,
+        "59": 1,
+        "55": 1,
+        "32": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 49,
+        "PRAGMA": 451,
+        "INSERT": 3020,
+        "SELECT": 189,
+        "COMMIT": 49,
+        "DELETE": 3,
+        "UPDATE": 27
+      },
+      "protection_states": {
+        "empty": 14
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            14,
+            127193972,
+            127193972
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            33,
+            250230527,
+            12842066
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            33,
+            11499628,
+            11499628
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            10618497,
+            10618497
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            34,
+            10407751,
+            10407751
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            14,
+            9638093,
+            8710780
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            248,
+            10871870,
+            7502350
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            14,
+            165852501,
+            4935267
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            14,
+            4651042,
+            4651042
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            33,
+            4548747,
+            4548747
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            14,
+            3207469,
+            3207469
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            32,
+            2845661,
+            2845661
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            33,
+            2263573,
+            2263573
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            33,
+            1724704,
+            1724704
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            32,
+            1660393,
+            1660393
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            33,
+            1545734,
+            1545734
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            14,
+            1469863,
+            1469863
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            1423316,
+            1423316
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            33,
+            1394749,
+            1394749
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            33,
+            1309020,
+            1309020
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            32,
+            3852535,
+            1284729
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            32,
+            1092449,
+            1092449
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            32,
+            1025789,
+            1025789
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            32,
+            4172388,
+            957714
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            14,
+            927313,
+            927313
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "22d4821c95623a56e57a0b3fd64363fa5f3c428420ea0669f71a5e91e75cc0d0",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small200-before": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 379.646403,
+      "writer_attempts": 68,
+      "writer_committed_batches": 67,
+      "traced_begin_events": 97,
+      "native_upserts": 248,
+      "persisted_qualified_receipts": 114,
+      "eligible_dataset_samples": 114,
+      "cpu_ms_per_writer_attempt": 5.583035338235295,
+      "cpu_ms_per_traced_begin": 3.9138804432989693,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.5308322701612904,
+      "cpu_ms_per_qualified_receipt": 3.330231605263158,
+      "batch_sizes": {
+        "4": 2,
+        "2": 13,
+        "1": 6,
+        "3": 24,
+        "16": 22,
+        "15": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 97,
+        "PRAGMA": 916,
+        "INSERT": 3054,
+        "SELECT": 511,
+        "COMMIT": 96,
+        "DELETE": 3,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 27
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            27,
+            167733262,
+            167733262
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            68,
+            379646403,
+            18169325
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            17180442,
+            17180442
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            67,
+            16826729,
+            16826729
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            68,
+            13437088,
+            13437088
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            27,
+            14701833,
+            12930984
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            27,
+            10044700,
+            10044700
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            114,
+            9073755,
+            9073755
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            248,
+            13238587,
+            9019410
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            68,
+            8285999,
+            8285999
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            27,
+            227039168,
+            7214939
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            27,
+            5741867,
+            5741867
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            68,
+            5641525,
+            5641525
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            114,
+            4801957,
+            4801957
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            114,
+            11357449,
+            3726360
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            67,
+            3255852,
+            3255852
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            68,
+            3139214,
+            3139214
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            114,
+            13162270,
+            3008524
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            68,
+            2970709,
+            2970709
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            114,
+            2969548,
+            2969548
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            114,
+            2908885,
+            2908885
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            67,
+            2537157,
+            2537157
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            2526072,
+            2526072
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            114,
+            2230332,
+            2230332
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            2155735,
+            2155735
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "22d4821c95623a56e57a0b3fd64363fa5f3c428420ea0669f71a5e91e75cc0d0",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small200-current": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 366.591499,
+      "writer_attempts": 67,
+      "writer_committed_batches": 65,
+      "traced_begin_events": 98,
+      "native_upserts": 252,
+      "persisted_qualified_receipts": 114,
+      "eligible_dataset_samples": 114,
+      "cpu_ms_per_writer_attempt": 5.471514910447762,
+      "cpu_ms_per_traced_begin": 3.740729581632653,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.4547281706349207,
+      "cpu_ms_per_qualified_receipt": 3.215714903508772,
+      "batch_sizes": {
+        "4": 2,
+        "2": 15,
+        "1": 5,
+        "3": 23,
+        "16": 19,
+        "19": 2,
+        "15": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 98,
+        "PRAGMA": 1039,
+        "INSERT": 3084,
+        "SELECT": 513,
+        "COMMIT": 96,
+        "DELETE": 3,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 29
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            29,
+            146472458,
+            146472458
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            65,
+            22546496,
+            22546496
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            67,
+            366591499,
+            17564112
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            16949527,
+            16949527
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            66,
+            14603224,
+            14603224
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            29,
+            15355356,
+            13357059
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            67,
+            11558992,
+            11558992
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            114,
+            9854768,
+            9854768
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            252,
+            11743134,
+            8061869
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            29,
+            198895253,
+            6851930
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            67,
+            5682088,
+            5682088
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            29,
+            5523404,
+            5523404
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            114,
+            5119294,
+            5119294
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            29,
+            4898930,
+            4898930
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            114,
+            12333632,
+            4065536
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            114,
+            14126940,
+            3166398
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            114,
+            3084337,
+            3084337
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            114,
+            3001696,
+            3001696
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            65,
+            2909164,
+            2909164
+          ]
+        ],
+        [
+          "universal_affected_sensors.topology:5:json.loads",
+          [
+            14,
+            2810038,
+            2810038
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            67,
+            2764749,
+            2764749
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            114,
+            2757040,
+            2757040
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            67,
+            2618383,
+            2618383
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            2587616,
+            2587616
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:6:conn.execute",
+          [
+            114,
+            2460258,
+            2460258
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "22d4821c95623a56e57a0b3fd64363fa5f3c428420ea0669f71a5e91e75cc0d0",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small200-source": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 299.199486,
+      "writer_attempts": 66,
+      "writer_committed_batches": 65,
+      "traced_begin_events": 96,
+      "native_upserts": 250,
+      "persisted_qualified_receipts": 114,
+      "eligible_dataset_samples": 114,
+      "cpu_ms_per_writer_attempt": 4.533325545454545,
+      "cpu_ms_per_traced_begin": 3.1166613125,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.1967979439999998,
+      "cpu_ms_per_qualified_receipt": 2.624556894736842,
+      "batch_sizes": {
+        "4": 2,
+        "2": 13,
+        "1": 5,
+        "3": 24,
+        "16": 21,
+        "19": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 96,
+        "PRAGMA": 940,
+        "INSERT": 3068,
+        "SELECT": 482,
+        "COMMIT": 95,
+        "DELETE": 3,
+        "UPDATE": 53
+      },
+      "protection_states": {},
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+          [
+            28,
+            123227443,
+            123227443
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            66,
+            299199486,
+            16760034
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            16726170,
+            16726170
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            65,
+            12314184,
+            12314184
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            66,
+            11456771,
+            11456771
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            114,
+            10210923,
+            10210923
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            66,
+            8500028,
+            8500028
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            250,
+            11428737,
+            7902642
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            28,
+            159039130,
+            6020427
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            28,
+            4877370,
+            4877370
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            28,
+            4751668,
+            4751668
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            66,
+            4734334,
+            4734334
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            114,
+            4679171,
+            4679171
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            114,
+            11878041,
+            4048124
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            114,
+            14375760,
+            3077824
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            114,
+            2690490,
+            2690490
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            2530362,
+            2530362
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            65,
+            2423204,
+            2423204
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            66,
+            2305118,
+            2305118
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            66,
+            2280069,
+            2280069
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:6:conn.execute",
+          [
+            114,
+            2265834,
+            2265834
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            114,
+            2146961,
+            2146961
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            114,
+            2143123,
+            2143123
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:5:validate_declaration",
+          [
+            114,
+            2091863,
+            2091863
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:26:encoded",
+          [
+            114,
+            1929721,
+            1929721
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "22d4821c95623a56e57a0b3fd64363fa5f3c428420ea0669f71a5e91e75cc0d0",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small50-base": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 144.025094,
+      "writer_attempts": 28,
+      "writer_committed_batches": 28,
+      "traced_begin_events": 45,
+      "native_upserts": 98,
+      "persisted_qualified_receipts": 101,
+      "eligible_dataset_samples": 101,
+      "cpu_ms_per_writer_attempt": 5.143753357142857,
+      "cpu_ms_per_traced_begin": 3.2005576444444443,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.4696438163265306,
+      "cpu_ms_per_qualified_receipt": 1.4259910297029703,
+      "batch_sizes": {
+        "4": 2,
+        "2": 5,
+        "1": 1,
+        "3": 7,
+        "10": 7,
+        "39": 5,
+        "14": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 45,
+        "PRAGMA": 427,
+        "INSERT": 1216,
+        "SELECT": 396,
+        "COMMIT": 45,
+        "UPDATE": 31
+      },
+      "protection_states": {
+        "empty": 16
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            16,
+            34026759,
+            34026759
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            240,
+            10621460,
+            10621460
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            28,
+            144025094,
+            8933282
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            28,
+            8026145,
+            8026145
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            101,
+            7174797,
+            7174797
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            29,
+            7170688,
+            7170688
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            16,
+            6502073,
+            6502073
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            16,
+            5861040,
+            5300114
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            28,
+            5128005,
+            5128005
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            101,
+            4043666,
+            4043666
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            98,
+            4684013,
+            3146407
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            101,
+            6707597,
+            2993010
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            16,
+            59162508,
+            2732079
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            16,
+            2672106,
+            2672106
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            101,
+            10646636,
+            2575372
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            101,
+            2078729,
+            2078729
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            101,
+            1937594,
+            1937594
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            101,
+            1687290,
+            1687290
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:5:validate_declaration",
+          [
+            101,
+            1579426,
+            1579426
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            240,
+            1510096,
+            1510096
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            28,
+            1505403,
+            1505403
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest",
+          [
+            101,
+            3250988,
+            1047176
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            28,
+            999362,
+            999362
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            28,
+            921913,
+            921913
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:26:encoded",
+          [
+            101,
+            884420,
+            884420
+          ]
+        ]
+      ],
+      "original_intents": 240,
+      "input_fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small50-before": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 224.868375,
+      "writer_attempts": 55,
+      "writer_committed_batches": 54,
+      "traced_begin_events": 82,
+      "native_upserts": 98,
+      "persisted_qualified_receipts": 175,
+      "eligible_dataset_samples": 175,
+      "cpu_ms_per_writer_attempt": 4.0885159090909085,
+      "cpu_ms_per_traced_begin": 2.7422972560975607,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 2.294575255102041,
+      "cpu_ms_per_qualified_receipt": 1.2849621428571427,
+      "batch_sizes": {
+        "4": 2,
+        "2": 5,
+        "1": 2,
+        "3": 22,
+        "10": 23,
+        "13": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 82,
+        "PRAGMA": 784,
+        "INSERT": 1233,
+        "SELECT": 686,
+        "COMMIT": 81,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 26
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            26,
+            41416346,
+            41416346
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            240,
+            16417978,
+            16417978
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            55,
+            224868375,
+            14510766
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            54,
+            13838481,
+            13838481
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            175,
+            12785939,
+            12785939
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            55,
+            10324625,
+            10324625
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            26,
+            10664067,
+            9041190
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            175,
+            7558485,
+            7558485
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            55,
+            7503413,
+            7503413
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            26,
+            5533512,
+            5533512
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            175,
+            11872736,
+            5227110
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            55,
+            4588306,
+            4588306
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            175,
+            18958181,
+            4560260
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            26,
+            77080277,
+            4198110
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            26,
+            4135585,
+            4135585
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            175,
+            4040437,
+            4040437
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            175,
+            3906231,
+            3906231
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            175,
+            3449500,
+            3449500
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            98,
+            5510562,
+            3389542
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:5:validate_declaration",
+          [
+            175,
+            2895437,
+            2895437
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            54,
+            2525479,
+            2525479
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            240,
+            2413380,
+            2413380
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            55,
+            2142365,
+            2142365
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            26,
+            1892301,
+            1892301
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            55,
+            1890941,
+            1890941
+          ]
+        ]
+      ],
+      "original_intents": 240,
+      "input_fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small50-current": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 247.70277,
+      "writer_attempts": 56,
+      "writer_committed_batches": 54,
+      "traced_begin_events": 85,
+      "native_upserts": 102,
+      "persisted_qualified_receipts": 175,
+      "eligible_dataset_samples": 175,
+      "cpu_ms_per_writer_attempt": 4.423263749999999,
+      "cpu_ms_per_traced_begin": 2.9141502352941173,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 2.4284585294117647,
+      "cpu_ms_per_qualified_receipt": 1.4154444,
+      "batch_sizes": {
+        "4": 2,
+        "2": 5,
+        "1": 3,
+        "3": 23,
+        "10": 20,
+        "9": 1,
+        "13": 2
+      },
+      "sql_trace_events": {
+        "BEGIN": 85,
+        "PRAGMA": 986,
+        "INSERT": 1264,
+        "SELECT": 691,
+        "COMMIT": 83,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 28
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            28,
+            45443287,
+            45443287
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            54,
+            18097484,
+            18097484
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            240,
+            16847861,
+            16847861
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            56,
+            247702770,
+            14552735
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            175,
+            13195325,
+            13195325
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            55,
+            10441555,
+            10441555
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            56,
+            10431854,
+            10431854
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            28,
+            12332666,
+            9971769
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            56,
+            7786889,
+            7786889
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            175,
+            7608705,
+            7608705
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            175,
+            12665769,
+            5590466
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            175,
+            19537259,
+            4669773
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            175,
+            4507131,
+            4507131
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            28,
+            82216867,
+            4435788
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            28,
+            4239729,
+            4239729
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            28,
+            4236553,
+            4236553
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            175,
+            4130853,
+            4130853
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            175,
+            3670256,
+            3670256
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:6:conn.execute",
+          [
+            175,
+            3495908,
+            3495908
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            102,
+            5302902,
+            3357478
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:5:validate_declaration",
+          [
+            175,
+            3047340,
+            3047340
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            240,
+            2573685,
+            2573685
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            28,
+            2360897,
+            2360897
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write",
+          [
+            175,
+            18478921,
+            2345163
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            54,
+            2281522,
+            2281522
+          ]
+        ]
+      ],
+      "original_intents": 240,
+      "input_fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "small50-source": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 201.959231,
+      "writer_attempts": 55,
+      "writer_committed_batches": 55,
+      "traced_begin_events": 82,
+      "native_upserts": 98,
+      "persisted_qualified_receipts": 175,
+      "eligible_dataset_samples": 175,
+      "cpu_ms_per_writer_attempt": 3.671986018181818,
+      "cpu_ms_per_traced_begin": 2.462917451219512,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 2.0608084795918367,
+      "cpu_ms_per_qualified_receipt": 1.1540527485714285,
+      "batch_sizes": {
+        "4": 2,
+        "2": 5,
+        "1": 2,
+        "3": 23,
+        "10": 23
+      },
+      "sql_trace_events": {
+        "BEGIN": 82,
+        "PRAGMA": 887,
+        "INSERT": 1233,
+        "SELECT": 661,
+        "COMMIT": 82,
+        "UPDATE": 53
+      },
+      "protection_states": {},
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+          [
+            26,
+            32926148,
+            32926148
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            240,
+            16242929,
+            16242929
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            55,
+            201959231,
+            14124129
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            55,
+            12593794,
+            12593794
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+          [
+            175,
+            12414656,
+            12414656
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            56,
+            9370574,
+            9370574
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:2:validate_binding",
+          [
+            175,
+            7734865,
+            7734865
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            55,
+            6967417,
+            6967417
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate",
+          [
+            175,
+            12178478,
+            5427386
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            55,
+            5098286,
+            5098286
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            26,
+            4787445,
+            4787445
+          ]
+        ],
+        [
+          "universal_training_data.HistoricalDecision.capture",
+          [
+            175,
+            18425224,
+            4452762
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            26,
+            3839079,
+            3839079
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            26,
+            56717388,
+            3768536
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:3:revision",
+          [
+            175,
+            3633944,
+            3633944
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            98,
+            5358429,
+            3467134
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+          [
+            175,
+            3058609,
+            3058609
+          ]
+        ],
+        [
+          "universal_affected_sensors.latest:2:conn.execute",
+          [
+            175,
+            2979110,
+            2979110
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write:6:conn.execute",
+          [
+            175,
+            2956923,
+            2956923
+          ]
+        ],
+        [
+          "universal_affected_sensors.validate:5:validate_declaration",
+          [
+            175,
+            2953148,
+            2953148
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            55,
+            2434898,
+            2434898
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            240,
+            2353353,
+            2353353
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            55,
+            2346678,
+            2346678
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            55,
+            2255913,
+            2255913
+          ]
+        ],
+        [
+          "universal_predecision.verify_for_write",
+          [
+            175,
+            16948579,
+            2211526
+          ]
+        ]
+      ],
+      "original_intents": 240,
+      "input_fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "unsupported-base": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 874.371969,
+      "writer_attempts": 59,
+      "writer_committed_batches": 57,
+      "traced_begin_events": 90,
+      "native_upserts": 1050,
+      "persisted_qualified_receipts": 0,
+      "eligible_dataset_samples": 0,
+      "cpu_ms_per_writer_attempt": 14.819863881355932,
+      "cpu_ms_per_traced_begin": 9.7152441,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.8327352085714286,
+      "cpu_ms_per_qualified_receipt": null,
+      "batch_sizes": {
+        "4": 2,
+        "2": 25,
+        "1": 17,
+        "3": 6,
+        "57": 4,
+        "16": 2,
+        "64": 1,
+        "12": 1,
+        "38": 1
+      },
+      "sql_trace_events": {
+        "BEGIN": 90,
+        "PRAGMA": 796,
+        "INSERT": 12671,
+        "SELECT": 145,
+        "COMMIT": 88,
+        "DELETE": 24,
+        "UPDATE": 29
+      },
+      "protection_states": {
+        "empty": 22
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            22,
+            606775051,
+            606775051
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            22,
+            36153993,
+            33726778
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1050,
+            43096248,
+            30924786
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            59,
+            874371969,
+            25054415
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            57,
+            18708120,
+            18708120
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            22,
+            745131339,
+            17695522
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            58,
+            15155997,
+            15155997
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            59,
+            14439425,
+            14439425
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            22,
+            10410512,
+            10410512
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            22,
+            9884923,
+            9884923
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            22,
+            8952290,
+            8952290
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            8164650,
+            8164650
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            59,
+            6010446,
+            6010446
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            59,
+            4808160,
+            4808160
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            14,
+            4633301,
+            4633301
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            59,
+            4424002,
+            4424002
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            57,
+            3942345,
+            3942345
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            57,
+            3748918,
+            3748918
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1050,
+            45604103,
+            2507855
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            22,
+            2427215,
+            2427215
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1050,
+            2381456,
+            2381456
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:36:c.execute",
+          [
+            22,
+            1963577,
+            1963577
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            22,
+            1620305,
+            1620305
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+          [
+            22,
+            1596232,
+            1596232
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+          [
+            14,
+            1430332,
+            1430332
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "975fd4ec8dc9491e639d36b818f77f22bbf22273709b28528f477cbd95030878",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "unsupported-before": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 1053.036217,
+      "writer_attempts": 174,
+      "writer_committed_batches": 171,
+      "traced_begin_events": 216,
+      "native_upserts": 1050,
+      "persisted_qualified_receipts": 0,
+      "eligible_dataset_samples": 0,
+      "cpu_ms_per_writer_attempt": 6.051932281609196,
+      "cpu_ms_per_traced_begin": 4.875167671296297,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.0028916352380952,
+      "cpu_ms_per_qualified_receipt": null,
+      "batch_sizes": {
+        "4": 5,
+        "2": 64,
+        "1": 71,
+        "3": 22,
+        "5": 1,
+        "16": 9,
+        "19": 2
+      },
+      "sql_trace_events": {
+        "BEGIN": 216,
+        "PRAGMA": 1960,
+        "INSERT": 12781,
+        "SELECT": 292,
+        "COMMIT": 213,
+        "DELETE": 21,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 34
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            34,
+            609795219,
+            609795219
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            171,
+            51884553,
+            51884553
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            172,
+            43871277,
+            43871277
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            34,
+            46886793,
+            42509964
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            173,
+            42438540,
+            42438540
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            174,
+            1053036217,
+            35958943
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1051,
+            43330441,
+            30566018
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            35,
+            767570071,
+            18970289
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            174,
+            17276481,
+            17276481
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            173,
+            12744332,
+            12744332
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            173,
+            12551635,
+            12551635
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            35,
+            11953376,
+            11953376
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            11434636,
+            11434636
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            34,
+            11412318,
+            11412318
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            171,
+            11026789,
+            11026789
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            171,
+            9380006,
+            9380006
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            34,
+            9305094,
+            9305094
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            6698989,
+            6698989
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            34,
+            4376829,
+            4376829
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            35,
+            3341927,
+            3341927
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+          [
+            26,
+            3189634,
+            3189634
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            171,
+            47484865,
+            2985721
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:36:c.execute",
+          [
+            35,
+            2839933,
+            2839933
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1051,
+            2817316,
+            2817316
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1051,
+            45916055,
+            2585614
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "975fd4ec8dc9491e639d36b818f77f22bbf22273709b28528f477cbd95030878",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "unsupported-current": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 1019.362802,
+      "writer_attempts": 172,
+      "writer_committed_batches": 167,
+      "traced_begin_events": 215,
+      "native_upserts": 1050,
+      "persisted_qualified_receipts": 0,
+      "eligible_dataset_samples": 0,
+      "cpu_ms_per_writer_attempt": 5.926527918604651,
+      "cpu_ms_per_traced_begin": 4.741222334883721,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 0.9708217161904762,
+      "cpu_ms_per_qualified_receipt": null,
+      "batch_sizes": {
+        "4": 3,
+        "2": 67,
+        "1": 66,
+        "3": 24,
+        "8": 1,
+        "16": 9,
+        "19": 2
+      },
+      "sql_trace_events": {
+        "BEGIN": 215,
+        "PRAGMA": 1939,
+        "INSERT": 12777,
+        "SELECT": 291,
+        "COMMIT": 210,
+        "DELETE": 24,
+        "UPDATE": 53
+      },
+      "protection_states": {
+        "empty": 34
+      },
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+          [
+            34,
+            601650727,
+            601650727
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            167,
+            48837100,
+            48837100
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            168,
+            39700962,
+            39700962
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            171,
+            38081981,
+            38081981
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            172,
+            1019362802,
+            36575119
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:73:read",
+          [
+            34,
+            39277079,
+            36367775
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1052,
+            43604073,
+            31096731
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            35,
+            749010295,
+            18557062
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            172,
+            15545143,
+            15545143
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            171,
+            12944750,
+            12944750
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            171,
+            12345537,
+            12345537
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            11738473,
+            11738473
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            35,
+            11449588,
+            11449588
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+          [
+            34,
+            10590734,
+            10590734
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            167,
+            10197893,
+            10197893
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            34,
+            10121572,
+            10121572
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            167,
+            9348313,
+            9348313
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            6886927,
+            6886927
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            167,
+            43493882,
+            3154621
+          ]
+        ],
+        [
+          "diagnostic_only_protection_empty_check",
+          [
+            34,
+            2909304,
+            2909304
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:36:c.execute",
+          [
+            35,
+            2520470,
+            2520470
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+          [
+            1052,
+            2491002,
+            2491002
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+          [
+            1052,
+            46039279,
+            2435206
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            35,
+            2264617,
+            2264617
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:32:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+          [
+            167,
+            2193668,
+            2193668
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "975fd4ec8dc9491e639d36b818f77f22bbf22273709b28528f477cbd95030878",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    },
+    "unsupported-source": {
+      "diagnostic_only": true,
+      "writer_cpu_ms": 1088.891915,
+      "writer_attempts": 185,
+      "writer_committed_batches": 180,
+      "traced_begin_events": 228,
+      "native_upserts": 1052,
+      "persisted_qualified_receipts": 0,
+      "eligible_dataset_samples": 0,
+      "cpu_ms_per_writer_attempt": 5.885902243243243,
+      "cpu_ms_per_traced_begin": 4.77584173245614,
+      "normalization_note": "Whole writer CPU includes setup/finalization and retries; BEGIN trace events are not a success counter. Native phase entry/exit costs remain separately available in raw rows.",
+      "cpu_ms_per_native_upsert": 1.0350683602661597,
+      "cpu_ms_per_qualified_receipt": null,
+      "batch_sizes": {
+        "4": 2,
+        "2": 59,
+        "1": 88,
+        "3": 22,
+        "8": 1,
+        "16": 7,
+        "19": 3,
+        "11": 1,
+        "5": 2
+      },
+      "sql_trace_events": {
+        "BEGIN": 228,
+        "PRAGMA": 1954,
+        "INSERT": 12806,
+        "SELECT": 268,
+        "COMMIT": 223,
+        "DELETE": 21,
+        "UPDATE": 53
+      },
+      "protection_states": {},
+      "exclusive_top": [
+        [
+          "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+          [
+            35,
+            585135997,
+            585135997
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+          [
+            180,
+            76688605,
+            76688605
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+          [
+            181,
+            61932671,
+            61932671
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+          [
+            185,
+            57261729,
+            57261729
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write",
+          [
+            185,
+            1088891915,
+            43377749
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal._prepare_record",
+          [
+            1052,
+            43879302,
+            31198076
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+          [
+            185,
+            23336285,
+            23336285
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+          [
+            185,
+            19224146,
+            19224146
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+          [
+            185,
+            18482174,
+            18482174
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch",
+          [
+            35,
+            702446965,
+            18390796
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+          [
+            180,
+            16690064,
+            16690064
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+          [
+            384,
+            13687289,
+            13687289
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+          [
+            180,
+            13654304,
+            13654304
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+          [
+            35,
+            13640224,
+            13640224
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+          [
+            35,
+            12925534,
+            12925534
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+          [
+            35,
+            9965059,
+            9965059
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+          [
+            26,
+            7379055,
+            7379055
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+          [
+            180,
+            66623392,
+            3896507
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:36:c.execute",
+          [
+            35,
+            3745901,
+            3745901
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:32:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:32:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+          [
+            180,
+            3265670,
+            3265670
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:40:c.execute",
+          [
+            35,
+            2966072,
+            2966072
+          ]
+        ],
+        [
+          "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+          [
+            35,
+            2853068,
+            2853068
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+          [
+            26,
+            2606344,
+            2606344
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+          [
+            384,
+            2571211,
+            2571211
+          ]
+        ],
+        [
+          "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+          [
+            186,
+            706174923,
+            2550987
+          ]
+        ]
+      ],
+      "original_intents": 384,
+      "input_fingerprint": "975fd4ec8dc9491e639d36b818f77f22bbf22273709b28528f477cbd95030878",
+      "collector_errors": 0,
+      "collector_dropped": 0
+    }
+  },
+  "matrix": [
+    {
+      "name": "normal-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.07877235705234109,
+        "rss": 0.034076609452861506,
+        "p95": -0.018780471807429144,
+        "p99": -0.0070741315597793175
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-2",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.19733078691073835,
+        "rss": 0.014149309850096436,
+        "p95": 0.14980930587337915,
+        "p99": 0.06595013967375518
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-3",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.2125710811922552,
+        "rss": 0.017078829162347597,
+        "p95": 0.1777178085159492,
+        "p99": 0.08622162580342385
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-4",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.09947499251108982,
+        "rss": 0.03151344841429138,
+        "p95": -0.002599811080394865,
+        "p99": -0.04321382736356194
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-5",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.10269566033578159,
+        "rss": 0.03643317230273757,
+        "p95": -0.02666644555186115,
+        "p99": -0.03021808413008298
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-6",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.17610379270633314,
+        "rss": 0.01331221853813025,
+        "p95": 0.059571855503489646,
+        "p99": 0.052219221264125926
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        3,
+        12
+      ],
+      "consumed": [
+        3,
+        12
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "busy128",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.014943522765675565,
+        "rss": 0.01569784849651401,
+        "p95": 0.05032370981987322,
+        "p99": 0.1449928689980733
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        9,
+        19
+      ],
+      "consumed": [
+        10,
+        22
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "busy200",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.04076017419731359,
+        "rss": 0.01361902226954137,
+        "p95": 0.05070561729997736,
+        "p99": -0.049264171641046794
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        4,
+        11
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "off",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.0006147414025402531,
+        "rss": -0.0005445510856987301,
+        "p95": 0.006360889615847798,
+        "p99": 0.10824619637253452
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "incomplete",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.07675325509786357,
+        "rss": 0.012458387975385898,
+        "p95": -0.1989461039922077,
+        "p99": -0.3499665799665048
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "unsupported",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.01789729397870432,
+        "rss": -0.01062312312312308,
+        "p95": 0.05762302741720848,
+        "p99": 0.08442304041082882
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {
+          "agent bound": 15
+        },
+        {
+          "agent bound": 29
+        }
+      ]
+    },
+    {
+      "name": "small50",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.4563760602057527,
+        "rss": 0.01358712666708417,
+        "p95": 0.3807079832671283,
+        "p99": 0.011132460580323356
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        80,
+        175
+      ],
+      "consumed": [
+        80,
+        175
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "small200",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.09112453854569935,
+        "rss": 0.006213053444323879,
+        "p95": -0.23995270279349123,
+        "p99": -0.08963023589128793
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        47,
+        114
+      ],
+      "consumed": [
+        47,
+        114
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    }
+  ],
+  "variance": [
+    {
+      "name": "variance-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.08233675468794166,
+        "rss": 0.0030211480362538623,
+        "p95": 0.09660790453030432,
+        "p99": 0.11821262265092303
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-2",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.0008482926219876008,
+        "rss": 0.003659786268481957,
+        "p95": -0.012430505131511893,
+        "p99": -0.03602343436370936
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-3",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.08096340299458815,
+        "rss": 0.0012928248222365823,
+        "p95": -0.04931322342026978,
+        "p99": -0.06371902792872164
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-4",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.3384731612054357,
+        "rss": -0.003008832378918802,
+        "p95": 0.4254386148783198,
+        "p99": 0.7773231102277569
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-5",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.05990283451021017,
+        "rss": 0.002542165729650492,
+        "p95": 0.11632265838153755,
+        "p99": 0.10171789687776167
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-6",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.012002883080089455,
+        "rss": -0.004379562043795637,
+        "p95": 0.035439397033104614,
+        "p99": 0.11619065024016018
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        12,
+        12
+      ],
+      "consumed": [
+        12,
+        12
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    }
+  ],
+  "preflight-ablation": [
+    {
+      "pair": 0,
+      "diagnostic_only": true,
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.01079594277479412,
+        "rss": -0.0014045476976806137,
+        "p95": 0.028320876308767673,
+        "p99": 0.02316662130759739
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {
+          "agent bound": 29
+        },
+        {
+          "agent bound": 28
+        }
+      ]
+    },
+    {
+      "pair": 1,
+      "diagnostic_only": true,
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.01636578024858637,
+        "rss": -0.004311485949850646,
+        "p95": -0.0004948992968305532,
+        "p99": -0.0035587770450705714
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {
+          "agent bound": 29
+        },
+        {
+          "agent bound": 29
+        }
+      ]
+    }
+  ],
+  "throughput": {
+    "primary": {
+      "totals": {
+        "consumed": [
+          43,
+          112
+        ],
+        "qualified": [
+          41,
+          107
+        ]
+      },
+      "at_least_2x": true,
+      "every_supported_case_improves": true
+    },
+    "broader": {
+      "totals": {
+        "consumed": [
+          170,
+          401
+        ],
+        "qualified": [
+          168,
+          396
+        ]
+      },
+      "at_least_2x": true,
+      "every_supported_case_improves": true
+    }
+  },
+  "registered_screen_passes": 9,
+  "registered_screen_total": 13,
+  "gate_d": "BLOCKER",
+  "native_validation": [
+    {
+      "name": "normal-1-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-1-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-2-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-2-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-3-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-3-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-4-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-4-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-5-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-5-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-6-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "normal-6-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "busy128-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "busy128-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "busy200-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "busy200-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "off-base",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "off-source",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "incomplete-base",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "incomplete-source",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "unsupported-base",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "unsupported-source",
+      "valid": true,
+      "negative": true
+    },
+    {
+      "name": "small50-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "small50-source",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "small200-base",
+      "valid": true,
+      "negative": false
+    },
+    {
+      "name": "small200-source",
+      "valid": true,
+      "negative": false
+    }
+  ],
+  "identities": {
+    "baseline": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d",
+    "before_cache": "4b989c6970f78b57b04dc2529a35db5d6cfc7ed0",
+    "previous_reporting": "79bf067432c2cf6b7e0c4122352a6c609bb36067",
+    "previous_production": "eb6650e2ba90a9e53470178386e623dd73bd4501",
+    "measured_production": "9c245577727c93ede3c59100f11844bf336acb1a",
+    "addon_tree": "cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f",
+    "version": "0.14.232",
+    "ci_run": 42277851913,
+    "ci_conclusion": "success"
+  },
+  "local_checks": {
+    "universal": {
+      "tests": 295,
+      "seconds": 148.095
+    },
+    "focused": {
+      "tests": 88,
+      "seconds": 46.516
+    },
+    "observation": {
+      "tests": 19,
+      "seconds": 1.544
+    },
+    "differential_preflight_final": {
+      "tests": 10,
+      "seconds": 3.909
+    },
+    "counts_overlap": true
+  }
+}
