@@ -627,7 +627,7 @@ class HistoricalTrainingCollector(threading.Thread):
             run_connection_worker(self.store,self.halt,self._run,self.retry,report)
         finally:
             evidence = getattr(self, 'predecision', None)
-            if evidence is not None:
+            if callable(getattr(evidence, 'close', None)):
                 evidence.close()
 
     def _idle_wait(self):
@@ -671,7 +671,7 @@ class HistoricalTrainingCollector(threading.Thread):
 
     def _run(self):
         evidence = getattr(self, 'predecision', None)
-        if evidence is not None:
+        if callable(getattr(evidence, 'close', None)):
             evidence.close()
         self.ready.set()
         while True:
@@ -710,7 +710,7 @@ class HistoricalTrainingCollector(threading.Thread):
         if stopped:
             # Also dispose a baseline prepared synchronously before start().
             evidence = getattr(self, 'predecision', None)
-            if evidence is not None:
+            if callable(getattr(evidence, 'close', None)):
                 evidence.close()
         return stopped
 
