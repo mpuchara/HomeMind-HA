@@ -1,0 +1,154 @@
+{
+  "scope": "Generated cross-version fixture; selected migration guards, not full production startup",
+  "status": "PASS",
+  "upgrades": [
+    {
+      "restart": 1,
+      "protected_tables": {
+        "agents": {
+          "rows": 6,
+          "sha256": "ade074e7d67171c9108bd2398a3212adb896294f99994997b976d909af1a8417"
+        },
+        "rl_models": {
+          "rows": 6,
+          "sha256": "5dfc86c19b553430493824d8958e0619695efab0af6b2a1b52c70a15a510e173"
+        },
+        "rl_feedback": {
+          "rows": 3,
+          "sha256": "08befdff0b608eddf762e646c35d6b76d7d3b559f652f7e98f70ef3b2ff49a64"
+        },
+        "entity_history": {
+          "rows": 3,
+          "sha256": "90ab51b40cc793d1ebe13e24dbd7d7504f1ab062eacd8a1e75042eafc753f1d5"
+        },
+        "entity_history_revision": {
+          "rows": 1,
+          "sha256": "9ea62386765321c509598256379766f70e1aea637e5cdbba84a3f23425a11e86"
+        },
+        "historical_experiences": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "model_backups": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_candidates": {
+          "rows": 3,
+          "sha256": "8d58ada7b6ca047d52de571f5a562be33157745265a5fb7b9360ea04de474638"
+        },
+        "agent_generation_state": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_generation_backups": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_candidate_generations": {
+          "rows": 6,
+          "sha256": "0e8d74e2de38ccbdc6519a27a9443ca61d29b757f2806f89c37cd5c851ac6639"
+        },
+        "device_explicit_mappings": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "device_resource_state": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "perception_resource_leases": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "manual_feedback_journal": {
+          "rows": 6,
+          "sha256": "535e967f270785c0f85f200f94efbb192d11e1d1da24bc240470d9197d931797"
+        },
+        "manual_feedback_effects": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    {
+      "restart": 2,
+      "protected_tables": {
+        "agents": {
+          "rows": 6,
+          "sha256": "ade074e7d67171c9108bd2398a3212adb896294f99994997b976d909af1a8417"
+        },
+        "rl_models": {
+          "rows": 6,
+          "sha256": "5dfc86c19b553430493824d8958e0619695efab0af6b2a1b52c70a15a510e173"
+        },
+        "rl_feedback": {
+          "rows": 3,
+          "sha256": "08befdff0b608eddf762e646c35d6b76d7d3b559f652f7e98f70ef3b2ff49a64"
+        },
+        "entity_history": {
+          "rows": 3,
+          "sha256": "90ab51b40cc793d1ebe13e24dbd7d7504f1ab062eacd8a1e75042eafc753f1d5"
+        },
+        "entity_history_revision": {
+          "rows": 1,
+          "sha256": "9ea62386765321c509598256379766f70e1aea637e5cdbba84a3f23425a11e86"
+        },
+        "historical_experiences": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "model_backups": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_candidates": {
+          "rows": 3,
+          "sha256": "8d58ada7b6ca047d52de571f5a562be33157745265a5fb7b9360ea04de474638"
+        },
+        "agent_generation_state": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_generation_backups": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "agent_candidate_generations": {
+          "rows": 6,
+          "sha256": "0e8d74e2de38ccbdc6519a27a9443ca61d29b757f2806f89c37cd5c851ac6639"
+        },
+        "device_explicit_mappings": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "device_resource_state": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "perception_resource_leases": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "manual_feedback_journal": {
+          "rows": 6,
+          "sha256": "535e967f270785c0f85f200f94efbb192d11e1d1da24bc240470d9197d931797"
+        },
+        "manual_feedback_effects": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    }
+  ],
+  "diagnostic_downgrade": "PASS (generated fixture only)",
+  "full_data_restore": "PASS",
+  "previous_startup_tables_changed": [
+    "agents"
+  ],
+  "existing_installation_copy": "NOT RUN",
+  "production_composition": "NOT RUN",
+  "pending_job_recovery": "NOT RUN",
+  "storage_faults": "NOT RUN",
+  "options_sha256": "8e9a7f2ef7648cd9f73c30ee7c1c5b59625b4b8f8c29f0d5ead7769b01d7551d"
+}

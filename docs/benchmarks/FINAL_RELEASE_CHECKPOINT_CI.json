@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-06",
+  "scope": "Exact checkpoint workflow snapshots; no final release SHA certified",
+  "unit_logs": {
+    "python_311": "3150 tests in 277.166s OK",
+    "python_313": "3150 tests in 328.561s OK",
+    "sha": "ed53f3e6c014bdeb4dd0557ad8a5a2314b0731db"
+  },
+  "checkpoints": [
+    {
+      "sha": "ed53f3e6c014bdeb4dd0557ad8a5a2314b0731db",
+      "runs": [
+        {
+          "id": 42200249485,
+          "sha": "ed53f3e6c014bdeb4dd0557ad8a5a2314b0731db",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/42200249485"
+        },
+        {
+          "id": 42200241646,
+          "sha": "ed53f3e6c014bdeb4dd0557ad8a5a2314b0731db",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/42200241646"
+        }
+      ]
+    },
+    {
+      "sha": "84563536831689588f90824887ddd2e936f31659",
+      "runs": [
+        {
+          "id": 42201459375,
+          "sha": "84563536831689588f90824887ddd2e936f31659",
+          "status": "in_progress",
+          "conclusion": null,
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/42201459375"
+        },
+        {
+          "id": 42201450413,
+          "sha": "84563536831689588f90824887ddd2e936f31659",
+          "status": "in_progress",
+          "conclusion": null,
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/42201450413"
+        }
+      ]
+    }
+  ]
+}

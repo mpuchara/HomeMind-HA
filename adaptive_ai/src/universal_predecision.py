@@ -8,6 +8,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from types import SimpleNamespace
 import sqlite3
+import os
 import threading
 import time
 
@@ -19,6 +20,19 @@ MAX_ACTIONS = 256
 TABLES = ('agents', 'device_explicit_mappings', 'device_resource_state',
           'app_meta', 'agent_candidate_generations')
 REVISION_TABLES = TABLES + ('universal_affected_declarations',)
+
+
+def _sqlite_row_bytes(rows):
+    # A detached SQLite row contains scalar values. Account for the batch,
+    # each row, and each scalar using the same structural budget as bounded_copy.
+    size = 64 + sum(64 * (1 + len(row)) for row in rows)
+    for row in rows:
+        for value in row:
+            if isinstance(value, str):
+                size += 4 * len(value)
+            elif value is not None and type(value) not in (int, float):
+                raise ValueError('non-JSON receipt')
+    return size
 
 
 def initialize(conn):
@@ -45,6 +59,152 @@ def holds(engine):
         raise ValueError('runtime bound')
     return {str(aid): float(rt.get('manual_override_until') or 0.)
             for aid, rt in engine.runtime.items() if rt.get('manual_override_until')}
+
+
+class RevisionValidatedArbiterSnapshot:
+    """One bounded worker-owned durable baseline. No current RAM or decisions.
+
+    Callers serialize ownership with PredecisionEvidence.preparation_lock. The
+    connection permits owner handoff only so shutdown can close it; a different
+    worker always invalidates it before use. Every turn verifies native DDL and
+    exact revision-trigger bodies in the same transaction as the revision read.
+    """
+    LIMIT = 8*1024*1024
+
+    def __init__(self, stats):
+        self.stats = stats
+        self.db = None
+        self.identity = None
+        self.configs = ()
+        self.owner = None
+        for name in ('hits', 'misses', 'invalidations', 'rebuilds', 'reused_turns',
+                     'materialization_cpu_ms', 'validation_cpu_ms', 'memory_bytes',
+                     'cleanup_failures'):
+            stats['arbiter_snapshot_cache_'+name if name in ('hits', 'misses')
+                  else 'arbiter_snapshot_'+name] = 0
+
+    def close(self):
+        db, self.db = self.db, None
+        self.identity = None
+        self.configs = ()
+        self.owner = None
+        self.stats['arbiter_snapshot_memory_bytes'] = 0
+        if db is not None:
+            self.stats['arbiter_snapshot_invalidations'] += 1
+            db.close()
+
+    @staticmethod
+    def source_identity(c, path, epoch):
+        rev = revision(c)
+        if type(rev) is not int or rev < 0:
+            raise ValueError('invalid arbiter revision')
+        schema_version = c.execute('PRAGMA schema_version').fetchone()[0]
+        names = list(REVISION_TABLES) + ['universal_arbiter_revision'] + [
+            f'uc_revision_{table}_{op}' for table in REVISION_TABLES
+            for op in ('INSERT', 'UPDATE', 'DELETE')]
+        rows = {row[0]: (row[1], row[2]) for row in c.execute(
+            'SELECT name,type,CASE WHEN length(sql)<=65536 THEN sql ELSE NULL END '
+            f'FROM sqlite_master WHERE name IN ({",".join("?" for _ in names)})', names)}
+        definitions = []
+        for table in REVISION_TABLES + ('universal_arbiter_revision',):
+            if table not in rows or rows[table][0] != 'table' or not rows[table][1]:
+                raise ValueError('missing arbiter table: '+table)
+            definitions.append((table, rows[table][1]))
+        for table in REVISION_TABLES:
+            for op in ('INSERT', 'UPDATE', 'DELETE'):
+                name = f'uc_revision_{table}_{op}'
+                expected = (f'CREATE TRIGGER {name} AFTER {op} ON {table} BEGIN '
+                            'UPDATE universal_arbiter_revision SET revision=revision+1 WHERE id=1; END')
+                actual = rows.get(name)
+                if (actual is None or actual[0] != 'trigger' or not actual[1] or
+                        ''.join(actual[1].split()) != ''.join(expected.split())):
+                    raise ValueError('incomplete arbiter revision contract')
+                definitions.append((name, actual[1]))
+        stat = os.stat(path)
+        return (stat.st_dev, stat.st_ino, rev, schema_version, tuple(definitions), epoch)
+
+    def acquire(self, c, store, epoch):
+        started = time.thread_time()
+        try:
+            identity = self.source_identity(c, store.path, epoch)
+        except BaseException:
+            self.close()
+            raise
+        finally:
+            self.stats['arbiter_snapshot_validation_cpu_ms'] += (time.thread_time()-started)*1000
+        if self.db is not None and (self.identity != identity or self.owner != threading.get_ident()):
+            self.close()
+        if self.db is not None:
+            if self.db.in_transaction:
+                self.close()
+                raise ValueError('arbiter snapshot retained transaction')
+            self.stats['arbiter_snapshot_cache_hits'] += 1
+            self.stats['arbiter_snapshot_reused_turns'] += 1
+            return self.db, self.configs, identity[2]
+        self.stats['arbiter_snapshot_cache_misses'] += 1
+        started = time.thread_time()
+        db = None
+        try:
+            count = c.execute('SELECT COUNT(*) FROM (SELECT 1 FROM agents LIMIT ?)',
+                              (MAX_AGENTS+1,)).fetchone()[0]
+            if count > MAX_AGENTS:
+                raise ValueError('agent bound')
+            db = sqlite3.connect(':memory:', check_same_thread=False)
+            db.row_factory = sqlite3.Row
+            db.execute('PRAGMA cache_size=-1024')
+            db.execute('PRAGMA max_page_count=1024')
+            copied_bytes, configs = 0, []
+            definitions = dict(identity[4])
+            for table in TABLES:
+                if table != 'agents':
+                    db.execute(definitions[table])
+                cursor = c.execute(f'SELECT * FROM {table} LIMIT 10001')
+                count = 0
+                while True:
+                    rows = cursor.fetchmany(16)
+                    if not rows:
+                        break
+                    count += len(rows)
+                    copied_bytes += _sqlite_row_bytes(rows)
+                    if count > 10000 or copied_bytes > 4*1024*1024:
+                        raise ValueError('arbiter table bound')
+                    if table == 'agents':
+                        configs.extend(store._agent_dict(row) for row in rows)
+                    else:
+                        db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
+            db.commit()
+            # Decoded JSON config fields can be larger than their SQL encoding.
+            # Bound and account their complete detached object graph as well.
+            configs, config_bytes = bounded_copy(configs, limit=4*1024*1024)
+            # SQLite pages plus conservative Python/source structural budget;
+            # include a fixed connection/cache reserve, not just Python objects.
+            memory = (db.execute('PRAGMA page_count').fetchone()[0] *
+                      db.execute('PRAGMA page_size').fetchone()[0] + copied_bytes + config_bytes + 1024*1024)
+            if memory > self.LIMIT:
+                raise ValueError('arbiter snapshot memory bound')
+            self.db, self.configs, self.identity = db, configs, identity
+            self.owner = threading.get_ident()
+            self.stats['arbiter_snapshot_memory_bytes'] = memory
+            self.stats['arbiter_snapshot_rebuilds'] += 1
+            return db, configs, identity[2]
+        except BaseException:
+            if db is not None:
+                db.close()
+            self.close()
+            raise
+        finally:
+            self.stats['arbiter_snapshot_materialization_cpu_ms'] += (time.thread_time()-started)*1000
+
+    def rollback(self):
+        try:
+            self.db.execute('ROLLBACK TO predecision_evaluation')
+            self.db.execute('RELEASE predecision_evaluation')
+            if self.db.in_transaction:
+                raise ValueError('arbiter cleanup retained transaction')
+        except BaseException:
+            self.stats['arbiter_snapshot_cleanup_failures'] += 1
+            self.close()
+            raise
 
 
 class SnapshotStore:
@@ -76,6 +236,8 @@ class PredecisionEvidence:
         self.lock = threading.Lock()
         self.prepared_bytes = 0
         self.stats = dict(requested=0, prepared=0, consumed=0, rejected=0, errors=0, unsupported=0)
+        self.preparation_lock = threading.Lock()
+        self.arbiter_snapshot = RevisionValidatedArbiterSnapshot(self.stats)
         with store.conn() as c:
             initialize(c)
 
@@ -134,17 +296,41 @@ class PredecisionEvidence:
             bound['affected_sensor_evidence']=bind(evidence['affected_sensor_evidence'],bound)
         return bound
 
+    def close(self):
+        with self.preparation_lock:
+            self.arbiter_snapshot.close()
+
     def prepare_one(self):
+        if not self.preparation_lock.acquire(blocking=False):
+            return
+        try:
+            return self._prepare_one()
+        except BaseException:
+            self.arbiter_snapshot.close()
+            raise
+        finally:
+            self.preparation_lock.release()
+
+    def _prepare_one(self):
         """At most one target per idle collector turn; no control locks held."""
         from device_agents import DeviceAgentService
         from context import action_values
-        from training_budget import TRAINING_BUDGET
-        TRAINING_BUDGET.checkpoint('universal_predecision_prepare',thread_name='adaptive-ai-index-universal-scorer')
         with self.lock:
             if not self.pending:
                 return
             aid, _ = self.pending.popitem(last=False)
         engine = self.engine
+        # Reject before copying RAM, including paused Candidate configurations
+        # absent from engine.agent_configs. This read never qualifies evidence.
+        # No result survives the transaction; acquire() retains its original
+        # authoritative bound check if the source changes after this preflight.
+        with self.store.conn() as preflight:
+            preflight.execute('BEGIN')
+            count = preflight.execute(
+                'SELECT COUNT(*) FROM (SELECT 1 FROM agents LIMIT ?)',
+                (MAX_AGENTS+1,)).fetchone()[0]
+            if count > MAX_AGENTS:
+                raise ValueError('agent bound')
         # Never wait behind foreground engine work.
         if not engine.lock.acquire(blocking=False):
             self.request(aid)
@@ -183,42 +369,16 @@ class PredecisionEvidence:
         values = action_values(agent)
         if not 1 <= len(values) <= MAX_ACTIONS:
             return
-        db = sqlite3.connect(':memory:')
-        db.row_factory = sqlite3.Row
+        evaluation_open = False
         try:
-            # One native read snapshot; triggers catch writes from other Store
-            # instances/processes too. Only small arbiter tables are copied.
+            # Native revision, schema and causal inputs share a read transaction.
+            # Fresh RAM above is never retained by the durable snapshot cache.
             with self.store.conn() as c:
                 c.execute('BEGIN')
-                rev = revision(c)
-                expected = {f'uc_revision_{table}_{op}' for table in REVISION_TABLES for op in ('INSERT','UPDATE','DELETE')}
-                installed = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'uc_revision_%'")}
-                if not expected <= installed:
-                    raise ValueError('incomplete arbiter revision contract')
+                db, configs, rev = self.arbiter_snapshot.acquire(c, self.store, epoch)
                 from universal_affected_sensors import latest, topology as affected_topology
-                declaration=latest(c,aid)
-                affected_scope=affected_topology(c,topology)
-                copied_bytes = 0
-                for table in TABLES:
-                    schema = c.execute('SELECT sql FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone()
-                    if schema is None:
-                        raise ValueError('missing arbiter table: '+table)
-                    db.execute(schema[0])
-                    cursor = c.execute(f'SELECT * FROM {table} LIMIT 10001')
-                    count = 0
-                    while True:
-                        rows = cursor.fetchmany(16)
-                        if not rows:
-                            break
-                        count += len(rows)
-                        rows, size = bounded_copy([tuple(r) for r in rows],limit=4*1024*1024)
-                        copied_bytes += size
-                        if count > 10000 or copied_bytes > 4*1024*1024:
-                            raise ValueError('arbiter table bound')
-                        db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
-                configs = [self.store._agent_dict(r) for r in db.execute('SELECT * FROM agents')]
-                if len(configs) > MAX_AGENTS:
-                    raise ValueError('agent bound')
+                declaration = latest(c, aid)
+                affected_scope = affected_topology(c, topology)
                 config = next((a for a in configs if a['id'] == aid), None)
                 if config is None or any(agent.get(k) != v for k, v in config.items()):
                     raise ValueError('RAM/durable config mismatch')
@@ -228,6 +388,8 @@ class PredecisionEvidence:
             with self.store._meta_lock:
                 metadata = {prefix + str(a['id']): self.store._meta_cache.get(prefix + str(a['id']))
                             for a in configs for prefix in ('manual_hold:', 'manual_hold_source:')}
+            db.execute('SAVEPOINT predecision_evaluation')
+            evaluation_open = True
             store = SnapshotStore(db, configs, metadata)
             context = SimpleNamespace(resolved_registry=lambda: snapshot['entities'], devices=snapshot['devices'])
             service = DeviceAgentService.__new__(DeviceAgentService)
@@ -235,9 +397,26 @@ class PredecisionEvidence:
             service.engine = SimpleNamespace(context=context, state_map=snapshot['states'])
             state = snapshot['states'].get(agent['target_entity'])
             desc = service.descriptor(agent)
-            at = time.time()
-            mask = service.legal_action_mask(agent, state, values,
-                runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)
+            # The original mask asks for this descriptor again through both
+            # legal_action_mask and control_eligibility. All of its inputs are
+            # private to this turn: full RAM snapshot, configs and mapping DB.
+            # Resource/manual-hold writes by the mask do not alter descriptors.
+            # No cache escapes the detached service or reaches the live arbiter.
+            original_descriptor = service.descriptor
+
+            def detached_descriptor(candidate):
+                return desc if candidate == agent else original_descriptor(candidate)
+
+            service.descriptor = detached_descriptor
+            try:
+                at = time.time()
+                mask = service.legal_action_mask(agent, state, values,
+                    runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)
+            finally:
+                # The closure owns a bound original method. Drop the instance
+                # override even on failure so it cannot retain the entire RAM
+                # snapshot through service -> closure -> bound method -> service.
+                del service.descriptor
             generation = db.execute('SELECT generation_id FROM agent_candidate_generations WHERE agent_id=?', (aid,)).fetchone()
             if generation is None:
                 raise ValueError('missing generation')
@@ -251,6 +430,7 @@ class PredecisionEvidence:
             evidence = dict(version=VERSION, agent=agent, state=state, descriptor=desc,
                 legal_mask=mask, values=values, generation_id=generation[0],
                 config_revision=digest(encoded(agent)), arbiter_revision=rev,
+                arbiter_schema_version=self.arbiter_snapshot.identity[3],
                 registry_revision=registry_revision, epoch=epoch, topology=topology,
                 related_states={eid: snapshot['states'].get(eid) for eid in desc['entities']},
                 manual_metadata=metadata,
@@ -261,6 +441,9 @@ class PredecisionEvidence:
             evidence.update(affected_contract_version=1,affected_sensor_evidence=affected,
                             affected_sensor_status=affected_status)
             evidence, size = bounded_copy(evidence)
+            # Never publish until temporary manual/resource writes are gone.
+            self.arbiter_snapshot.rollback()
+            evaluation_open = False
             with self.lock:
                 old = self.prepared.pop(aid, None)
                 if old is not None:
@@ -273,7 +456,8 @@ class PredecisionEvidence:
                 self.prepared_bytes += size
                 self.stats['prepared'] += 1
         finally:
-            db.close()
+            if evaluation_open and self.arbiter_snapshot.db is not None:
+                self.arbiter_snapshot.rollback()
 
 
 def validate_binding(evidence, intent, agent, state):
@@ -308,6 +492,9 @@ def verify_for_write(conn, evidence, intent, agent, state):
     validate_binding(evidence, intent, agent, state)
     if revision(conn) != evidence['arbiter_revision']:
         raise ValueError('arbiter revision changed before evidence persistence')
+    if ('arbiter_schema_version' in evidence and
+            conn.execute('PRAGMA schema_version').fetchone()[0] != evidence['arbiter_schema_version']):
+        raise ValueError('arbiter schema changed before evidence persistence')
     # Equal revisions extend the immutable snapshot's validity through this
     # transaction (which inserts the receipt). Later revisions do not revoke a
     # correctly persisted historical assertion.
