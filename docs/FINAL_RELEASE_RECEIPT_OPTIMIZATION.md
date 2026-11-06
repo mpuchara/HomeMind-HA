@@ -208,6 +208,12 @@ The restored source passes **2 differential tests in 1.566 s** (15 writer subcas
 and **4 native journal tests in 2.317 s** after all timing measurements finish.
 Candidate Universal 295 PASS remains a candidate-local result, not release CI.
 
+A subsequent test-only portability refinement closes the backup destination
+explicitly before temporary-directory cleanup. Windows rerun: **2 PASS**, 3.613 s;
+see `benchmarks/FINAL_RELEASE_RECEIPT_WINDOWS_TESTS.txt`. This does not modify any
+measured runtime/harness or raw archive. Native Git source archives also remain
+in the ext4 study's `source-archives/` directory for reproducible verification.
+
 The largest measured remaining native writer cost is storage-budget sampling,
 page accounting and guarded transaction lifecycle, detailed in the CPU report.
 Continue inside those original checks: distinguish redundant Python/statement

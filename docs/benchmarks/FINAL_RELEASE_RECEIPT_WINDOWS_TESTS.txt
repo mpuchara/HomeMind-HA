@@ -1,0 +1,11 @@
+Post-study Windows validation; runtime restored to the exact 9c245577 add-on tree.
+Test-only refinement: explicitly close the SQLite backup destination before
+TemporaryDirectory cleanup. No benchmark source or measurement was changed.
+
+Command: python -m unittest discover -s tests -p test_receipt_writer_differential.py -v
+
+test_derived_inputs_and_rejection_equivalence ... ok
+test_exact_receipt_bytes_hashes_and_native_rows ... ok
+
+Ran 2 tests in 3.613s
+OK

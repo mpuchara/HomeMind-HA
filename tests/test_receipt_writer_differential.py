@@ -1,5 +1,6 @@
 """Exact persisted writer bytes against the frozen pre-optimization oracle."""
 from copy import deepcopy
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import json
@@ -36,13 +37,14 @@ class ReceiptWriterDifferentialTests(unittest.TestCase):
         f = self.fixture.f
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'copy.db'
-            with f.store.conn() as source, sqlite3.connect(path) as target:
+            with f.store.conn() as source, closing(sqlite3.connect(path)) as target:
                 source.backup(target)
                 # SQLite backup assigns its destination a fresh schema cookie.
                 # Restore the source cookie on this disposable exact-schema copy
                 # so the positive witness remains valid (DDL cases change it later).
                 schema = source.execute('PRAGMA schema_version').fetchone()[0]
                 target.execute('PRAGMA schema_version='+str(int(schema)))
+                target.commit()
             # This is an already initialized native snapshot, not a restart
             # migration: rerunning Store DDL would correctly stale every schema
             # witness and make the positive differential case vacuous.
