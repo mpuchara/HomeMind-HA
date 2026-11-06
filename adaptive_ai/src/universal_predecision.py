@@ -253,6 +253,17 @@ class PredecisionEvidence:
             service.engine = SimpleNamespace(context=context, state_map=snapshot['states'])
             state = snapshot['states'].get(agent['target_entity'])
             desc = service.descriptor(agent)
+            # The original mask asks for this descriptor again through both
+            # legal_action_mask and control_eligibility. All of its inputs are
+            # private to this turn: full RAM snapshot, configs and mapping DB.
+            # Resource/manual-hold writes by the mask do not alter descriptors.
+            # No cache escapes the detached service or reaches the live arbiter.
+            original_descriptor = service.descriptor
+
+            def detached_descriptor(candidate):
+                return desc if candidate == agent else original_descriptor(candidate)
+
+            service.descriptor = detached_descriptor
             at = time.time()
             mask = service.legal_action_mask(agent, state, values,
                 runtime_by_agent={a: {'manual_override_until': h} for a, h in snapshot['holds'].items()}, now=at)

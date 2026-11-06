@@ -113,3 +113,21 @@ class SnapshotScopeTests(unittest.TestCase):
             conn.execute('BEGIN IMMEDIATE')
             with self.assertRaisesRegex(ValueError, 'revision changed'):
                 universal_predecision.verify_for_write(conn, evidence, vars(intent), self.agent, self.state)
+
+    def test_only_one_original_descriptor_per_detached_turn_with_mask_parity(self):
+        self.scope_fixture()
+        original = DeviceAgentService.descriptor
+        calls = []
+        def traced(service, agent):
+            calls.append(service)
+            return original(service, agent)
+        with patch.object(DeviceAgentService, 'descriptor', traced):
+            self.prepare()
+        self.assertEqual(len(calls), 1)
+        self.assertIsNot(calls[0], self.service)
+        evidence = self.evidence.prepared[self.agent['id']]
+        self.assertEqual(evidence['legal_mask'], self.service.legal_action_mask(
+            self.agent, self.state, [0., 1.], now=evidence['created_ts']))
+        self.assertEqual(evidence['descriptor'], self.service.descriptor(self.agent))
+        self.prepare()
+        self.assertEqual(self.evidence.stats['prepared'], 2)
