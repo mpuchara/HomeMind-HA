@@ -368,14 +368,35 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         timeline = [] if profile_prepare else None
         inference = threading.local() if profile_prepare else None
         materialization = Counter()
+        descriptor_state_reads = Counter()
         if profile_prepare:
             from device_agents import DeviceAgentService
             from intent import ActionIntent
             from training_budget import TRAINING_BUDGET
             import universal_predecision
             import universal_affected_sensors
+            import device_agents
 
             preparing = threading.local()
+            original_options = device_agents.target_options_for_state
+            original_descriptor = DeviceAgentService.descriptor
+
+            def measured_options(state):
+                if getattr(preparing, "active", False):
+                    descriptor_state_reads[str(state.get("entity_id"))] += 1
+                return original_options(state)
+
+            def measured_descriptor(service, agent):
+                result = original_descriptor(service, agent)
+                if getattr(preparing, "active", False):
+                    # The descriptor and mapping reads still use the original
+                    # detached database. Keep the full RAM snapshot unchanged.
+                    timeline.append(("descriptor_scope", agent["id"], time.perf_counter_ns(),
+                                     tuple(result["entities"]), result["logical_device_id"]))
+                return result
+
+            stack.enter_context(patch.object(device_agents, "target_options_for_state", measured_options))
+            stack.enter_context(patch.object(DeviceAgentService, "descriptor", measured_descriptor))
             create_intent = ActionIntent.create
 
             def measured_intent(*args, **kwargs):
@@ -654,6 +675,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                       candidates=candidate_count, durable_configs=durable_configs,
                       preparation_profile=preparation_probe.snapshot() if profile_prepare else None,
                       preparation_materialization=materialization if profile_prepare else None,
+                      descriptor_state_reads=descriptor_state_reads if profile_prepare else None,
                       timeline=timeline, thread_cpu=thread_cpu,
                       preparation_pending_at_load_end=preparation_pending_at_load_end,
                       preparation_native_sql=snapshot.get("sqlite_execute.universal_predecision.prepare_one"),
