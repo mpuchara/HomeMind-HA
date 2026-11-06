@@ -1049,44 +1049,50 @@ class FeatureJournal:
                 if admission is not None:
                     admission()
                 c.execute('BEGIN IMMEDIATE')
-            protection = {}
-            for start in range(0, len(prepared), 256):
-                chunk = prepared[start:start+256]
-                values = ','.join('(?,?,?)' for _ in chunk)
-                params = [value for offset,row in enumerate(chunk) for value in
-                          (start+offset, str(row['entity_id']), float(row['event_time']))]
-                # Most fresh samples share the newest protecting window. When
-                # the maximum expiry also covers an entity's complete sample
-                # range, it is the exact answer for every sample in that range.
-                # Partial/disjoint coverage retains the exact per-sample query.
-                # Return one SQLite row for the whole bounded group. Iterating
-                # one native result row per sample repeatedly yields the GIL
-                # while Store is held; busy inference can turn a short query
-                # into seconds of writer lock residency. CASE/MAX preserves
-                # the native REAL values without a text/JSON round trip.
-                columns = ','.join(f'MAX(CASE WHEN seq={start+offset} THEN expiry END)'
-                                   for offset in range(len(chunk)))
-                query = f'''SELECT * FROM (
-                    WITH samples(seq,entity,stamp) AS (VALUES {values}),
-                    ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
-                    coverage AS (
-                        SELECT r.entity,COALESCE(MAX(w.protected_until),0) maximum,
-                            COALESCE(MAX(CASE WHEN w.start_time<=r.lo AND w.end_time>=r.hi
-                                THEN w.protected_until END),0) common
-                        FROM ranges r LEFT JOIN feature_window_entities e ON e.entity_id=r.entity
-                        LEFT JOIN feature_windows w ON w.window_id=e.window_id
-                            AND w.start_time<=r.hi AND w.end_time>=r.lo
-                        GROUP BY r.entity
-                    )
-                    , protection AS (SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
-                        SELECT MAX(w.protected_until) FROM feature_window_entities e
-                        JOIN feature_windows w ON w.window_id=e.window_id
-                        WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
-                    ) END AS expiry FROM samples s JOIN coverage c ON c.entity=s.entity)
-                    SELECT {columns} FROM protection)'''
-                read = getattr(c, 'storage_readonly_one', None)
-                row = read(query, params) if callable(read) else c.execute(query, params).fetchone()
-                protection.update((start+offset, float(value or 0.)) for offset,value in enumerate(row))
+            # Empty native links imply exactly zero protection for every sample.
+            # Read only AFTER BEGIN IMMEDIATE; no native write intervenes before
+            # insertion. Never cache this result across batches/transactions.
+            if c.execute('SELECT 1 FROM feature_window_entities LIMIT 1').fetchone() is None:
+                protection = dict.fromkeys(range(len(prepared)), 0.)
+            else:
+                protection = {}
+                for start in range(0, len(prepared), 256):
+                    chunk = prepared[start:start+256]
+                    values = ','.join('(?,?,?)' for _ in chunk)
+                    params = [value for offset,row in enumerate(chunk) for value in
+                              (start+offset, str(row['entity_id']), float(row['event_time']))]
+                    # Most fresh samples share the newest protecting window. When
+                    # the maximum expiry also covers an entity's complete sample
+                    # range, it is the exact answer for every sample in that range.
+                    # Partial/disjoint coverage retains the exact per-sample query.
+                    # Return one SQLite row for the whole bounded group. Iterating
+                    # one native result row per sample repeatedly yields the GIL
+                    # while Store is held; busy inference can turn a short query
+                    # into seconds of writer lock residency. CASE/MAX preserves
+                    # the native REAL values without a text/JSON round trip.
+                    columns = ','.join(f'MAX(CASE WHEN seq={start+offset} THEN expiry END)'
+                                       for offset in range(len(chunk)))
+                    query = f'''SELECT * FROM (
+                        WITH samples(seq,entity,stamp) AS (VALUES {values}),
+                        ranges AS (SELECT entity,MIN(stamp) lo,MAX(stamp) hi FROM samples GROUP BY entity),
+                        coverage AS (
+                            SELECT r.entity,COALESCE(MAX(w.protected_until),0) maximum,
+                                COALESCE(MAX(CASE WHEN w.start_time<=r.lo AND w.end_time>=r.hi
+                                    THEN w.protected_until END),0) common
+                            FROM ranges r LEFT JOIN feature_window_entities e ON e.entity_id=r.entity
+                            LEFT JOIN feature_windows w ON w.window_id=e.window_id
+                                AND w.start_time<=r.hi AND w.end_time>=r.lo
+                            GROUP BY r.entity
+                        )
+                        , protection AS (SELECT s.seq,CASE WHEN c.maximum=c.common THEN c.common ELSE (
+                            SELECT MAX(w.protected_until) FROM feature_window_entities e
+                            JOIN feature_windows w ON w.window_id=e.window_id
+                            WHERE e.entity_id=s.entity AND w.start_time<=s.stamp AND w.end_time>=s.stamp
+                        ) END AS expiry FROM samples s JOIN coverage c ON c.entity=s.entity)
+                        SELECT {columns} FROM protection)'''
+                    read = getattr(c, 'storage_readonly_one', None)
+                    row = read(query, params) if callable(read) else c.execute(query, params).fetchone()
+                    protection.update((start+offset, float(value or 0.)) for offset,value in enumerate(row))
             _insert_journal_rows(c,
                     """INSERT INTO feature_observation_events
                        (event_key,contract_version,entity_id,event_time,received_time,state,

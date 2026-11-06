@@ -320,6 +320,17 @@ class PredecisionEvidence:
                 return
             aid, _ = self.pending.popitem(last=False)
         engine = self.engine
+        # Reject before copying RAM, including paused Candidate configurations
+        # absent from engine.agent_configs. This read never qualifies evidence.
+        # No result survives the transaction; acquire() retains its original
+        # authoritative bound check if the source changes after this preflight.
+        with self.store.conn() as preflight:
+            preflight.execute('BEGIN')
+            count = preflight.execute(
+                'SELECT COUNT(*) FROM (SELECT 1 FROM agents LIMIT ?)',
+                (MAX_AGENTS+1,)).fetchone()[0]
+            if count > MAX_AGENTS:
+                raise ValueError('agent bound')
         # Never wait behind foreground engine work.
         if not engine.lock.acquire(blocking=False):
             self.request(aid)
