@@ -623,7 +623,12 @@ class HistoricalTrainingCollector(threading.Thread):
         # Use the same reopen/final-drain lifecycle as the other native writers.
         def report(exc):
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
-        run_connection_worker(self.store,self.halt,self._run,self.retry,report)
+        try:
+            run_connection_worker(self.store,self.halt,self._run,self.retry,report)
+        finally:
+            evidence = getattr(self, 'predecision', None)
+            if evidence is not None:
+                evidence.close()
 
     def _idle_wait(self):
         evidence = getattr(self, 'predecision', None)
@@ -665,6 +670,9 @@ class HistoricalTrainingCollector(threading.Thread):
             TRAINING_BUDGET.end()
 
     def _run(self):
+        evidence = getattr(self, 'predecision', None)
+        if evidence is not None:
+            evidence.close()
         self.ready.set()
         while True:
             with self.cv:

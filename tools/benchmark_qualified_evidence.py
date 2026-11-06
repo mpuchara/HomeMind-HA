@@ -369,6 +369,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         inference = threading.local() if profile_prepare else None
         materialization = Counter()
         descriptor_state_reads = Counter()
+        cpu_profiles = []
+        source_revisions = []
         if profile_prepare:
             from device_agents import DeviceAgentService
             from intent import ActionIntent
@@ -376,6 +378,14 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             import universal_predecision
             import universal_affected_sensors
             import device_agents
+
+            native_revision = universal_predecision.revision
+            def measured_revision(conn):
+                result = native_revision(conn)
+                if getattr(preparing, 'active', False):
+                    source_revisions.append(result)
+                return result
+            stack.enter_context(patch.object(universal_predecision, 'revision', measured_revision))
 
             preparing = threading.local()
             original_options = device_agents.target_options_for_state
@@ -434,6 +444,7 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             observe_stage(universal_affected_sensors, "topology", "affected_topology_read")
             observe_stage(universal_affected_sensors, "prepare", "affected_evidence")
             observe_stage(DeviceAgentService, "legal_action_mask", "original_arbiter_mask")
+            observe_stage(DeviceAgentService, "_persist_runtime_manual_holds", "manual_override")
             observe_stage(engine.context, "resolved_registry", "registry_snapshot")
             observe_stage(store, "_agent_dict", "agent_normalization")
             native_row_bytes = universal_predecision._sqlite_row_bytes
@@ -471,6 +482,10 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                     materialization["detached_insert_rows"] += len(parameters)
                     with preparation_probe.span("detached_sql_insert_batch"):
                         return super().executemany(sql, parameters)
+
+                def close(self):
+                    with preparation_probe.span('detached_cleanup'):
+                        return super().close()
 
             def connect_detached(*args, **kwargs):
                 with preparation_probe.span("detached_sql_connect"):
@@ -516,9 +531,16 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                     with preparation_probe.span("prepare_pending_turn"):
                         start, cpu = time.perf_counter_ns(), time.thread_time_ns()
                         prepared_before = scenario.evidence.stats["prepared"]
+                        profiler = PreparationCPUProfile() if os.environ.get("HOMEMIND_PREPARATION_CPU_PROFILE") == "1" else None
                         try:
+                            if profiler is not None: profiler.enable()
                             return prepare()
                         finally:
+                            if profiler is not None: profiler.disable()
+                            # Keep raw CPU rows; no profiler crosses threads.
+                            if profiler is not None:
+                                profiler.create_stats()
+                                cpu_profiles.append(profiler.stats)
                             timeline.append(("preparation_turn", agent_id, start, time.perf_counter_ns(),
                                              time.thread_time_ns()-cpu,
                                              scenario.evidence.stats["prepared"] > prepared_before))
@@ -671,6 +693,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         if mode == "incomplete" and (dataset["status"] != "qualified_source" or dataset["eligible"]):
             raise AssertionError(f"Missing evidence qualified: {dataset}")
         result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
+                      preparation_cpu_functions=(cpu_function_rows(cpu_profiles) if profile_prepare else None),
+                      preparation_source_revisions=source_revisions if profile_prepare else None,
                       root_target_order=[a['target_entity'] for a in scenario.agents],
                       input_fingerprint=hashlib.sha256(json.dumps(dict(
                           mode=mode,sensors=sensors,devices=devices,ticks=ticks,period=period,
@@ -711,6 +735,64 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         if result["ha_service_calls"]:
             raise AssertionError(result)
         return result
+
+
+class PreparationCPUProfile:
+    """Thread-local CPU call tree; avoids Python 3.12 cProfile global hooks.
+
+    Includes diagnostic hook overhead. Never enabled in acceptance runs.
+    """
+    def __init__(self):
+        self.stack = []
+        self.stats = {}
+
+    def event(self, frame, event, arg):
+        if event not in ('call', 'return', 'c_call', 'c_return', 'c_exception'):
+            return
+        at = time.thread_time_ns()
+        if event in ('call', 'c_call'):
+            if event == 'call':
+                code = frame.f_code
+                key = (Path(code.co_filename).name, code.co_firstlineno, code.co_name)
+            else:
+                key = ('C', 0, getattr(arg, '__qualname__', str(type(arg))))
+            self.stack.append([key, at, 0])
+        elif self.stack:
+            key, started, child = self.stack.pop()
+            elapsed = at-started
+            old = self.stats.get(key, (0, 0, 0., 0., {}))
+            self.stats[key] = (old[0]+1, old[1]+1, old[2]+(elapsed-child)/1e9,
+                               old[3]+elapsed/1e9, {})
+            if self.stack:
+                self.stack[-1][2] += elapsed
+
+    def enable(self):
+        if sys.getprofile() is not None:
+            raise RuntimeError('another profiler is active')
+        sys.setprofile(self.event)
+
+    def disable(self):
+        sys.setprofile(None)
+
+    def create_stats(self):
+        pass
+
+
+def cpu_function_rows(profiles):
+    """Separate diagnostic only: exclusive/inclusive CPU in the preparation thread."""
+    import pstats
+    if not profiles:
+        return []
+    stats = pstats.Stats()
+    stats.stats = profiles[0].copy()
+    for profile in profiles[1:]:
+        other = pstats.Stats()
+        other.stats = profile
+        stats.add(other)
+    return [dict(file=Path(key[0]).name, line=key[1], function=key[2],
+                 primitive_calls=value[0], calls=value[1],
+                 exclusive_cpu_ms=value[2]*1000, inclusive_cpu_ms=value[3]*1000)
+            for key, value in sorted(stats.stats.items(), key=lambda item: -item[1][3])]
 
 
 def sql_calls(probe):
