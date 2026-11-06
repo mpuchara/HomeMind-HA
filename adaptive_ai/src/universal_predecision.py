@@ -173,10 +173,13 @@ class RevisionValidatedArbiterSnapshot:
                     else:
                         db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
             db.commit()
+            # Decoded JSON config fields can be larger than their SQL encoding.
+            # Bound and account their complete detached object graph as well.
+            configs, config_bytes = bounded_copy(configs, limit=4*1024*1024)
             # SQLite pages plus conservative Python/source structural budget;
             # include a fixed connection/cache reserve, not just Python objects.
             memory = (db.execute('PRAGMA page_count').fetchone()[0] *
-                      db.execute('PRAGMA page_size').fetchone()[0] + copied_bytes + 1024*1024)
+                      db.execute('PRAGMA page_size').fetchone()[0] + copied_bytes + config_bytes + 1024*1024)
             if memory > self.LIMIT:
                 raise ValueError('arbiter snapshot memory bound')
             self.db, self.configs, self.identity = db, configs, identity

@@ -38,9 +38,18 @@ class ReusableSnapshotTests(unittest.TestCase):
     def parity(self, agent=None):
         agent = agent or self.agent
         fresh = oracle.PredecisionEvidence(self.engine, self.store, self.collector)
-        with patch('time.time', return_value=2000000000.):
+        resource_reads = [[], []]
+        arm = 0
+        original_rows = DeviceAgentService._resource_rows
+        def rows(service, keys):
+            result = original_rows(service, keys)
+            resource_reads[arm].append(deepcopy(result))
+            return result
+        with patch('time.time', return_value=2000000000.), patch.object(DeviceAgentService, '_resource_rows', rows):
             fresh.request(agent['id']); fresh.prepare_one()
+            arm = 1
             self.evidence.request(agent['id']); self.evidence.prepare_one()
+        self.assertEqual(resource_reads[0], resource_reads[1])
         actual = deepcopy(self.evidence.prepared[agent['id']])
         expected = fresh.prepared[agent['id']]
         with self.store.conn() as c:
@@ -116,6 +125,8 @@ class ReusableSnapshotTests(unittest.TestCase):
     def test_shared_mapping_ownership_leases_and_dwell_parity(self):
         from test_final_release_snapshot_scope import SnapshotScopeTests
         SnapshotScopeTests.scope_fixture(self)
+        with self.store.conn() as c:
+            c.execute("UPDATE device_explicit_mappings SET resource_group='shared' WHERE entity_id='light.remapped'")
         self.parity()
         for values in (('other',0,0,''), ('',2000000030.,0,''), ('',0,1999999999.,'peer')):
             with self.subTest(values=values):
@@ -124,6 +135,45 @@ class ReusableSnapshotTests(unittest.TestCase):
                               '(resource_key,control_owner_agent_id,lease_until,last_dispatch_ts,last_dispatch_agent_id,updated_ts) '
                               'VALUES(?,?,?,?,?,0)', ('device:ha-device:light-device',)+values)
                 self.parity()
+
+    def test_schema_rebuild_missing_table_and_native_materialization_failure(self):
+        self.parity(); previous = self.evidence.arbiter_snapshot.db
+        with self.store.conn() as c:
+            c.execute('CREATE TABLE unrelated_schema_change (id INTEGER)')
+        self.parity()
+        self.assertIsNot(previous, self.evidence.arbiter_snapshot.db)
+        self.evidence.close()
+        with patch.object(self.store, '_agent_dict', side_effect=RuntimeError('decode failure')):
+            with self.assertRaisesRegex(RuntimeError, 'decode failure'):
+                self.prepare()
+        self.assertIsNone(self.evidence.arbiter_snapshot.db)
+        self.parity()
+        with self.store.conn() as c:
+            c.execute('DROP TABLE device_resource_state')
+        with self.assertRaisesRegex(ValueError, 'missing arbiter table'):
+            self.prepare()
+        self.assertIsNone(self.evidence.arbiter_snapshot.db)
+
+    def test_real_rollback_failure_disposes_connection_and_counts_failure(self):
+        self.parity()
+        original = self.evidence.arbiter_snapshot.db
+        class FailingRollback:
+            def __getattr__(self, name):
+                return getattr(original, name)
+            def execute(self, sql, *args):
+                if sql.startswith('ROLLBACK TO'):
+                    raise sqlite3.DatabaseError('injected SQL rollback failure')
+                return original.execute(sql, *args)
+        self.evidence.arbiter_snapshot.db = FailingRollback()
+        before = self.evidence.stats['prepared']
+        with self.assertRaisesRegex(sqlite3.DatabaseError, 'SQL rollback failure'):
+            self.prepare()
+        self.assertEqual(self.evidence.stats['arbiter_snapshot_cleanup_failures'], 1)
+        self.assertEqual(self.evidence.stats['prepared'], before)
+        self.assertIsNone(self.evidence.arbiter_snapshot.db)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            original.execute('SELECT 1')
+        self.parity()
 
     def test_fresh_ram_nested_metadata_registry_and_epoch(self):
         self.parity()
