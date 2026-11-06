@@ -686,6 +686,9 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                       predecision_max_agents=MAX_AGENTS,
                       prepare_error_reasons=errors, original_intents=len(intents), event=events,
                       decision_status=statuses, decision_signature=hashlib.sha256(json.dumps(signature).encode()).hexdigest(),
+                      # Synthetic original decisions only. Retain the rows as well
+                      # as their digest so any same-revision mismatch is diagnosable.
+                      decision_trace=signature,
                       history=counts, dataset=dataset, collector=end,
                       collector_before_final_drain=before_final_drain, collector_at_load_end=collector_at_load_end,
                       background=background_stats,
