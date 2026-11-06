@@ -57,10 +57,11 @@ def main():
             checks.append(dict(name=path.stem,
                 persisted_decisions=counts.get('written_decisions',0),
                 native_persistence=counts.get('written_decisions',0)==(0 if row['mode']=='off' else row['original_intents']),
+                provenance=counts.get('valid_provenance',0)==counts.get('written_decisions',0),
                 negative_control=(not negative or (not counts.get('v2_receipts',0) and not row['dataset']['eligible'])),
                 unsupported=(row['durable_configs']<=256 or set(row['prepare_error_reasons'])=={'agent bound'})))
         result['native_checks'] = checks
-        if not all(row['native_persistence'] and row['negative_control'] and row['unsupported'] for row in checks): result['gate_d']='BLOCKER'
+        if not all(row['native_persistence'] and row['provenance'] and row['negative_control'] and row['unsupported'] for row in checks): result['gate_d']='BLOCKER'
     args.output.write_text(json.dumps(result,indent=2))
 
 

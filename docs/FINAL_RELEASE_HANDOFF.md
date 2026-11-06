@@ -1,3 +1,82 @@
+# Receipt CPU investigation checkpoint — 2026-11-06
+
+**Gate D remains BLOCKER.** The isolated derived-universe experiment
+`4dc2d2d630aa8ee144c0e7d8492173c462647a34` was implemented, tested and **rejected**:
+it has no repeatable process-CPU improvement versus previous production.
+Restoration commit `c1dbfd9fd468a9ea24c114cdaf044fbe5b0d8244` returns the add-on tree
+to `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`, exactly the `9c245577` production tree.
+Version **0.14.232** is unchanged. Reporting-only HEAD is recorded in PR #369.
+
+The frozen rejected candidate completed all **13 pairs / 26 arms** against exact
+#368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`: **11/13 timing screens PASS**.
+All six Normal pairs, both Busy cases and OFF/incomplete/unsupported controls
+pass. CPU fails for **50/10 +16.057%** and **200/30 +16.121%** (limit +15%).
+Primary consumed/qualified are **41 -> 99 / 39 -> 95** (>2x), while the broader
+supported totals **187 -> 365 / 185 -> 361** are **below 2x**. Every active
+supported case improves. No failure was averaged away. All six registered
+same-revision timing controls pass; one varies consumed/qualified 13 -> 11.
+
+Every input fingerprint/original decision signature/count and native persistence/
+provenance check passes, with zero unauthorized HA calls, collector errors/drops
+or event drops. Unsupported 400 remains unqualified (`agent bound`). The earlier
+`9c245577` 9/13 matrix remains evidence for the restored runtime; the rejected
+candidate's matrix does not replace it or prove a cross-series causal speedup.
+
+Candidate local validation: **295 Universal PASS**; corrected positive exact-byte
+writer differential **2 PASS / 15 subcases**; journal differential **4 PASS**.
+Restored runtime: **2 differential + 4 journal PASS** after timing finishes.
+All **253 add-on files in each of four source trees** match exact archives;
+original and registered source/harness manifests remain unchanged.
+
+See [CPU profile](FINAL_RELEASE_RECEIPT_CPU_PROFILE.md),
+[optimization, full matrix and rejection](FINAL_RELEASE_RECEIPT_OPTIMIZATION.md),
+[parsed evidence](benchmarks/FINAL_RELEASE_RECEIPT_SUMMARY.json) and
+[raw evidence](benchmarks/FINAL_RELEASE_RECEIPT_RAW.tar.gz) with adjacent SHA-256.
+Next measured target is native storage-budget sampling/page accounting and guarded
+transaction lifecycle: 619 Normal load samples and 318 page observations in the
+extra diagnostic. Preserve fresh native checks, commit/rollback and all cadence,
+workload, qualification, receipt-byte and evidence-throughput contracts.
+
+PR #369 stays Draft/open. Collector stays default-off. Candidate Recovery,
+production composition, actual-installation migration, inherited intermittent
+retention/rollback, four-hour soak, release integration and Pi/live HA remain open.
+No merge, version bump, release/tag/ZIP or deployment.
+
+## Exact continuation
+
+Worktree: `C:\Users\mpuch\OneDrive\Dokumenty\HomeMind\HomeMind-HA-universal-232`.
+Branch: `codex/universal-u05b4c1g-evidence-scalability`; Draft PR #369.
+Immutable WSL evidence: `/home/mpuchara/homemind-receipt-study-20261106`.
+Use `~/homemind-perf-venv/bin/python`.
+
+Fetch and verify clean worktree/actual reporting HEAD. Require an empty
+`git diff c1dbfd9f HEAD -- adaptive_ai` for reporting-only changes. Do not repeat
+the complete PR inventory, the four completed snapshot/writer optimizations,
+the rejected universe experiment or completed acceptance runs without a new cause.
+The measured experiment is `4dc2d2d6` / add-on `6cc6c81c21764d9c1b530fbc7cff4bf8ef2295c1`;
+the retained runtime is `c1dbfd9f` / add-on `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`.
+The generic same-revision protocol retains a baseline label, but its actual
+receipts execute the candidate source for BOTH roles; all six runs are controls.
+
+Next unfinished implementation action: use the native-budget detail to distinguish
+redundant Python/statement setup in `StorageBudget.sample`, `check`,
+`observe_pages` and guarded `Store.conn`/connection exit from the required fresh
+filesystem/page/WAL samples. Do not cache storage safety values or reduce refresh
+points to manufacture a speedup. Establish one bounded safe redundancy, preserve
+a frozen oracle, implement one change, and require repeatable unprofiled CPU
+benefit against the retained runtime before retaining it. Then rerun the original
+complete Gate D protocol against exact #368, including the broader aggregate.
+Do not change cadence, training duty cycle, admission or validation limits.
+
+All failed initial fixture/bootstrap attempts and raw measurements are retained.
+The corrected positive differential explicitly requires a complete V2 receipt;
+SQLite backup schema-cookie restoration is test-copy preparation, not production
+verification relaxation. No general verified-native transaction cache was added.
+Current local checks and checkpoint CI must be attributed to their exact source;
+a green restored-runtime CI does not certify rejected `4dc2d2d6` or a final release.
+
+## Earlier checkpoint (historical)
+
 # Native collector writer checkpoint — 2026-11-06
 
 **Gate D remains BLOCKER: 9/13 registered pairs pass.** Measured/final production

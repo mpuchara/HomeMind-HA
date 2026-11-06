@@ -156,6 +156,8 @@ def main():
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--harness', type=Path, required=True)
     parser.add_argument('--profile-output', type=Path, required=True)
+    parser.add_argument('--profile-storage-budget', action='store_true',
+                        help='Additional diagnostic overhead; never acceptance')
     args, benchmark_args = parser.parse_known_args()
     root = args.source_root.resolve()
     harness = args.harness.resolve()
@@ -192,7 +194,19 @@ def main():
                 connection.set_trace_callback(trace_sql)
             yield connection
     Store.conn = traced_conn
-    from storage_budget import BudgetConnection
+    from storage_budget import BudgetConnection, StorageBudget
+    if args.profile_storage_budget:
+        for name in ('sample', 'observe_pages', 'check'):
+            probe.install(StorageBudget, name)
+        # Preserve the original methods/closures (including zero-argument
+        # super()); only time their native lifecycle, never compile an override.
+        for name in ('__exit__', 'commit', 'rollback', 'close'):
+            original = getattr(BudgetConnection, name)
+            def measured_lifecycle(*a, _fn=original, _name=name, **kw):
+                if getattr(probe.local, 'active', False):
+                    return probe.call('storage_budget.BudgetConnection.'+_name, _fn, *a, **kw)
+                return _fn(*a, **kw)
+            setattr(BudgetConnection, name, measured_lifecycle)
     native_read = BudgetConnection.storage_readonly_one
     def observed_read(connection, sql, parameters=()):
         if getattr(probe.local, 'active', False) and 'samples(seq,entity,stamp)' in sql:
@@ -229,6 +243,7 @@ def main():
     finally:
         args.profile_output.write_text(json.dumps(dict(
             diagnostic_only=True, clock='thread_time_ns',
+            storage_budget_detail=args.profile_storage_budget,
             source_root=str(root), harness_sha256=hashlib.sha256(harness.read_bytes()).hexdigest(),
             columns=['calls', 'inclusive_cpu_ns', 'exclusive_cpu_ns'],
             note='Diagnostic setup/load/finalization rows are separate; load is the unchanged harness stream() interval. Batches crossing a boundary retain their entry phase. Instrumentation overhead included. SQL trace counts include trigger expansion. Context entry/exit costs include native connection configuration and commit/cleanup.',

@@ -1,3 +1,11 @@
+# Latest receipt CPU investigation — 2026-11-06
+
+The receipt experiment `4dc2d2d6` was rejected and restored by `c1dbfd9f`;
+production is again the exact `9c245577` add-on tree. See the
+[phase-scoped CPU profile](FINAL_RELEASE_RECEIPT_CPU_PROFILE.md) and
+[complete rejected experiment / Gate D results](FINAL_RELEASE_RECEIPT_OPTIMIZATION.md).
+Gate D remains BLOCKER; the earlier retained-runtime evidence below is preserved.
+
 # Native collector writer checkpoint — 2026-11-06
 
 **Gate D remains BLOCKER: 9/13 registered pairs pass.** Measured/final production
