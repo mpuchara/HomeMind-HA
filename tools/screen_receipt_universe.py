@@ -12,6 +12,8 @@ from universal_history_collector import encoded, digest
 
 
 def main():
+    if not hasattr(affected, '_PreparedSensorUniverse'):
+        raise SystemExit('Run this historical experiment on frozen candidate 4dc2d2d6; production optimization was rejected.')
     fixture = ReceiptWriterDifferentialTests()
     fixture.setUp()
     try:

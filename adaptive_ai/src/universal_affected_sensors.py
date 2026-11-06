@@ -7,7 +7,6 @@ import json
 import math
 import time
 import uuid
-from dataclasses import dataclass
 
 from universal_history_collector import bounded_copy, digest, encoded, sensor
 
@@ -15,23 +14,6 @@ VERSION = 1
 TABLE = 'universal_affected_declarations'
 SCOPE = 'collector_sensor_universe'
 TRUST = 'operator_attested_scoped'
-
-
-@dataclass(frozen=True, init=False)
-class _PreparedSensorUniverse:
-    """Derived values only; never a native revision or evidence assertion.
-
-    Own an immutable copy so later caller mutation cannot change membership
-    independently of the checksum. The writer discards it at metadata/write
-    boundaries and still verifies every receipt and declaration independently.
-    """
-    members: frozenset
-    revision: str
-
-    def __init__(self, sensors):
-        members = frozenset(sensors)
-        object.__setattr__(self, 'members', members)
-        object.__setattr__(self, 'revision', digest(encoded(sorted(members))))
 
 
 def ensure_schema(conn):
@@ -218,17 +200,10 @@ def validate(evidence, parent, *, sensor_universe=None,topology_information_ts=N
             or any(doc[k]>available for k in ('recorded_ts','approved_ts','configuration_information_ts','topology_information_ts'))):
         raise ValueError('affected_future_information')
     if sensor_universe is not None:
-        if type(sensor_universe) is _PreparedSensorUniverse:
-            universe = sensor_universe.members
-            if doc['sensor_universe_count']!=len(universe) or doc['sensor_universe_revision']!=sensor_universe.revision:
-                raise ValueError('affected_historical_sensor_universe_mismatch')
-            members = universe
-        else:
-            universe=sorted(set(sensor_universe))
-            if doc['sensor_universe_count']!=len(universe) or doc['sensor_universe_revision']!=digest(encoded(universe)):
-                raise ValueError('affected_historical_sensor_universe_mismatch')
-            members = set(universe)
-        if not set(doc['affected_sensor_ids'])<=members:
+        universe=sorted(set(sensor_universe))
+        if doc['sensor_universe_count']!=len(universe) or doc['sensor_universe_revision']!=digest(encoded(universe)):
+            raise ValueError('affected_historical_sensor_universe_mismatch')
+        if not set(doc['affected_sensor_ids'])<=set(universe):
             raise ValueError('affected_unknown_sensors')
     if topology_information_ts is not None and doc['topology_information_ts']!=topology_information_ts:
         raise ValueError('affected_topology_information_mismatch')

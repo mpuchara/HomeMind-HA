@@ -358,7 +358,7 @@ class HistoricalTrainingCollector(threading.Thread):
     def _write(self, batch, gap, epoch, reset_registries):
         from settings import parse_ts
         require_storage_available(self.store)
-        observations=[]; metadata=[]; advances={}; affected_topologies={}; prepared_universes={}
+        observations=[]; metadata=[]; advances={}; affected_topologies={}
         for row_epoch,kind,payload,size,queued in batch:
             if row_epoch!=epoch:
                 continue
@@ -378,7 +378,6 @@ class HistoricalTrainingCollector(threading.Thread):
                 insert_bounded_rows(c,'INSERT OR IGNORE INTO universal_collection_decisions',decision_rows,6)
                 insert_bounded_rows(c,'INSERT OR IGNORE INTO universal_collection_masks',mask_rows,5)
                 decision_rows.clear();mask_rows.clear()
-                prepared_universes.clear()
             if gap:
                 self._close(c,gap)
                 if reset_registries:
@@ -389,11 +388,6 @@ class HistoricalTrainingCollector(threading.Thread):
                 self.stats['gaps']+=1
             retention=c.execute('SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone()[0]
             for kind,payload in metadata:
-                # Only consecutive read-only decision verification may share
-                # derived topology inputs. Metadata, receipt-trigger writes and
-                # snapshot partial commits always start a fresh interval.
-                if kind != 'decision':
-                    prepared_universes.clear()
                 if kind=='connected':
                     self.connected=True
                 elif kind=='notice':
@@ -471,7 +465,7 @@ class HistoricalTrainingCollector(threading.Thread):
                             payload['missing_proof']='affected_sensor_evidence_unavailable' if payload['affected_sensor_ids'] is None else None
                             new_affected='affected_contract_version' in evidence
                             if new_affected:
-                                from universal_affected_sensors import VERSION as AFFECTED_VERSION, validate, latest, topology as affected_topology, _PreparedSensorUniverse
+                                from universal_affected_sensors import VERSION as AFFECTED_VERSION, validate, latest, topology as affected_topology
                                 try:
                                     if evidence['affected_contract_version']!=AFFECTED_VERSION:
                                         raise ValueError('affected_unsupported_contract')
@@ -480,9 +474,7 @@ class HistoricalTrainingCollector(threading.Thread):
                                         raise ValueError('affected_native_declaration_mismatch')
                                     if self.topology not in affected_topologies:
                                         affected_topologies[self.topology]=affected_topology(c,self.topology)
-                                    if self.topology not in prepared_universes:
-                                        prepared_universes[self.topology]=_PreparedSensorUniverse(affected_topologies[self.topology][1])
-                                    ids=validate(proof,payload['predecision'],sensor_universe=prepared_universes[self.topology],
+                                    ids=validate(proof,payload['predecision'],sensor_universe=affected_topologies[self.topology][1],
                                                  topology_information_ts=affected_topologies[self.topology][0])
                                     if list(ids)!=list(payload['affected_sensor_ids'] or ()):
                                         raise ValueError('affected_sensor_set_mismatch')
