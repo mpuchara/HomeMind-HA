@@ -30,9 +30,15 @@ class Probe:
         self.protection_states = Counter()
         self.sql_events = Counter()
         self.lock = threading.Lock()
+        self.phase = 'setup'
+        self.revisions = Counter()
+        self.declarations = Counter()
+        self.topologies = Counter()
+        self.batch_kinds = Counter()
 
     @contextmanager
     def span(self, name):
+        name = getattr(self.local, 'phase', self.phase) + '/' + name
         stack = getattr(self.local, 'stack', None)
         if stack is None:
             stack = self.local.stack = []
@@ -53,7 +59,17 @@ class Probe:
 
     def call(self, name, fn, *args, **kwargs):
         with self.span(name):
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
+            if name.endswith(':revision'):
+                with self.lock:
+                    self.revisions[str(result)] += 1
+            elif name.endswith(':latest'):
+                with self.lock:
+                    self.declarations['missing' if result is None else str(result[0])] += 1
+            elif name.endswith(':affected_topology'):
+                with self.lock:
+                    self.topologies[str(args[1])] += 1
+            return result
 
     @contextmanager
     def context(self, name, manager):
@@ -120,8 +136,11 @@ class Probe:
                 return fn(*args, **kwargs)
             if root:
                 probe.local.active = True
+                probe.local.phase = probe.phase
                 with probe.lock:
-                    probe.batches[len(args[1])] += 1
+                    probe.batches[probe.local.phase+'/'+str(len(args[1]))] += 1
+                    kinds = '+'.join(sorted({row[1] for row in args[1]})) or 'empty'
+                    probe.batch_kinds[probe.local.phase+'/'+kinds] += 1
             try:
                 with probe.span(prefix):
                     return compiled(*args, **kwargs)
@@ -163,7 +182,7 @@ def main():
                             'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'RELEASE', 'WITH'):
                 verb = 'OTHER'
             with probe.lock:
-                probe.sql_events[verb] += 1
+                probe.sql_events[getattr(probe.local, 'phase', probe.phase)+'/'+verb] += 1
     @contextmanager
     def traced_conn(store, *a, **kw):
         with native_conn(store, *a, **kw) as connection:
@@ -188,7 +207,7 @@ def main():
     for owner, names in (
         (collector.HistoricalTrainingCollector, ('_write', '_journal_rows')),
         (journal.FeatureJournal, ('record_batch', '_prepare_record')),
-        (predecision, ('verify_for_write', 'validate_binding', 'revision')),
+        (predecision, ('revision', 'validate_binding', 'verify_for_write')),
         (data.HistoricalDecision, ('capture',)),
         (affected, ('latest', 'topology', 'validate')),
     ):
@@ -196,14 +215,28 @@ def main():
             probe.install(owner, name)
     sys.argv = [str(harness), *benchmark_args]
     try:
-        runpy.run_path(sys.argv[0], run_name='__main__')
+        namespace = runpy.run_path(sys.argv[0], run_name='writer_diagnostic')
+        scope = namespace['main'].__globals__
+        native_stream = scope['stream']
+        def stream(*a, **kw):
+            probe.phase = 'load'
+            try:
+                return native_stream(*a, **kw)
+            finally:
+                probe.phase = 'finalization'
+        scope['stream'] = stream
+        namespace['main']()
     finally:
         args.profile_output.write_text(json.dumps(dict(
             diagnostic_only=True, clock='thread_time_ns',
             source_root=str(root), harness_sha256=hashlib.sha256(harness.read_bytes()).hexdigest(),
             columns=['calls', 'inclusive_cpu_ns', 'exclusive_cpu_ns'],
-            note='Setup/finalization included; call instrumentation overhead included. SQL counts are call-site API counts, not SQLite VM instructions. Context-manager exit costs remain in enclosing residual.',
+            note='Diagnostic setup/load/finalization rows are separate; load is the unchanged harness stream() interval. Batches crossing a boundary retain their entry phase. Instrumentation overhead included. SQL trace counts include trigger expansion. Context entry/exit costs include native connection configuration and commit/cleanup.',
             batch_sizes=probe.batches, protection_states=probe.protection_states,
+            source_revision_counts=probe.revisions,
+            declaration_revision_counts=probe.declarations,
+            topology_revision_counts=probe.topologies,
+            batch_kinds=probe.batch_kinds,
             sql_trace_events=probe.sql_events,
             sql_trace_note='Includes trigger-expanded/repeated trace events; connection setup before callback installation is excluded. Diagnostic empty checks are included and separately timed.',
             rows=probe.rows), indent=2))

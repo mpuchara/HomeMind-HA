@@ -19,6 +19,20 @@ def main():
         probe = load(path)
         case = json.loads(path.with_name(name+'.jsonl').read_text().splitlines()[-1])
         rows = probe['rows']
+        # New diagnostics preserve setup/load/finalization separately. Retain
+        # the historical aggregate report without discarding those raw rows.
+        if any(key.startswith(('setup/', 'load/', 'finalization/')) for key in rows):
+            merged = {}
+            for key, values in rows.items():
+                key = key.split('/', 1)[1]
+                total = merged.setdefault(key, [0, 0, 0])
+                for index, value in enumerate(values): total[index] += value
+            rows = merged
+            sql = {}
+            for key, value in probe['sql_trace_events'].items():
+                key = key.rsplit('/', 1)[-1]
+                sql[key] = sql.get(key, 0) + value
+            probe['sql_trace_events'] = sql
         writer = rows['universal_history_collector.HistoricalTrainingCollector._write']
         cpu = writer[1]/1e6
         transactions = probe['sql_trace_events'].get('BEGIN', 0)
