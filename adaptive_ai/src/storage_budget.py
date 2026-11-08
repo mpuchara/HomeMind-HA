@@ -72,8 +72,6 @@ def _payload_bytes(parameters):
 class StorageBudget:
     def __init__(self, path, options):
         self.path = Path(path)
-        self._wal_path = Path(str(self.path) + '-wal')
-        self._directory = self.path.parent
         self.mode = options.get('storage_budget_mode', 'auto')
         self.auto_use_percent = max(10, min(80, int(options.get('storage_auto_use_percent', 50))))
         self.auto_pool_bytes = None
@@ -124,9 +122,10 @@ class StorageBudget:
                 pass
 
     def _configure_auto(self):
-        free = shutil.disk_usage(self._directory).free
+        free = shutil.disk_usage(self.path.parent).free
         db = _file_bytes(self.path)
-        wal = _file_bytes(self._wal_path)
+        wal_path = Path(str(self.path) + '-wal')
+        wal = _file_bytes(wal_path)
         # Count existing app files back into the available pool. As the app grows,
         # free space falls by the same amount: restarting cannot ratchet the quota
         # upwards. Other applications' data is excluded. Freeze for this process,
@@ -168,8 +167,9 @@ class StorageBudget:
             if self.mode == 'auto' and self.auto_pool_bytes is None:
                 self._configure_auto()
             db = _file_bytes(self.path)
-            wal = _file_bytes(self._wal_path)
-            free = shutil.disk_usage(self._directory).free
+            wal_path = Path(str(self.path) + '-wal')
+            wal = _file_bytes(wal_path)
+            free = shutil.disk_usage(self.path.parent).free
             hard = free < self.hard_reserve or wal >= self.wal_limit
             with self.lock:
                 used = self.stats['database_used_bytes']
@@ -257,7 +257,7 @@ class StorageBudget:
         connection.set_progress_handler(connection.storage_progress, 1000)
 
     def prepare_existing_wal(self):
-        wal = self._wal_path
+        wal = Path(str(self.path) + '-wal')
         if not wal.exists() or wal.stat().st_size < min(64 * MIB, self.wal_limit // 2):
             return
         # Recovery precedes schema writes. Otherwise an old oversized WAL could
