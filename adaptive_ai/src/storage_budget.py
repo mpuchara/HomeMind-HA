@@ -55,20 +55,11 @@ def _clean_sql(sql):
     return re.sub(r'\A\s*(?:(?:--[^\n]*\n|/\*.*?\*/)\s*)*', '', str(sql), flags=re.S)
 
 
-def _statement_flags(sql):
-    # Classification is local to this call. Admission and page observations
-    # still depend on the live connection and budget.
-    text = _clean_sql(sql)
-    parts = text.split(None, 1)
-    if not parts:
-        return False, False
-    verb = parts[0].upper()
-    if verb == 'PRAGMA':
-        pragma = re.match(r'PRAGMA\s+(?:\w+\.)?(\w+)', text, re.I)
-        return False, bool(pragma and pragma[1].lower() not in _READONLY_PAGE_PRAGMAS)
-    # CTEs and unknown verbs conservatively take the write path.
-    write = verb not in ('SELECT', 'EXPLAIN', 'BEGIN', 'ROLLBACK', 'SAVEPOINT')
-    return write, write
+def _is_write(sql):
+    # CTEs are conservatively checked. Read PRAGMAs configure/inspect SQLite only;
+    # application data writes through execute/cursor/executescript are guarded.
+    sql = _clean_sql(sql)
+    return sql.split(None, 1)[0].upper() not in ('SELECT', 'EXPLAIN', 'PRAGMA', 'BEGIN', 'ROLLBACK', 'SAVEPOINT') if sql.strip() else False
 
 
 def _payload_bytes(parameters):
@@ -386,18 +377,20 @@ class BudgetConnection(sqlite3.Connection):
     def storage_statement(self, sql, parameters=()):
         self.storage_denial = None
         budget = self.storage_budget
-        write, pages_dirty = _statement_flags(sql) if budget is not None else (False, False)
+        write = budget is not None and _is_write(sql)
         if write and not self.in_transaction and self.storage_write_admission is not None:
             self.storage_write_admission()
-        if pages_dirty:
+        if budget is not None:
             # Reused read-only connections do not change page ownership. Avoid
             # three page PRAGMAs after every SELECT, especially on the microSD.
             # Non-read statements and data/unknown PRAGMAs remain conservative.
-            if not self.storage_pages_dirty:
-                # Another process can grow the database between reads. Sample
-                # actual pages before the next writer's admission as well.
-                budget.observe_pages(self)
-            self.storage_pages_dirty = True
+            pragma = re.match(r'PRAGMA\s+(?:\w+\.)?(\w+)', _clean_sql(sql), re.I)
+            if write or (pragma and pragma[1].lower() not in _READONLY_PAGE_PRAGMAS):
+                if not self.storage_pages_dirty:
+                    # Another process can grow the database between reads. Sample
+                    # actual pages before the next writer's admission as well.
+                    budget.observe_pages(self)
+                self.storage_pages_dirty = True
         if write:
             level = budget.check(parameters, refresh=not self.storage_batch_depth)
             update_tables = getattr(budget.local, 'update_tables', frozenset())
