@@ -1,0 +1,223 @@
+{
+  "sqlite": "3.38.4",
+  "results": {
+    "autocommit": {
+      "page_values": [
+        274,
+        272,
+        4096
+      ],
+      "timings": [
+        {
+          "pair": 0,
+          "method": "separate",
+          "wall_ns": 411216000,
+          "cpu_ns": 406250000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 0,
+          "method": "combined",
+          "wall_ns": 390915400,
+          "cpu_ns": 359375000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 1,
+          "method": "combined",
+          "wall_ns": 376645100,
+          "cpu_ns": 375000000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 1,
+          "method": "separate",
+          "wall_ns": 414521400,
+          "cpu_ns": 406250000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 2,
+          "method": "separate",
+          "wall_ns": 476036900,
+          "cpu_ns": 437500000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 2,
+          "method": "combined",
+          "wall_ns": 288553200,
+          "cpu_ns": 296875000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 3,
+          "method": "combined",
+          "wall_ns": 293010500,
+          "cpu_ns": 296875000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 3,
+          "method": "separate",
+          "wall_ns": 425861700,
+          "cpu_ns": 375000000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 4,
+          "method": "separate",
+          "wall_ns": 366076300,
+          "cpu_ns": 343750000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 4,
+          "method": "combined",
+          "wall_ns": 385201000,
+          "cpu_ns": 343750000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 5,
+          "method": "combined",
+          "wall_ns": 322493800,
+          "cpu_ns": 296875000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 5,
+          "method": "separate",
+          "wall_ns": 610692200,
+          "cpu_ns": 578125000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        }
+      ],
+      "progress_callbacks": {
+        "separate": 15,
+        "combined": 38
+      }
+    },
+    "write_transaction": {
+      "page_values": [
+        274,
+        256,
+        4096
+      ],
+      "timings": [
+        {
+          "pair": 0,
+          "method": "separate",
+          "wall_ns": 175223800,
+          "cpu_ns": 171875000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 0,
+          "method": "combined",
+          "wall_ns": 152254700,
+          "cpu_ns": 156250000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 1,
+          "method": "combined",
+          "wall_ns": 175902100,
+          "cpu_ns": 171875000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 1,
+          "method": "separate",
+          "wall_ns": 219364200,
+          "cpu_ns": 218750000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 2,
+          "method": "separate",
+          "wall_ns": 264678300,
+          "cpu_ns": 250000000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 2,
+          "method": "combined",
+          "wall_ns": 152249700,
+          "cpu_ns": 156250000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 3,
+          "method": "combined",
+          "wall_ns": 154282700,
+          "cpu_ns": 156250000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 3,
+          "method": "separate",
+          "wall_ns": 208454300,
+          "cpu_ns": 203125000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 4,
+          "method": "separate",
+          "wall_ns": 194198200,
+          "cpu_ns": 187500000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        },
+        {
+          "pair": 4,
+          "method": "combined",
+          "wall_ns": 202988000,
+          "cpu_ns": 187500000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 5,
+          "method": "combined",
+          "wall_ns": 158915900,
+          "cpu_ns": 156250000,
+          "iterations": 20000,
+          "python_execute_calls": 20000
+        },
+        {
+          "pair": 5,
+          "method": "separate",
+          "wall_ns": 138839000,
+          "cpu_ns": 140625000,
+          "iterations": 20000,
+          "python_execute_calls": 60000
+        }
+      ],
+      "progress_callbacks": {
+        "separate": 15,
+        "combined": 38
+      }
+    }
+  }
+}

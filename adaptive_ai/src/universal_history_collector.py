@@ -10,6 +10,7 @@ from dataclasses import asdict
 import hashlib
 import json
 import math
+import sqlite3
 import threading
 import time
 import uuid
@@ -19,6 +20,7 @@ from sqlite_background import background_sqlite, is_sqlite_busy, run_connection_
 
 MAX_RECORD = 4 * 1024 * 1024
 MAX_ENTITIES = 10000
+PREPARATION_POLL_SECONDS = .25
 
 
 def encoded(value):
@@ -84,6 +86,27 @@ def bounded_copy(value, *, limit=262144):
     return detached,used
 
 
+class PreparationBudget:
+    """Charge one completed turn and let all time outside that turn pay its debt."""
+
+    def __init__(self, clock=time.perf_counter):
+        self.clock = clock
+        self.ready_at = 0.
+
+    def remaining(self):
+        return max(0., self.ready_at - self.clock())
+
+    def charge(self, started, duty_cycle):
+        finished = self.clock()
+        elapsed = finished - started
+        # Ingress and writer notifications may wake the loop several times
+        # between polls. They can advance the writer, but do not grant extra
+        # snapshot turns within the same preparation polling interval.
+        self.ready_at = max(started + PREPARATION_POLL_SECONDS,
+                            finished + elapsed * (1. - duty_cycle) / duty_cycle)
+        return elapsed
+
+
 class HistoricalTrainingCollector(threading.Thread):
     daemon = True
 
@@ -105,6 +128,9 @@ class HistoricalTrainingCollector(threading.Thread):
         self.retry = StorageRetry(); self.ready = threading.Event()
         self.idle_ready=idle_ready or (lambda:True)
         self.halt=threading.Event()
+        self.preparation_budget = PreparationBudget()
+        self.preparation_stats = dict(turns=0, wall_seconds=0., thread_cpu_seconds=0.,
+                                      budget_deferrals=0)
         self.writing_foreground=False
         self.partial_metadata_commit=False
         self.by_kind={}
@@ -597,7 +623,12 @@ class HistoricalTrainingCollector(threading.Thread):
         # Use the same reopen/final-drain lifecycle as the other native writers.
         def report(exc):
             self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
-        run_connection_worker(self.store,self.halt,self._run,self.retry,report)
+        try:
+            run_connection_worker(self.store,self.halt,self._run,self.retry,report)
+        finally:
+            evidence = getattr(self, 'predecision', None)
+            if callable(getattr(evidence, 'close', None)):
+                evidence.close()
 
     def _idle_wait(self):
         evidence = getattr(self, 'predecision', None)
@@ -605,12 +636,43 @@ class HistoricalTrainingCollector(threading.Thread):
             # The periodic poll can repeatedly miss an idle slot between state
             # changes. Recheck admission at the end of the interactive window
             # when preparation is queued, without preparing in foreground.
-            remaining = foreground_priority_remaining(evidence.engine)
+            remaining = max(foreground_priority_remaining(evidence.engine),
+                            self.preparation_budget.remaining())
             if remaining > 0:
-                return min(.25, remaining)
-        return .25
+                return min(PREPARATION_POLL_SECONDS, remaining)
+        return PREPARATION_POLL_SECONDS
+
+    def _prepare_turn(self):
+        evidence = getattr(self, 'predecision', None)
+        if evidence is None or not evidence.pending or self.stopping or not self.idle_ready():
+            return
+        budget = self.preparation_budget
+        if budget.remaining() > 0:
+            self.preparation_stats['budget_deferrals'] += 1
+            return
+        from training_budget import TRAINING_BUDGET
+        duty_cycle = TRAINING_BUDGET.duty_cycle
+        started = budget.clock()
+        cpu_started = time.thread_time()
+        try:
+            # Preparation can be retried via a subsequent request. Avoid waiting
+            # on SQLite while the same worker also owns the writer queue.
+            with self.store.background_sqlite(timeout_ms=0):
+                evidence.prepare_one()
+        except Exception:
+            evidence.stats['errors'] += 1
+        finally:
+            self.preparation_stats['wall_seconds'] += budget.charge(started, duty_cycle)
+            self.preparation_stats['thread_cpu_seconds'] += time.thread_time() - cpu_started
+            self.preparation_stats['turns'] += 1
+            # The writer's cooperative clock is thread-local. Do not bill the
+            # same preparation (or the following idle interval) to its next turn.
+            TRAINING_BUDGET.end()
 
     def _run(self):
+        evidence = getattr(self, 'predecision', None)
+        if callable(getattr(evidence, 'close', None)):
+            evidence.close()
         self.ready.set()
         while True:
             with self.cv:
@@ -634,14 +696,8 @@ class HistoricalTrainingCollector(threading.Thread):
                         self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
                 self.halt.wait(.005)
             else:
-                self.drain()
-                evidence=getattr(self,'predecision',None)
-                if evidence is not None and not self.stopping and self.idle_ready():
-                    try:
-                        with background_sqlite(self.store):
-                            evidence.prepare_one()
-                    except Exception:
-                        evidence.stats['errors']+=1
+                if self.drain():
+                    self._prepare_turn()
         with self.store.conn() as c:
             self._close(c,'clean_shutdown')
             c.execute("UPDATE universal_collection_sessions SET ended=?,reason='clean_shutdown' WHERE id=?",(self.clock(),self.session))
@@ -650,7 +706,13 @@ class HistoricalTrainingCollector(threading.Thread):
         with self.cv:self.stopping=True;self.cv.notify_all()
         self.halt.set()
         if self.is_alive():self.join(timeout)
-        return not self.is_alive()
+        stopped = not self.is_alive()
+        if stopped:
+            # Also dispose a baseline prepared synchronously before start().
+            evidence = getattr(self, 'predecision', None)
+            if callable(getattr(evidence, 'close', None)):
+                evidence.close()
+        return stopped
 
     def diagnostics(self):
         with self.cv:
@@ -666,6 +728,7 @@ class HistoricalTrainingCollector(threading.Thread):
         evidence=getattr(self,'predecision',None)
         if evidence is not None:
             result['predecision']=dict(evidence.stats,prepared_bytes=evidence.prepared_bytes)
+            result['predecision_budget'] = dict(self.preparation_stats)
         return result
 
 

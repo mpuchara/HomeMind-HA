@@ -1,0 +1,2413 @@
+{
+  "scope": "Checkpoint CI for restored runtime and test/tool/report changes; not rejected experimental source or final release acceptance",
+  "retained_runtime": "c1dbfd9fd468a9ea24c114cdaf044fbe5b0d8244",
+  "addon_tree": "cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f",
+  "rejected_candidate": "4dc2d2d630aa8ee144c0e7d8492173c462647a34",
+  "experimental_ci": "NOT RUN; no restored-source CI is attributed to this candidate",
+  "runs": [
+    {
+      "sha": "630f4453d2708c13fb0481dfa295c8226fd5be9d",
+      "run": {
+        "workflow_runs": [
+          {
+            "id": 42304381708,
+            "name": "Validate HomeMind",
+            "status": "completed",
+            "conclusion": "success",
+            "run_number": 6016,
+            "jobs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42304381708/jobs",
+            "logs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42304381708/logs",
+            "workflow_id": 357010785
+          }
+        ]
+      },
+      "jobs": {
+        "jobs": [
+          {
+            "id": 128189904304,
+            "name": "tests (3.13)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42304381708,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install vector-training dependency",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python -m unittest discover -s tests -v",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Composed normal-policy scaling smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 7
+              },
+              {
+                "name": "Stage 1 active Candidate, training and Correct smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 8
+              },
+              {
+                "name": "Run node tools/verify_debug_export_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Recorder archive parity and bounded WAL writes",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 10
+              },
+              {
+                "name": "U03 synthetic neural cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 11
+              },
+              {
+                "name": "U04 shared action scorer cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 12
+              },
+              {
+                "name": "U05b.1 isolated neural training core smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 13
+              },
+              {
+                "name": "U05b.2 independent offline quality gate smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 14
+              },
+              {
+                "name": "U05b.3 atomic checkpoint lifecycle and Undo smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 15
+              },
+              {
+                "name": "U05b.4a historical collector cardinality and composed ingress smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 16
+              },
+              {
+                "name": "U05b.4b.1 detached predecision evidence smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 17
+              },
+              {
+                "name": "U05b.4b.2 scoped affected-sensor evidence and native dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 18
+              },
+              {
+                "name": "U05b.4b.3 native granular retention and scoped dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 19
+              },
+              {
+                "name": "U05b.4b.4 original V2/V3 evidence to validated offline artifact (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 20
+              },
+              {
+                "name": "U05b.4c.1f native V2/V3 collection and overload smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 21
+              },
+              {
+                "name": "U05b.4c.1f persistent collector disconnect and restart smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 22
+              },
+              {
+                "name": "U05b.4c.1a HA-native protocol and native journal audit smoke (offline host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 23
+              },
+              {
+                "name": "U05b.4c.1a cold and steady probe smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 24
+              },
+              {
+                "name": "U05b.4c.1 runtime collector durability smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 25
+              },
+              {
+                "name": "Run python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_target_only_replay.py tools/benchmark_ram_replay_index.py tools/benchmark_transition_edges.py tools/benchmark_feature_snapshot_reuse.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Run node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              },
+              {
+                "name": "0.14.111 RAM replay index component benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 28
+              },
+              {
+                "name": "0.14.112 transition-edge index component benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 29
+              },
+              {
+                "name": "Numeric radar and relay full training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 30
+              },
+              {
+                "name": "Causal statistics prefix parity and bounded replay work",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 31
+              },
+              {
+                "name": "0.14.157 Shadow JSON data and checksum parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 32
+              },
+              {
+                "name": "0.14.161 observed-pool JSON snapshot parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 33
+              },
+              {
+                "name": "0.14.162 indexed feature-journal pruning reference parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 34
+              },
+              {
+                "name": "0.14.163 native witness full SHA and Shadow JSON parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 35
+              },
+              {
+                "name": "0.14.164 fresh indexed target-config retrieval parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 36
+              },
+              {
+                "name": "0.14.165 HA session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 37
+              },
+              {
+                "name": "0.14.171 inference SQL session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 38
+              },
+              {
+                "name": "0.14.200 retained runtime SQLite cache result parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 39
+              },
+              {
+                "name": "0.14.201 contended runtime full candidate checksum smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 40
+              },
+              {
+                "name": "0.14.202 causal observation handoff smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 41
+              },
+              {
+                "name": "0.14.206 compact cold comparison smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 42
+              },
+              {
+                "name": "0.14.208 bounded Shadow evidence backpressure and exact recovery",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 43
+              },
+              {
+                "name": "0.14.210 populated screening and post-label learning smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 44
+              },
+              {
+                "name": "0.14.212 Candidate bundle parity and deadline wake smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 45
+              },
+              {
+                "name": "0.14.213 live card delivery and RAM worker cache smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 46
+              },
+              {
+                "name": "0.14.211 automatic quota recovery and foreground Control priority",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 47
+              },
+              {
+                "name": "0.14.207 observed Current and long-ON lighting regressions",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 48
+              },
+              {
+                "name": "0.14.206 guarded Control dispatch with continuous pending events",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 49
+              },
+              {
+                "name": "0.14.203 real event scheduler under episode UI load",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 50
+              },
+              {
+                "name": "0.14.172 targeted retries terminate without peer replay",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 51
+              },
+              {
+                "name": "0.14.173 candidate observation causal feature and full checksum parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 52
+              },
+              {
+                "name": "0.14.166 bounded Recorder import row parity and transaction size",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 53
+              },
+              {
+                "name": "0.14.180 guarded Recorder insert/upsert row parity and disk sampling",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 54
+              },
+              {
+                "name": "0.14.158 compact classifier fit reference parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 55
+              },
+              {
+                "name": "0.14.113 feature snapshot full replay benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 56
+              },
+              {
+                "name": "Stage 17 synthetic history-cost benchmark smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 57
+              },
+              {
+                "name": "0.14.76 Correct history scaling benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 58
+              },
+              {
+                "name": "0.14.77 active-home training QoS benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 59
+              },
+              {
+                "name": "0.14.78 HA ingest SQLite-decoupling benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 60
+              },
+              {
+                "name": "0.14.79 shared historical context profile",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 61
+              },
+              {
+                "name": "0.14.80 packaged Pi profiler CLI smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 62
+              },
+              {
+                "name": "0.14.81 observation-space and hot-path benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 63
+              },
+              {
+                "name": "0.14.82 tiny MLP Shadow inference/persistence benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 64
+              },
+              {
+                "name": "0.14.99 full Hybrid + Candidate hot-path baseline",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 65
+              },
+              {
+                "name": "Upload 0.14.99 Hybrid hot-path baseline",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 66
+              },
+              {
+                "name": "ETAP 2 deferred Candidate critical-path benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 67
+              },
+              {
+                "name": "ETAP 4 same-process Hybrid hotspot profile",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 68
+              },
+              {
+                "name": "0.14.83 bounded supervised tiny MLP training benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 69
+              },
+              {
+                "name": "0.14.84 incremental neural Manual Correct benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 70
+              },
+              {
+                "name": "0.14.85 trusted Automatic Correct reward-buffer benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 71
+              },
+              {
+                "name": "0.14.86 conservative Offline-RL Candidate benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 72
+              },
+              {
+                "name": "0.14.87 stateful replay continuation benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 73
+              },
+              {
+                "name": "0.14.108 persistent training worker benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 74
+              },
+              {
+                "name": "0.14.109 dual-agent CPU capacity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 75
+              },
+              {
+                "name": "0.14.110 target-only replay stream benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 76
+              },
+              {
+                "name": "Agent Training vNext sparse long-memory boundedness benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 77
+              },
+              {
+                "name": "Independent preference rollouts for historical training quality",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 78
+              },
+              {
+                "name": "0.14.88 Stage-9 Pi4 gate CLI smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 79
+              },
+              {
+                "name": "Stage 18 deterministic product runtime benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 80
+              },
+              {
+                "name": "Upload Stage 18 product benchmark report",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 81
+              },
+              {
+                "name": "Stage 18 actual source entrypoint smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 82
+              },
+              {
+                "name": "0.14.170 promotion snapshot state and durable JSON parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 83
+              },
+              {
+                "name": "Run python tools/simulate_anticipation.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 84
+              },
+              {
+                "name": "Run python tools/simulate_context_tournament.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 85
+              },
+              {
+                "name": "Run python tools/simulate_fast_light_timing.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 86
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 170
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 171
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 172
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 173
+              }
+            ]
+          },
+          {
+            "id": 128189904598,
+            "name": "tests (3.11)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42304381708,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install vector-training dependency",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python -m unittest discover -s tests -v",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Composed normal-policy scaling smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Stage 1 active Candidate, training and Correct smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Run node tools/verify_debug_export_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Recorder archive parity and bounded WAL writes",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "U03 synthetic neural cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "U04 shared action scorer cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "U05b.1 isolated neural training core smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "U05b.2 independent offline quality gate smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "U05b.3 atomic checkpoint lifecycle and Undo smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "U05b.4a historical collector cardinality and composed ingress smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "U05b.4b.1 detached predecision evidence smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              },
+              {
+                "name": "U05b.4b.2 scoped affected-sensor evidence and native dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 18
+              },
+              {
+                "name": "U05b.4b.3 native granular retention and scoped dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "U05b.4b.4 original V2/V3 evidence to validated offline artifact (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "U05b.4c.1f native V2/V3 collection and overload smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              },
+              {
+                "name": "U05b.4c.1f persistent collector disconnect and restart smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 22
+              },
+              {
+                "name": "U05b.4c.1a HA-native protocol and native journal audit smoke (offline host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 23
+              },
+              {
+                "name": "U05b.4c.1a cold and steady probe smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 24
+              },
+              {
+                "name": "U05b.4c.1 runtime collector durability smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 25
+              },
+              {
+                "name": "Run python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_target_only_replay.py tools/benchmark_ram_replay_index.py tools/benchmark_transition_edges.py tools/benchmark_feature_snapshot_reuse.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Run node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              },
+              {
+                "name": "0.14.111 RAM replay index component benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 28
+              },
+              {
+                "name": "0.14.112 transition-edge index component benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 29
+              },
+              {
+                "name": "Numeric radar and relay full training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 30
+              },
+              {
+                "name": "Causal statistics prefix parity and bounded replay work",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 31
+              },
+              {
+                "name": "0.14.157 Shadow JSON data and checksum parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 32
+              },
+              {
+                "name": "0.14.161 observed-pool JSON snapshot parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 33
+              },
+              {
+                "name": "0.14.162 indexed feature-journal pruning reference parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 34
+              },
+              {
+                "name": "0.14.163 native witness full SHA and Shadow JSON parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 35
+              },
+              {
+                "name": "0.14.164 fresh indexed target-config retrieval parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 36
+              },
+              {
+                "name": "0.14.165 HA session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 37
+              },
+              {
+                "name": "0.14.171 inference SQL session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 38
+              },
+              {
+                "name": "0.14.200 retained runtime SQLite cache result parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 39
+              },
+              {
+                "name": "0.14.201 contended runtime full candidate checksum smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 40
+              },
+              {
+                "name": "0.14.202 causal observation handoff smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 41
+              },
+              {
+                "name": "0.14.206 compact cold comparison smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 42
+              },
+              {
+                "name": "0.14.208 bounded Shadow evidence backpressure and exact recovery",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 43
+              },
+              {
+                "name": "0.14.210 populated screening and post-label learning smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 44
+              },
+              {
+                "name": "0.14.212 Candidate bundle parity and deadline wake smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 45
+              },
+              {
+                "name": "0.14.213 live card delivery and RAM worker cache smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 46
+              },
+              {
+                "name": "0.14.211 automatic quota recovery and foreground Control priority",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 47
+              },
+              {
+                "name": "0.14.207 observed Current and long-ON lighting regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 48
+              },
+              {
+                "name": "0.14.206 guarded Control dispatch with continuous pending events",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 49
+              },
+              {
+                "name": "0.14.203 real event scheduler under episode UI load",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 50
+              },
+              {
+                "name": "0.14.172 targeted retries terminate without peer replay",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 51
+              },
+              {
+                "name": "0.14.173 candidate observation causal feature and full checksum parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 52
+              },
+              {
+                "name": "0.14.166 bounded Recorder import row parity and transaction size",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 53
+              },
+              {
+                "name": "0.14.180 guarded Recorder insert/upsert row parity and disk sampling",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 54
+              },
+              {
+                "name": "0.14.158 compact classifier fit reference parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 55
+              },
+              {
+                "name": "0.14.113 feature snapshot full replay benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 56
+              },
+              {
+                "name": "Stage 17 synthetic history-cost benchmark smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 57
+              },
+              {
+                "name": "0.14.76 Correct history scaling benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 58
+              },
+              {
+                "name": "0.14.77 active-home training QoS benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 59
+              },
+              {
+                "name": "0.14.78 HA ingest SQLite-decoupling benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 60
+              },
+              {
+                "name": "0.14.79 shared historical context profile",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 61
+              },
+              {
+                "name": "0.14.80 packaged Pi profiler CLI smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 62
+              },
+              {
+                "name": "0.14.81 observation-space and hot-path benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 63
+              },
+              {
+                "name": "0.14.82 tiny MLP Shadow inference/persistence benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 64
+              },
+              {
+                "name": "0.14.99 full Hybrid + Candidate hot-path baseline",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 65
+              },
+              {
+                "name": "Upload 0.14.99 Hybrid hot-path baseline",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 66
+              },
+              {
+                "name": "ETAP 2 deferred Candidate critical-path benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 67
+              },
+              {
+                "name": "ETAP 4 same-process Hybrid hotspot profile",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 68
+              },
+              {
+                "name": "0.14.83 bounded supervised tiny MLP training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 69
+              },
+              {
+                "name": "0.14.84 incremental neural Manual Correct benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 70
+              },
+              {
+                "name": "0.14.85 trusted Automatic Correct reward-buffer benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 71
+              },
+              {
+                "name": "0.14.86 conservative Offline-RL Candidate benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 72
+              },
+              {
+                "name": "0.14.87 stateful replay continuation benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 73
+              },
+              {
+                "name": "0.14.108 persistent training worker benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 74
+              },
+              {
+                "name": "0.14.109 dual-agent CPU capacity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 75
+              },
+              {
+                "name": "0.14.110 target-only replay stream benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 76
+              },
+              {
+                "name": "Agent Training vNext sparse long-memory boundedness benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 77
+              },
+              {
+                "name": "Independent preference rollouts for historical training quality",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 78
+              },
+              {
+                "name": "0.14.88 Stage-9 Pi4 gate CLI smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 79
+              },
+              {
+                "name": "Stage 18 deterministic product runtime benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 80
+              },
+              {
+                "name": "Upload Stage 18 product benchmark report",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 81
+              },
+              {
+                "name": "Stage 18 actual source entrypoint smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 82
+              },
+              {
+                "name": "0.14.170 promotion snapshot state and durable JSON parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 83
+              },
+              {
+                "name": "Run python tools/simulate_anticipation.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 84
+              },
+              {
+                "name": "Run python tools/simulate_context_tournament.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 85
+              },
+              {
+                "name": "Run python tools/simulate_fast_light_timing.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 86
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 170
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 171
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 172
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 173
+              }
+            ]
+          },
+          {
+            "id": 128189904643,
+            "name": "image",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42304381708,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Read addon version",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Resolve Python base image with public mirror fallback",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run docker build --build-arg BUILD_VERSION=0.14.232 -t homemind:0.14.232 adaptive_ai",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python tools/smoke_image.py homemind:0.14.232",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Verify packaged vectorized Tiny MLP trainer",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 128195539980,
+            "name": "package",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 42304381708,
+            "logs_url": null,
+            "steps": null
+          }
+        ]
+      },
+      "unit_tests": {
+        "3.11": [
+          "Ran 3176 tests in 345.230s"
+        ],
+        "3.13": [
+          "Ran 3176 tests in 329.888s"
+        ]
+      }
+    },
+    {
+      "sha": "56fd84f8d8bb23fdcb88e127c4f60a07594cb26b",
+      "run": {
+        "workflow_runs": [
+          {
+            "id": 42305210953,
+            "name": "Validate HomeMind",
+            "status": "completed",
+            "conclusion": "success",
+            "run_number": 6018,
+            "jobs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42305210953/jobs",
+            "logs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42305210953/logs",
+            "workflow_id": 357010785
+          }
+        ]
+      },
+      "jobs": {
+        "jobs": [
+          {
+            "id": 128192717409,
+            "name": "image",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42305210953,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Read addon version",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Resolve Python base image with public mirror fallback",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run docker build --build-arg BUILD_VERSION=0.14.232 -t homemind:0.14.232 adaptive_ai",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python tools/smoke_image.py homemind:0.14.232",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Verify packaged vectorized Tiny MLP trainer",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 128192717623,
+            "name": "tests (3.11)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42305210953,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install vector-training dependency",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python -m unittest discover -s tests -v",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Composed normal-policy scaling smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Stage 1 active Candidate, training and Correct smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Run node tools/verify_debug_export_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Recorder archive parity and bounded WAL writes",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "U03 synthetic neural cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "U04 shared action scorer cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "U05b.1 isolated neural training core smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "U05b.2 independent offline quality gate smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "U05b.3 atomic checkpoint lifecycle and Undo smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "U05b.4a historical collector cardinality and composed ingress smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "U05b.4b.1 detached predecision evidence smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              },
+              {
+                "name": "U05b.4b.2 scoped affected-sensor evidence and native dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 18
+              },
+              {
+                "name": "U05b.4b.3 native granular retention and scoped dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "U05b.4b.4 original V2/V3 evidence to validated offline artifact (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "U05b.4c.1f native V2/V3 collection and overload smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              },
+              {
+                "name": "U05b.4c.1f persistent collector disconnect and restart smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 22
+              },
+              {
+                "name": "U05b.4c.1a HA-native protocol and native journal audit smoke (offline host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 23
+              },
+              {
+                "name": "U05b.4c.1a cold and steady probe smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 24
+              },
+              {
+                "name": "U05b.4c.1 runtime collector durability smoke (host only)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 25
+              },
+              {
+                "name": "Run python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_target_only_replay.py tools/benchmark_ram_replay_index.py tools/benchmark_transition_edges.py tools/benchmark_feature_snapshot_reuse.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Run node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              },
+              {
+                "name": "0.14.111 RAM replay index component benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 28
+              },
+              {
+                "name": "0.14.112 transition-edge index component benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 29
+              },
+              {
+                "name": "Numeric radar and relay full training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 30
+              },
+              {
+                "name": "Causal statistics prefix parity and bounded replay work",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 31
+              },
+              {
+                "name": "0.14.157 Shadow JSON data and checksum parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 32
+              },
+              {
+                "name": "0.14.161 observed-pool JSON snapshot parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 33
+              },
+              {
+                "name": "0.14.162 indexed feature-journal pruning reference parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 34
+              },
+              {
+                "name": "0.14.163 native witness full SHA and Shadow JSON parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 35
+              },
+              {
+                "name": "0.14.164 fresh indexed target-config retrieval parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 36
+              },
+              {
+                "name": "0.14.165 HA session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 37
+              },
+              {
+                "name": "0.14.171 inference SQL session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 38
+              },
+              {
+                "name": "0.14.200 retained runtime SQLite cache result parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 39
+              },
+              {
+                "name": "0.14.201 contended runtime full candidate checksum smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 40
+              },
+              {
+                "name": "0.14.202 causal observation handoff smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 41
+              },
+              {
+                "name": "0.14.206 compact cold comparison smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 42
+              },
+              {
+                "name": "0.14.208 bounded Shadow evidence backpressure and exact recovery",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 43
+              },
+              {
+                "name": "0.14.210 populated screening and post-label learning smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 44
+              },
+              {
+                "name": "0.14.212 Candidate bundle parity and deadline wake smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 45
+              },
+              {
+                "name": "0.14.213 live card delivery and RAM worker cache smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 46
+              },
+              {
+                "name": "0.14.211 automatic quota recovery and foreground Control priority",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 47
+              },
+              {
+                "name": "0.14.207 observed Current and long-ON lighting regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 48
+              },
+              {
+                "name": "0.14.206 guarded Control dispatch with continuous pending events",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 49
+              },
+              {
+                "name": "0.14.203 real event scheduler under episode UI load",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 50
+              },
+              {
+                "name": "0.14.172 targeted retries terminate without peer replay",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 51
+              },
+              {
+                "name": "0.14.173 candidate observation causal feature and full checksum parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 52
+              },
+              {
+                "name": "0.14.166 bounded Recorder import row parity and transaction size",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 53
+              },
+              {
+                "name": "0.14.180 guarded Recorder insert/upsert row parity and disk sampling",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 54
+              },
+              {
+                "name": "0.14.158 compact classifier fit reference parity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 55
+              },
+              {
+                "name": "0.14.113 feature snapshot full replay benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 56
+              },
+              {
+                "name": "Stage 17 synthetic history-cost benchmark smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 57
+              },
+              {
+                "name": "0.14.76 Correct history scaling benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 58
+              },
+              {
+                "name": "0.14.77 active-home training QoS benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 59
+              },
+              {
+                "name": "0.14.78 HA ingest SQLite-decoupling benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 60
+              },
+              {
+                "name": "0.14.79 shared historical context profile",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 61
+              },
+              {
+                "name": "0.14.80 packaged Pi profiler CLI smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 62
+              },
+              {
+                "name": "0.14.81 observation-space and hot-path benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 63
+              },
+              {
+                "name": "0.14.82 tiny MLP Shadow inference/persistence benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 64
+              },
+              {
+                "name": "0.14.99 full Hybrid + Candidate hot-path baseline",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 65
+              },
+              {
+                "name": "Upload 0.14.99 Hybrid hot-path baseline",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 66
+              },
+              {
+                "name": "ETAP 2 deferred Candidate critical-path benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 67
+              },
+              {
+                "name": "ETAP 4 same-process Hybrid hotspot profile",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 68
+              },
+              {
+                "name": "0.14.83 bounded supervised tiny MLP training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 69
+              },
+              {
+                "name": "0.14.84 incremental neural Manual Correct benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 70
+              },
+              {
+                "name": "0.14.85 trusted Automatic Correct reward-buffer benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 71
+              },
+              {
+                "name": "0.14.86 conservative Offline-RL Candidate benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 72
+              },
+              {
+                "name": "0.14.87 stateful replay continuation benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 73
+              },
+              {
+                "name": "0.14.108 persistent training worker benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 74
+              },
+              {
+                "name": "0.14.109 dual-agent CPU capacity benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 75
+              },
+              {
+                "name": "0.14.110 target-only replay stream benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 76
+              },
+              {
+                "name": "Agent Training vNext sparse long-memory boundedness benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 77
+              },
+              {
+                "name": "Independent preference rollouts for historical training quality",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 78
+              },
+              {
+                "name": "0.14.88 Stage-9 Pi4 gate CLI smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 79
+              },
+              {
+                "name": "Stage 18 deterministic product runtime benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 80
+              },
+              {
+                "name": "Upload Stage 18 product benchmark report",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 81
+              },
+              {
+                "name": "Stage 18 actual source entrypoint smoke",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 82
+              },
+              {
+                "name": "0.14.170 promotion snapshot state and durable JSON parity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 83
+              },
+              {
+                "name": "Run python tools/simulate_anticipation.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 84
+              },
+              {
+                "name": "Run python tools/simulate_context_tournament.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 85
+              },
+              {
+                "name": "Run python tools/simulate_fast_light_timing.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 86
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 170
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 171
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 172
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 173
+              }
+            ]
+          },
+          {
+            "id": 128192717668,
+            "name": "tests (3.13)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 42305210953,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install vector-training dependency",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run python -m unittest discover -s tests -v",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Composed normal-policy scaling smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 7
+              },
+              {
+                "name": "Stage 1 active Candidate, training and Correct smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 8
+              },
+              {
+                "name": "Run node tools/verify_debug_export_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Recorder archive parity and bounded WAL writes",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 10
+              },
+              {
+                "name": "U03 synthetic neural cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 11
+              },
+              {
+                "name": "U04 shared action scorer cardinality benchmark (informational)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 12
+              },
+              {
+                "name": "U05b.1 isolated neural training core smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 13
+              },
+              {
+                "name": "U05b.2 independent offline quality gate smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 14
+              },
+              {
+                "name": "U05b.3 atomic checkpoint lifecycle and Undo smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 15
+              },
+              {
+                "name": "U05b.4a historical collector cardinality and composed ingress smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 16
+              },
+              {
+                "name": "U05b.4b.1 detached predecision evidence smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 17
+              },
+              {
+                "name": "U05b.4b.2 scoped affected-sensor evidence and native dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 18
+              },
+              {
+                "name": "U05b.4b.3 native granular retention and scoped dataset smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 19
+              },
+              {
+                "name": "U05b.4b.4 original V2/V3 evidence to validated offline artifact (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 20
+              },
+              {
+                "name": "U05b.4c.1f native V2/V3 collection and overload smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 21
+              },
+              {
+                "name": "U05b.4c.1f persistent collector disconnect and restart smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 22
+              },
+              {
+                "name": "U05b.4c.1a HA-native protocol and native journal audit smoke (offline host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 23
+              },
+              {
+                "name": "U05b.4c.1a cold and steady probe smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 24
+              },
+              {
+                "name": "U05b.4c.1 runtime collector durability smoke (host only)",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 25
+              },
+              {
+                "name": "Run python -m compileall -q adaptive_ai/src tools/benchmark_product_runtime.py tools/run_product_runtime_benchmark.py tools/benchmark_correct_history.py tools/benchmark_training_qos.py tools/benchmark_ha_ingress.py tools/benchmark_shared_context.py tools/benchmark_observation_space.py tools/benchmark_tiny_mlp.py tools/benchmark_tiny_mlp_training.py tools/benchmark_tiny_mlp_correct.py tools/benchmark_hybrid_inference.py tools/benchmark_inference_hotspots.py tools/benchmark_candidate_deferred.py tools/benchmark_automatic_correct.py tools/benchmark_offline_rl.py tools/benchmark_stateful_replay.py tools/benchmark_persistent_worker.py tools/benchmark_parallel_training.py tools/benchmark_target_only_replay.py tools/benchmark_ram_replay_index.py tools/benchmark_transition_edges.py tools/benchmark_feature_snapshot_reuse.py tools/benchmark_long_memory.py tools/profile_pi_training.py tools/evaluate_pi4_release.py tools/smoke_entrypoint.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Run node --check adaptive_ai/src/static/app.js && node --check adaptive_ai/src/static/debug_export_ui.js && node --check adaptive_ai/src/static/home.js && node --check adaptive_ai/src/static/polling_guard.js && node --check adaptive_ai/src/static/settings.js && node --check adaptive_ai/src/static/p0.js && node --check adaptive_ai/src/static/automation_baseline_ui.js && node --check adaptive_ai/src/static/queue.js && node --check adaptive_ai/src/static/experiments.js && node --check adaptive_ai/src/static/manual_feedback.js && node --check adaptive_ai/src/static/teach_observed_ui.js && node --check adaptive_ai/src/static/candidate_ui.js && node --check adaptive_ai/src/static/candidate_preference_ui.js && node --check adaptive_ai/src/static/agent_workflow_ui.js && node --check adaptive_ai/src/static/explore_ui.js && node --check adaptive_ai/src/static/promotion_lifecycle_ui.js && node --check adaptive_ai/src/static/confidence_contract_ui.js && node --check adaptive_ai/src/static/simple_agent_names.js && node --check adaptive_ai/src/static/runtime_activity_ui.js && node --check adaptive_ai/src/static/runtime_debug_ui.js",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              },
+              {
+                "name": "0.14.111 RAM replay index component benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 28
+              },
+              {
+                "name": "0.14.112 transition-edge index component benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 29
+              },
+              {
+                "name": "Numeric radar and relay full training benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 30
+              },
+              {
+                "name": "Causal statistics prefix parity and bounded replay work",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 31
+              },
+              {
+                "name": "0.14.157 Shadow JSON data and checksum parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 32
+              },
+              {
+                "name": "0.14.161 observed-pool JSON snapshot parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 33
+              },
+              {
+                "name": "0.14.162 indexed feature-journal pruning reference parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 34
+              },
+              {
+                "name": "0.14.163 native witness full SHA and Shadow JSON parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 35
+              },
+              {
+                "name": "0.14.164 fresh indexed target-config retrieval parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 36
+              },
+              {
+                "name": "0.14.165 HA session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 37
+              },
+              {
+                "name": "0.14.171 inference SQL session fresh-query and connection-count parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 38
+              },
+              {
+                "name": "0.14.200 retained runtime SQLite cache result parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 39
+              },
+              {
+                "name": "0.14.201 contended runtime full candidate checksum smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 40
+              },
+              {
+                "name": "0.14.202 causal observation handoff smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 41
+              },
+              {
+                "name": "0.14.206 compact cold comparison smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 42
+              },
+              {
+                "name": "0.14.208 bounded Shadow evidence backpressure and exact recovery",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 43
+              },
+              {
+                "name": "0.14.210 populated screening and post-label learning smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 44
+              },
+              {
+                "name": "0.14.212 Candidate bundle parity and deadline wake smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 45
+              },
+              {
+                "name": "0.14.213 live card delivery and RAM worker cache smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 46
+              },
+              {
+                "name": "0.14.211 automatic quota recovery and foreground Control priority",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 47
+              },
+              {
+                "name": "0.14.207 observed Current and long-ON lighting regressions",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 48
+              },
+              {
+                "name": "0.14.206 guarded Control dispatch with continuous pending events",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 49
+              },
+              {
+                "name": "0.14.203 real event scheduler under episode UI load",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 50
+              },
+              {
+                "name": "0.14.172 targeted retries terminate without peer replay",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 51
+              },
+              {
+                "name": "0.14.173 candidate observation causal feature and full checksum parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 52
+              },
+              {
+                "name": "0.14.166 bounded Recorder import row parity and transaction size",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 53
+              },
+              {
+                "name": "0.14.180 guarded Recorder insert/upsert row parity and disk sampling",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 54
+              },
+              {
+                "name": "0.14.158 compact classifier fit reference parity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 55
+              },
+              {
+                "name": "0.14.113 feature snapshot full replay benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 56
+              },
+              {
+                "name": "Stage 17 synthetic history-cost benchmark smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 57
+              },
+              {
+                "name": "0.14.76 Correct history scaling benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 58
+              },
+              {
+                "name": "0.14.77 active-home training QoS benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 59
+              },
+              {
+                "name": "0.14.78 HA ingest SQLite-decoupling benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 60
+              },
+              {
+                "name": "0.14.79 shared historical context profile",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 61
+              },
+              {
+                "name": "0.14.80 packaged Pi profiler CLI smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 62
+              },
+              {
+                "name": "0.14.81 observation-space and hot-path benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 63
+              },
+              {
+                "name": "0.14.82 tiny MLP Shadow inference/persistence benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 64
+              },
+              {
+                "name": "0.14.99 full Hybrid + Candidate hot-path baseline",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 65
+              },
+              {
+                "name": "Upload 0.14.99 Hybrid hot-path baseline",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 66
+              },
+              {
+                "name": "ETAP 2 deferred Candidate critical-path benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 67
+              },
+              {
+                "name": "ETAP 4 same-process Hybrid hotspot profile",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 68
+              },
+              {
+                "name": "0.14.83 bounded supervised tiny MLP training benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 69
+              },
+              {
+                "name": "0.14.84 incremental neural Manual Correct benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 70
+              },
+              {
+                "name": "0.14.85 trusted Automatic Correct reward-buffer benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 71
+              },
+              {
+                "name": "0.14.86 conservative Offline-RL Candidate benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 72
+              },
+              {
+                "name": "0.14.87 stateful replay continuation benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 73
+              },
+              {
+                "name": "0.14.108 persistent training worker benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 74
+              },
+              {
+                "name": "0.14.109 dual-agent CPU capacity benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 75
+              },
+              {
+                "name": "0.14.110 target-only replay stream benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 76
+              },
+              {
+                "name": "Agent Training vNext sparse long-memory boundedness benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 77
+              },
+              {
+                "name": "Independent preference rollouts for historical training quality",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 78
+              },
+              {
+                "name": "0.14.88 Stage-9 Pi4 gate CLI smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 79
+              },
+              {
+                "name": "Stage 18 deterministic product runtime benchmark",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 80
+              },
+              {
+                "name": "Upload Stage 18 product benchmark report",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 81
+              },
+              {
+                "name": "Stage 18 actual source entrypoint smoke",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 82
+              },
+              {
+                "name": "0.14.170 promotion snapshot state and durable JSON parity",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 83
+              },
+              {
+                "name": "Run python tools/simulate_anticipation.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 84
+              },
+              {
+                "name": "Run python tools/simulate_context_tournament.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 85
+              },
+              {
+                "name": "Run python tools/simulate_fast_light_timing.py",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 86
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 170
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 171
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 172
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 173
+              }
+            ]
+          },
+          {
+            "id": 128196108948,
+            "name": "package",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 42305210953,
+            "logs_url": null,
+            "steps": null
+          }
+        ]
+      },
+      "unit_tests": {
+        "3.11": [
+          "Ran 3176 tests in 217.487s"
+        ],
+        "3.13": [
+          "Ran 3176 tests in 320.981s"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,924 @@
+{
+  "checked_date": "2026-11-06",
+  "prs": [
+    {
+      "number": 369,
+      "title": "U05b.4c.1g: Predecision Evidence Scalability & Runtime Stability",
+      "draft": true,
+      "base": "codex/universal-u05b4c1f-qualified-evidence",
+      "base_sha": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d",
+      "head": "codex/universal-u05b4c1g-evidence-scalability",
+      "head_sha": "07ed423daa760bce2c1903448719cfe711b4f06b"
+    },
+    {
+      "number": 368,
+      "title": "U05b.4c.1f: Qualified Historical Evidence Under Sustained Load",
+      "draft": true,
+      "base": "codex/universal-u05b4c1e-steady-state",
+      "base_sha": "c4adb44512f8c1954a8cefdd7970710b249591d2",
+      "head": "codex/universal-u05b4c1f-qualified-evidence",
+      "head_sha": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d"
+    },
+    {
+      "number": 367,
+      "title": "U05b.4c.1e: Steady-State Performance & Qualified Evidence Under Load",
+      "draft": true,
+      "base": "codex/universal-u05b4c1-runtime-recovery",
+      "base_sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+      "head": "codex/universal-u05b4c1e-steady-state",
+      "head_sha": "c4adb44512f8c1954a8cefdd7970710b249591d2"
+    },
+    {
+      "number": 366,
+      "title": "U05b.4c.1: runtime recovery and collector durability",
+      "draft": true,
+      "base": "codex/universal-u05b4c1-ha-native-performance",
+      "base_sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2",
+      "head": "codex/universal-u05b4c1-runtime-recovery",
+      "head_sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1"
+    },
+    {
+      "number": 365,
+      "title": "U05b.4c.1: HA-Native Architecture and Runtime Performance Recovery (1a audit/profiling)",
+      "draft": true,
+      "base": "codex/universal-u05b4b4-e2e-neural-validation",
+      "base_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "head": "codex/universal-u05b4c1-ha-native-performance",
+      "head_sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2"
+    },
+    {
+      "number": 364,
+      "title": "U05b.4b.4: Original V2 Evidence to Validated Neural Artifact",
+      "draft": true,
+      "base": "codex/universal-u05b4b3-granular-retention",
+      "base_sha": "e797439989dba56ca2ccf3d37cf1b3521c501b1c",
+      "head": "codex/universal-u05b4b4-e2e-neural-validation",
+      "head_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3"
+    },
+    {
+      "number": 363,
+      "title": "U05b.4b.3: Granular FeatureJournal retention witnesses",
+      "draft": true,
+      "base": "codex/universal-u05b4b2-affected-sensors",
+      "base_sha": "4755830a0244c6ae33e115e27ce321600806c341",
+      "head": "codex/universal-u05b4b3-granular-retention",
+      "head_sha": "e797439989dba56ca2ccf3d37cf1b3521c501b1c"
+    },
+    {
+      "number": 362,
+      "title": "U05b.4b.2: scoped historical affected-sensor evidence",
+      "draft": true,
+      "base": "codex/universal-u05b4b-causal-evidence",
+      "base_sha": "1b298554490a629cbc00d024c3879659bbfeb253",
+      "head": "codex/universal-u05b4b2-affected-sensors",
+      "head_sha": "4755830a0244c6ae33e115e27ce321600806c341"
+    },
+    {
+      "number": 361,
+      "title": "U05b.4b.1: detached predecision arbiter evidence",
+      "draft": true,
+      "base": "codex/universal-u05b4a-history-collector",
+      "base_sha": "72487b945d521c8564928cea770de73023b82136",
+      "head": "codex/universal-u05b4b-causal-evidence",
+      "head_sha": "1b298554490a629cbc00d024c3879659bbfeb253"
+    },
+    {
+      "number": 360,
+      "title": "U05b.4a: opt-in historical training data collector",
+      "draft": true,
+      "base": "codex/universal-u05b3-artifact-lifecycle",
+      "base_sha": "3c3ccee8354cc74aab8ac871a010883b7054cbf1",
+      "head": "codex/universal-u05b4a-history-collector",
+      "head_sha": "72487b945d521c8564928cea770de73023b82136"
+    },
+    {
+      "number": 359,
+      "title": "U05b.3: validated offline neural checkpoint lifecycle",
+      "draft": true,
+      "base": "codex/universal-u05b2-quality-gate",
+      "base_sha": "6a9beaa30adbf7f848521a68ea323bb14a1962e5",
+      "head": "codex/universal-u05b3-artifact-lifecycle",
+      "head_sha": "3c3ccee8354cc74aab8ac871a010883b7054cbf1"
+    },
+    {
+      "number": 358,
+      "title": "U05b.2: independent offline quality gate and unlabeled action scoring",
+      "draft": true,
+      "base": "codex/universal-u05b-trainable-scorer",
+      "base_sha": "8d869fcffd8c5440546c8b82806ae163fcacd076",
+      "head": "codex/universal-u05b2-quality-gate",
+      "head_sha": "6a9beaa30adbf7f848521a68ea323bb14a1962e5"
+    },
+    {
+      "number": 357,
+      "title": "U05b.1: real shared action ranking training with frozen U03 encoder",
+      "draft": true,
+      "base": "codex/universal-u05a-training-data",
+      "base_sha": "e32f0b1802a66333d797af0d0fa87a2012975501",
+      "head": "codex/universal-u05b-trainable-scorer",
+      "head_sha": "8d869fcffd8c5440546c8b82806ae163fcacd076"
+    },
+    {
+      "number": 356,
+      "title": "U05a: causal training data and trusted supervision on 0.14.232",
+      "draft": true,
+      "base": "codex/universal-232-compat",
+      "base_sha": "859c372cf9418cf63dae7063f7ded78369a0dde3",
+      "head": "codex/universal-u05a-training-data",
+      "head_sha": "e32f0b1802a66333d797af0d0fa87a2012975501"
+    },
+    {
+      "number": 355,
+      "title": "Universal U01–U04c: compatibility port onto pinned 0.14.232",
+      "draft": true,
+      "base": "codex/runtime-regression-stage1-20261029",
+      "base_sha": "f7384ba5476f26155ecb138034cc3350fa5bfda2",
+      "head": "codex/universal-232-compat",
+      "head_sha": "859c372cf9418cf63dae7063f7ded78369a0dde3"
+    },
+    {
+      "number": 354,
+      "title": "U04c: opt-in dynamic neural action observer with production DeviceAgent masks",
+      "draft": true,
+      "base": "feature/universal-u04b-observer-runtime",
+      "base_sha": "1c54cb865bc5b85d77cb930bf24ad18699fe56ac",
+      "head": "feature/universal-u04c-shadow-action-observer",
+      "head_sha": "e2989925573a5bc2748e87652570125232d3f69c"
+    },
+    {
+      "number": 353,
+      "title": "U04b: opt-in bounded neural observer on live Home Assistant events",
+      "draft": true,
+      "base": "feature/universal-u04-action-conditioned",
+      "base_sha": "a05c66a55a5dd0702f8c7cdbfc273a03be96d45e",
+      "head": "feature/universal-u04b-observer-runtime",
+      "head_sha": "1c54cb865bc5b85d77cb930bf24ad18699fe56ac"
+    },
+    {
+      "number": 352,
+      "title": "U04a: variable-cardinality DeviceAgent action contract + shared neural action scorer",
+      "draft": true,
+      "base": "feature/universal-neural-u03-shared-encoder",
+      "base_sha": "deb5e9cdfe3398d6f0b756694c1f9a8024984fa9",
+      "head": "feature/universal-u04-action-conditioned",
+      "head_sha": "a05c66a55a5dd0702f8c7cdbfc273a03be96d45e"
+    },
+    {
+      "number": 351,
+      "title": "U03: shared neural Deep Sets encoder with incremental per-room caches",
+      "draft": true,
+      "base": "feature/universal-observation-u02-causal-replay",
+      "base_sha": "89ea8e01acf10fc5466739a5b5f18fde8eb08148",
+      "head": "feature/universal-neural-u03-shared-encoder",
+      "head_sha": "deb5e9cdfe3398d6f0b756694c1f9a8024984fa9"
+    },
+    {
+      "number": 350,
+      "title": "U02: HA semantic adapter and causal historical observations",
+      "draft": true,
+      "base": "feature/universal-observation-v1-20261031",
+      "base_sha": "d32b8cf927fea368717624d3b9dcc3a2947e05d5",
+      "head": "feature/universal-observation-u02-causal-replay",
+      "head_sha": "89ea8e01acf10fc5466739a5b5f18fde8eb08148"
+    },
+    {
+      "number": 349,
+      "title": "U01: dynamic typed observation set foundation for Universal Neural Engine",
+      "draft": true,
+      "base": "main",
+      "base_sha": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+      "head": "feature/universal-observation-v1-20261031",
+      "head_sha": "d32b8cf927fea368717624d3b9dcc3a2947e05d5"
+    },
+    {
+      "number": 348,
+      "title": "0.14.232 Stage 1: diagnose composed runtime and cache immutable SQL syntax classification",
+      "draft": true,
+      "base": "codex/performance-capture-20261027",
+      "base_sha": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
+      "head": "codex/runtime-regression-stage1-20261029",
+      "head_sha": "f7384ba5476f26155ecb138034cc3350fa5bfda2"
+    },
+    {
+      "number": 347,
+      "title": "0.14.231: eliminate redundant ingress snapshot and reduce Tournament capture bookkeeping",
+      "draft": false,
+      "base": "codex/performance-capture-20261027",
+      "base_sha": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
+      "head": "codex/inference-capture-0.14.231",
+      "head_sha": "a5b07f0c3277f5c7a7dc1edc3197dcb02679abd4"
+    },
+    {
+      "number": 346,
+      "title": "0.14.230: reduce scheduler routing copies and benchmark composed normal policies",
+      "draft": true,
+      "base": "codex/shadow-agent-scaling-20261026",
+      "base_sha": "8e47cd6652c1364f0b048f79d507929b1cca6168",
+      "head": "codex/performance-capture-20261027",
+      "head_sha": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b"
+    },
+    {
+      "number": 345,
+      "title": "0.14.229: reduce shared Shadow work and prioritize Root decisions",
+      "draft": true,
+      "base": "codex/debug-export-runtime-priority-20261023",
+      "base_sha": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce",
+      "head": "codex/shadow-agent-scaling-20261026",
+      "head_sha": "8e47cd6652c1364f0b048f79d507929b1cca6168"
+    },
+    {
+      "number": 344,
+      "title": "0.14.228: remove pre-Live Candidate writer waits and recover debug export timeouts",
+      "draft": true,
+      "base": "codex/shadow-ingress-corruption-20261023",
+      "base_sha": "e60ee69ef1c432a54d44cc85ef7534348f6070b4",
+      "head": "codex/debug-export-runtime-priority-20261023",
+      "head_sha": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce"
+    },
+    {
+      "number": 343,
+      "title": "0.14.227: isolate corrupt raw audit storage from HA and Shadow ingress",
+      "draft": true,
+      "base": "codex/correct-history-readonly-20261022",
+      "base_sha": "43c6fc7f94630aa93189348255b2a857a8101ad6",
+      "head": "codex/shadow-ingress-corruption-20261023",
+      "head_sha": "e60ee69ef1c432a54d44cc85ef7534348f6070b4"
+    },
+    {
+      "number": 342,
+      "title": "0.14.226: unblock Correct history reads during training and storage writes",
+      "draft": true,
+      "base": "codex/realtime-state-history-20261022",
+      "base_sha": "9fd5a24f81ad17d853c8b6e10cddc69502cf0ccb",
+      "head": "codex/correct-history-readonly-20261022",
+      "head_sha": "43c6fc7f94630aa93189348255b2a857a8101ad6"
+    },
+    {
+      "number": 341,
+      "title": "0.14.225: collect closed-panel latency history and prevent delayed Current/history delivery",
+      "draft": true,
+      "base": "codex/training-admission-status-20261021",
+      "base_sha": "c28ac86d79d675f41a30bb39ac795ea8da5c7e40",
+      "head": "codex/realtime-state-history-20261022",
+      "head_sha": "9fd5a24f81ad17d853c8b6e10cddc69502cf0ccb"
+    },
+    {
+      "number": 340,
+      "title": "0.14.224: recover responsive Resume/Rebuild admission after interrupted training",
+      "draft": true,
+      "base": "codex/performance-trend-20261021",
+      "base_sha": "9721c29138b106e176e707b6b0f349b73f50a2f9",
+      "head": "codex/training-admission-status-20261021",
+      "head_sha": "c28ac86d79d675f41a30bb39ac795ea8da5c7e40"
+    },
+    {
+      "number": 339,
+      "title": "0.14.223: latency sparklines and bounded RAM-first training",
+      "draft": true,
+      "base": "codex/training-admission-20261020",
+      "base_sha": "dbe5be5720d2b7bae5b779654fc8b619766f68d8",
+      "head": "codex/performance-trend-20261021",
+      "head_sha": "9721c29138b106e176e707b6b0f349b73f50a2f9"
+    },
+    {
+      "number": 338,
+      "title": "0.14.222: unblock training admission and pending dialog dismissal",
+      "draft": true,
+      "base": "codex/training-buttons-20261020",
+      "base_sha": "898bffa2cde6fd1d0c1de0d7d19130eb45695e91",
+      "head": "codex/training-admission-20261020",
+      "head_sha": "dbe5be5720d2b7bae5b779654fc8b619766f68d8"
+    },
+    {
+      "number": 337,
+      "title": "Fix silent Resume and Rebuild actions in embedded panels (0.14.221)",
+      "draft": true,
+      "base": "codex/training-ram-20261019",
+      "base_sha": "724e5e5b6936f3fd38e249bc08ba0fd5d47e69db",
+      "head": "codex/training-buttons-20261020",
+      "head_sha": "898bffa2cde6fd1d0c1de0d7d19130eb45695e91"
+    },
+    {
+      "number": 336,
+      "title": "Use bounded RAM for Recorder training preparation and avoid storage restart loops (0.14.220)",
+      "draft": true,
+      "base": "codex/pi-startup-20261019",
+      "base_sha": "196ce914dcb31a9c9f98c3897abdec10c66de987",
+      "head": "codex/training-ram-20261019",
+      "head_sha": "724e5e5b6936f3fd38e249bc08ba0fd5d47e69db"
+    },
+    {
+      "number": 335,
+      "title": "Speed up restart reads and avoid UI waits for derived Confidence caches (0.14.219)",
+      "draft": true,
+      "base": "codex/shadow-persistence-20261019",
+      "base_sha": "0eae5b9cab5e37c1d09114affa4ada419408ef77",
+      "head": "codex/pi-startup-20261019",
+      "head_sha": "196ce914dcb31a9c9f98c3897abdec10c66de987"
+    },
+    {
+      "number": 334,
+      "title": "Isolate Candidate evidence writes and batch guarded runtime provenance (0.14.218)",
+      "draft": true,
+      "base": "codex/performance-plan-20261018",
+      "base_sha": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
+      "head": "codex/shadow-persistence-20261019",
+      "head_sha": "0eae5b9cab5e37c1d09114affa4ada419408ef77"
+    },
+    {
+      "number": 333,
+      "title": "Reduce target admission and SQL overhead with full-runtime performance evidence (0.14.217)",
+      "draft": true,
+      "base": "codex/startup-and-runtime-scaling-20261018",
+      "base_sha": "b4e3e22d7881c9cf7380386ff027b05e4471780b",
+      "head": "codex/performance-plan-20261018",
+      "head_sha": "f84211d676cf07c8ef80ea72aa6868d8747f38f7"
+    },
+    {
+      "number": 332,
+      "title": "Remove archive scans from startup and audit runtime scaling (0.14.216)",
+      "draft": true,
+      "base": "codex/isolated-runtime-compute-20261017",
+      "base_sha": "7c52470a0889cb3d4cfbd240666ae4b658a27e39",
+      "head": "codex/startup-and-runtime-scaling-20261018",
+      "head_sha": "b4e3e22d7881c9cf7380386ff027b05e4471780b"
+    },
+    {
+      "number": 331,
+      "title": "Isolate background CPU from Control and Shadow reactions (0.14.215)",
+      "draft": true,
+      "base": "codex/tournament-background-reaction-20261017",
+      "base_sha": "5e6fd19518ba09449c923714cd9b144dc137e1bb",
+      "head": "codex/isolated-runtime-compute-20261017",
+      "head_sha": "7c52470a0889cb3d4cfbd240666ae4b658a27e39"
+    },
+    {
+      "number": 330,
+      "title": "Free Control and Shadow target workers from Sensor Tournament (0.14.214)",
+      "draft": true,
+      "base": "codex/live-shadow-ram-refresh-20261017",
+      "base_sha": "b529bbd09aef665987db323aba9001e2d2c2762b",
+      "head": "codex/tournament-background-reaction-20261017",
+      "head_sha": "5e6fd19518ba09449c923714cd9b144dc137e1bb"
+    },
+    {
+      "number": 329,
+      "title": "Deliver fresh Shadow tiles and reuse bounded worker RAM caches (0.14.213)",
+      "draft": true,
+      "base": "codex/shadow-computation-performance-20261017",
+      "base_sha": "fcd85455ce2f4d499ccbf18e3065c51d80aff8ea",
+      "head": "codex/live-shadow-ram-refresh-20261017",
+      "head_sha": "b529bbd09aef665987db323aba9001e2d2c2762b"
+    },
+    {
+      "number": 328,
+      "title": "Accelerate Candidate Shadow scheduling and observations (0.14.212)",
+      "draft": true,
+      "base": "codex/storage-recovery-reaction-20261017",
+      "base_sha": "5efd9327456a3b054e09db9e908a240148ae55c4",
+      "head": "codex/shadow-computation-performance-20261017",
+      "head_sha": "fcd85455ce2f4d499ccbf18e3065c51d80aff8ea"
+    },
+    {
+      "number": 327,
+      "title": "Recover diagnostic storage automatically and prioritize decisions (0.14.211)",
+      "draft": true,
+      "base": "codex/sensor-action-performance-20261016",
+      "base_sha": "781c44f9461d2f19656e6f2d3f7327e5563a6408",
+      "head": "codex/storage-recovery-reaction-20261017",
+      "head_sha": "5efd9327456a3b054e09db9e908a240148ae55c4"
+    },
+    {
+      "number": 326,
+      "title": "Reduce CPU blocking between sensor decisions (0.14.210)",
+      "draft": true,
+      "base": "codex/shadow-storage-backpressure-20261016",
+      "base_sha": "0601094c2136e8db754f2684c4071b1de634412f",
+      "head": "codex/sensor-action-performance-20261016",
+      "head_sha": "781c44f9461d2f19656e6f2d3f7327e5563a6408"
+    },
+    {
+      "number": 325,
+      "title": "Fix Candidate Shadow backpressure under storage quotas (0.14.208)",
+      "draft": true,
+      "base": "codex/correct-lighting-regressions-20261016",
+      "base_sha": "6abe0f95c946d33839e26eff5f483682b4316d36",
+      "head": "codex/shadow-storage-backpressure-20261016",
+      "head_sha": "0601094c2136e8db754f2684c4071b1de634412f"
+    },
+    {
+      "number": 324,
+      "title": "0.14.207: restore physical Current and stabilize long-stay lighting",
+      "draft": true,
+      "base": "codex/runtime-tail-latency-20261015",
+      "base_sha": "bf9bce389a6a15601d48f933d493b43bbbe8ff34",
+      "head": "codex/correct-lighting-regressions-20261016",
+      "head_sha": "6abe0f95c946d33839e26eff5f483682b4316d36"
+    },
+    {
+      "number": 323,
+      "title": "0.14.206: prioritize sensor events and avoid cold audit scans",
+      "draft": true,
+      "base": "codex/sensor-control-priority-20261015",
+      "base_sha": "d0b98210b49c34102d403350a943fbf21336191f",
+      "head": "codex/runtime-tail-latency-20261015",
+      "head_sha": "bf9bce389a6a15601d48f933d493b43bbbe8ff34"
+    },
+    {
+      "number": 322,
+      "title": "Prioritize sensor-to-control reaction and sample candidate work (0.14.205)",
+      "draft": true,
+      "base": "codex/runtime-shadow-performance-20261015",
+      "base_sha": "653b8b4f2e387d9c1b17319f84c073d964f953fe",
+      "head": "codex/sensor-control-priority-20261015",
+      "head_sha": "d0b98210b49c34102d403350a943fbf21336191f"
+    },
+    {
+      "number": 321,
+      "title": "Reuse causal entity features across Shadow candidates (0.14.204)",
+      "draft": true,
+      "base": "codex/runtime-priority-20261015",
+      "base_sha": "058f3a32ff55474d516fcd564ccd1f1bf0fbfbd4",
+      "head": "codex/runtime-shadow-performance-20261015",
+      "head_sha": "653b8b4f2e387d9c1b17319f84c073d964f953fe"
+    },
+    {
+      "number": 320,
+      "title": "Reduce episode comparison contention on sensor reaction (0.14.203)",
+      "draft": true,
+      "base": "codex/runtime-reaction-20261015",
+      "base_sha": "2571538d2eaf902222fe5685c93cdaecea376719",
+      "head": "codex/runtime-priority-20261015",
+      "head_sha": "058f3a32ff55474d516fcd564ccd1f1bf0fbfbd4"
+    },
+    {
+      "number": 319,
+      "title": "Shorten sensor-to-action path and expose HA dispatch timing (0.14.202)",
+      "draft": true,
+      "base": "codex/runtime-hot-path-20261015",
+      "base_sha": "ec217ca5457e598d2583e4cb216b48872a441d46",
+      "head": "codex/runtime-reaction-20261015",
+      "head_sha": "2571538d2eaf902222fe5685c93cdaecea376719"
+    },
+    {
+      "number": 318,
+      "title": "0.14.201: reduce shadow SQL work and runtime thread contention",
+      "draft": true,
+      "base": "codex/runtime-ram-cache-20261015",
+      "base_sha": "aa79300971b369b1815b128cb895f89f032b3883",
+      "head": "codex/runtime-hot-path-20261015",
+      "head_sha": "ec217ca5457e598d2583e4cb216b48872a441d46"
+    },
+    {
+      "number": 317,
+      "title": "0.14.200: retain bounded SQLite caches between runtime decisions",
+      "draft": true,
+      "base": "codex/runtime-wal-registry-20261015",
+      "base_sha": "be2aac45cf71518f58b79b0fd9c31d91e0bf80a5",
+      "head": "codex/runtime-ram-cache-20261015",
+      "head_sha": "aa79300971b369b1815b128cb895f89f032b3883"
+    },
+    {
+      "number": 316,
+      "title": "Reduce SQLite setup and improve WAL recovery (0.14.199)",
+      "draft": true,
+      "base": "codex/runtime-sqlite-gaps-20261014",
+      "base_sha": "21c12ef8a8ad023d1cf158fed85d5e97ede538fa",
+      "head": "codex/runtime-wal-registry-20261015",
+      "head_sha": "be2aac45cf71518f58b79b0fd9c31d91e0bf80a5"
+    },
+    {
+      "number": 315,
+      "title": "Retain observed evidence across SQLite contention (0.14.198)",
+      "draft": true,
+      "base": "codex/shadow-observation-census-20261014",
+      "base_sha": "daae55611e5f5ae8905beeca8305040f739bb03a",
+      "head": "codex/runtime-sqlite-gaps-20261014",
+      "head_sha": "21c12ef8a8ad023d1cf158fed85d5e97ede538fa"
+    },
+    {
+      "number": 314,
+      "title": "Share pool census across the complete Shadow observation (0.14.197)",
+      "draft": true,
+      "base": "codex/sqlite-deferred-write-regression-20261014",
+      "base_sha": "1b4d961c3da764bff9a925700ea5c5c29ff5915f",
+      "head": "codex/shadow-observation-census-20261014",
+      "head_sha": "daae55611e5f5ae8905beeca8305040f739bb03a"
+    },
+    {
+      "number": 313,
+      "title": "Avoid deferred SQLite collisions during WAL reclamation (0.14.196)",
+      "draft": true,
+      "base": "codex/context-buffer-shared-payloads-20261014",
+      "base_sha": "141e064e3d62eb36fdaa2553eb05936c3224a475",
+      "head": "codex/sqlite-deferred-write-regression-20261014",
+      "head_sha": "1b4d961c3da764bff9a925700ea5c5c29ff5915f"
+    },
+    {
+      "number": 312,
+      "title": "Avoid false RAM pressure during context statistics writes (0.14.195)",
+      "draft": true,
+      "base": "codex/shadow-persistence-snapshot-performance-20261014",
+      "base_sha": "e5b14217dd26a071bc698f89b34fa7d16afa0514",
+      "head": "codex/context-buffer-shared-payloads-20261014",
+      "head_sha": "141e064e3d62eb36fdaa2553eb05936c3224a475"
+    },
+    {
+      "number": 311,
+      "title": "Reuse immutable policy sources during Shadow persistence (0.14.194)",
+      "draft": true,
+      "base": "codex/context-pool-incremental-performance-20261014",
+      "base_sha": "be7621c3514fd7ec145ae534c28c1fd2833f646a",
+      "head": "codex/shadow-persistence-snapshot-performance-20261014",
+      "head_sha": "e5b14217dd26a071bc698f89b34fa7d16afa0514"
+    },
+    {
+      "number": 310,
+      "title": "Reduce redundant SQLite read work in runtime (0.14.193)",
+      "draft": true,
+      "base": "codex/shadow-sealed-ram-performance-20261014",
+      "base_sha": "70e3d94ae843996d66b13717e01351ff53a70e53",
+      "head": "codex/context-pool-incremental-performance-20261014",
+      "head_sha": "be7621c3514fd7ec145ae534c28c1fd2833f646a"
+    },
+    {
+      "number": 309,
+      "title": "Speed up context Shadow and training indexes with RAM (0.14.192)",
+      "draft": true,
+      "base": "codex/runtime-ram-performance-20261013",
+      "base_sha": "4a82f3a23cf8dd05c6db4f62272da26c816c6837",
+      "head": "codex/shadow-sealed-ram-performance-20261014",
+      "head_sha": "70e3d94ae843996d66b13717e01351ff53a70e53"
+    },
+    {
+      "number": 308,
+      "title": "Reduce runtime I/O with bounded RAM buffers (0.14.191)",
+      "draft": true,
+      "base": "codex/correct-generation-stability-20261013",
+      "base_sha": "ce332508a36d906423103ced218791edf0d3edd5",
+      "head": "codex/runtime-ram-performance-20261013",
+      "head_sha": "4a82f3a23cf8dd05c6db4f62272da26c816c6837"
+    },
+    {
+      "number": 307,
+      "title": "Preserve ON/OFF knowledge across Correct generations (0.14.190)",
+      "draft": true,
+      "base": "codex/correct-candidate-parent-preservation-20261013",
+      "base_sha": "82a39ae352fee3f58275359d1be63ff604729820",
+      "head": "codex/correct-generation-stability-20261013",
+      "head_sha": "ce332508a36d906423103ced218791edf0d3edd5"
+    },
+    {
+      "number": 306,
+      "title": "0.14.189: Correct keeps the trained parent instead of rebuilding a valid v12 model",
+      "draft": true,
+      "base": "codex/pi4-chunk-training-performance-20261012",
+      "base_sha": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27",
+      "head": "codex/correct-candidate-parent-preservation-20261013",
+      "head_sha": "82a39ae352fee3f58275359d1be63ff604729820"
+    },
+    {
+      "number": 305,
+      "title": "0.14.188: reuse causal statistics across chunks and index replay fallback",
+      "draft": true,
+      "base": "codex/pi4-context-training-performance-20261012",
+      "base_sha": "9de14cfe5d48b08ba75471f0e3d1071a32f4cd21",
+      "head": "codex/pi4-chunk-training-performance-20261012",
+      "head_sha": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27"
+    },
+    {
+      "number": 304,
+      "title": "0.14.187: reuse decoded history samples during reward replay",
+      "draft": true,
+      "base": "codex/training-context-relevance-20261012",
+      "base_sha": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe",
+      "head": "codex/pi4-context-training-performance-20261012",
+      "head_sha": "9de14cfe5d48b08ba75471f0e3d1071a32f4cd21"
+    },
+    {
+      "number": 303,
+      "title": "0.14.186: reassess lighting dependency and radar context before Rebuild",
+      "draft": true,
+      "base": "codex/pi4-training-storage-20261012",
+      "base_sha": "f4efd1fd9da39d6189d7d5db519f89481896f213",
+      "head": "codex/training-context-relevance-20261012",
+      "head_sha": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe"
+    },
+    {
+      "number": 302,
+      "title": "0.14.185: reduce Recorder training import overhead and WAL rewrites",
+      "draft": true,
+      "base": "main",
+      "base_sha": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+      "head": "codex/pi4-training-storage-20261012",
+      "head_sha": "f4efd1fd9da39d6189d7d5db519f89481896f213"
+    }
+  ],
+  "universal_details": [
+    {
+      "number": 349,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "main",
+      "base_sha": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+      "head": "feature/universal-observation-v1-20261031",
+      "head_sha": "d32b8cf927fea368717624d3b9dcc3a2947e05d5",
+      "title": "U01: dynamic typed observation set foundation for Universal Neural Engine"
+    },
+    {
+      "number": 350,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "feature/universal-observation-v1-20261031",
+      "base_sha": "d32b8cf927fea368717624d3b9dcc3a2947e05d5",
+      "head": "feature/universal-observation-u02-causal-replay",
+      "head_sha": "89ea8e01acf10fc5466739a5b5f18fde8eb08148",
+      "title": "U02: HA semantic adapter and causal historical observations"
+    },
+    {
+      "number": 351,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "feature/universal-observation-u02-causal-replay",
+      "base_sha": "89ea8e01acf10fc5466739a5b5f18fde8eb08148",
+      "head": "feature/universal-neural-u03-shared-encoder",
+      "head_sha": "deb5e9cdfe3398d6f0b756694c1f9a8024984fa9",
+      "title": "U03: shared neural Deep Sets encoder with incremental per-room caches"
+    },
+    {
+      "number": 352,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "feature/universal-neural-u03-shared-encoder",
+      "base_sha": "deb5e9cdfe3398d6f0b756694c1f9a8024984fa9",
+      "head": "feature/universal-u04-action-conditioned",
+      "head_sha": "a05c66a55a5dd0702f8c7cdbfc273a03be96d45e",
+      "title": "U04a: variable-cardinality DeviceAgent action contract + shared neural action scorer"
+    },
+    {
+      "number": 353,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "feature/universal-u04-action-conditioned",
+      "base_sha": "a05c66a55a5dd0702f8c7cdbfc273a03be96d45e",
+      "head": "feature/universal-u04b-observer-runtime",
+      "head_sha": "1c54cb865bc5b85d77cb930bf24ad18699fe56ac",
+      "title": "U04b: opt-in bounded neural observer on live Home Assistant events"
+    },
+    {
+      "number": 354,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "feature/universal-u04b-observer-runtime",
+      "base_sha": "1c54cb865bc5b85d77cb930bf24ad18699fe56ac",
+      "head": "feature/universal-u04c-shadow-action-observer",
+      "head_sha": "e2989925573a5bc2748e87652570125232d3f69c",
+      "title": "U04c: opt-in dynamic neural action observer with production DeviceAgent masks"
+    },
+    {
+      "number": 355,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/runtime-regression-stage1-20261029",
+      "base_sha": "f7384ba5476f26155ecb138034cc3350fa5bfda2",
+      "head": "codex/universal-232-compat",
+      "head_sha": "859c372cf9418cf63dae7063f7ded78369a0dde3",
+      "title": "Universal U01–U04c: compatibility port onto pinned 0.14.232"
+    },
+    {
+      "number": 356,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-232-compat",
+      "base_sha": "859c372cf9418cf63dae7063f7ded78369a0dde3",
+      "head": "codex/universal-u05a-training-data",
+      "head_sha": "e32f0b1802a66333d797af0d0fa87a2012975501",
+      "title": "U05a: causal training data and trusted supervision on 0.14.232"
+    },
+    {
+      "number": 357,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05a-training-data",
+      "base_sha": "e32f0b1802a66333d797af0d0fa87a2012975501",
+      "head": "codex/universal-u05b-trainable-scorer",
+      "head_sha": "8d869fcffd8c5440546c8b82806ae163fcacd076",
+      "title": "U05b.1: real shared action ranking training with frozen U03 encoder"
+    },
+    {
+      "number": 358,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b-trainable-scorer",
+      "base_sha": "8d869fcffd8c5440546c8b82806ae163fcacd076",
+      "head": "codex/universal-u05b2-quality-gate",
+      "head_sha": "6a9beaa30adbf7f848521a68ea323bb14a1962e5",
+      "title": "U05b.2: independent offline quality gate and unlabeled action scoring"
+    },
+    {
+      "number": 359,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b2-quality-gate",
+      "base_sha": "6a9beaa30adbf7f848521a68ea323bb14a1962e5",
+      "head": "codex/universal-u05b3-artifact-lifecycle",
+      "head_sha": "3c3ccee8354cc74aab8ac871a010883b7054cbf1",
+      "title": "U05b.3: validated offline neural checkpoint lifecycle"
+    },
+    {
+      "number": 360,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b3-artifact-lifecycle",
+      "base_sha": "3c3ccee8354cc74aab8ac871a010883b7054cbf1",
+      "head": "codex/universal-u05b4a-history-collector",
+      "head_sha": "72487b945d521c8564928cea770de73023b82136",
+      "title": "U05b.4a: opt-in historical training data collector"
+    },
+    {
+      "number": 361,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4a-history-collector",
+      "base_sha": "72487b945d521c8564928cea770de73023b82136",
+      "head": "codex/universal-u05b4b-causal-evidence",
+      "head_sha": "1b298554490a629cbc00d024c3879659bbfeb253",
+      "title": "U05b.4b.1: detached predecision arbiter evidence"
+    },
+    {
+      "number": 362,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4b-causal-evidence",
+      "base_sha": "1b298554490a629cbc00d024c3879659bbfeb253",
+      "head": "codex/universal-u05b4b2-affected-sensors",
+      "head_sha": "4755830a0244c6ae33e115e27ce321600806c341",
+      "title": "U05b.4b.2: scoped historical affected-sensor evidence"
+    },
+    {
+      "number": 363,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4b2-affected-sensors",
+      "base_sha": "4755830a0244c6ae33e115e27ce321600806c341",
+      "head": "codex/universal-u05b4b3-granular-retention",
+      "head_sha": "e797439989dba56ca2ccf3d37cf1b3521c501b1c",
+      "title": "U05b.4b.3: Granular FeatureJournal retention witnesses"
+    },
+    {
+      "number": 364,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4b3-granular-retention",
+      "base_sha": "e797439989dba56ca2ccf3d37cf1b3521c501b1c",
+      "head": "codex/universal-u05b4b4-e2e-neural-validation",
+      "head_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "title": "U05b.4b.4: Original V2 Evidence to Validated Neural Artifact"
+    },
+    {
+      "number": 365,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4b4-e2e-neural-validation",
+      "base_sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "head": "codex/universal-u05b4c1-ha-native-performance",
+      "head_sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2",
+      "title": "U05b.4c.1: HA-Native Architecture and Runtime Performance Recovery (1a audit/profiling)"
+    },
+    {
+      "number": 366,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4c1-ha-native-performance",
+      "base_sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2",
+      "head": "codex/universal-u05b4c1-runtime-recovery",
+      "head_sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+      "title": "U05b.4c.1: runtime recovery and collector durability"
+    },
+    {
+      "number": 367,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4c1-runtime-recovery",
+      "base_sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+      "head": "codex/universal-u05b4c1e-steady-state",
+      "head_sha": "c4adb44512f8c1954a8cefdd7970710b249591d2",
+      "title": "U05b.4c.1e: Steady-State Performance & Qualified Evidence Under Load"
+    },
+    {
+      "number": 368,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4c1e-steady-state",
+      "base_sha": "c4adb44512f8c1954a8cefdd7970710b249591d2",
+      "head": "codex/universal-u05b4c1f-qualified-evidence",
+      "head_sha": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d",
+      "title": "U05b.4c.1f: Qualified Historical Evidence Under Sustained Load"
+    },
+    {
+      "number": 369,
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "mergeable": true,
+      "base": "codex/universal-u05b4c1f-qualified-evidence",
+      "base_sha": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d",
+      "head": "codex/universal-u05b4c1g-evidence-scalability",
+      "head_sha": "07ed423daa760bce2c1903448719cfe711b4f06b",
+      "title": "U05b.4c.1g: Predecision Evidence Scalability & Runtime Stability"
+    }
+  ],
+  "ci": [
+    {
+      "id": 41971796849,
+      "sha": "07ed423daa760bce2c1903448719cfe711b4f06b",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971796849"
+    },
+    {
+      "id": 41971791244,
+      "sha": "07ed423daa760bce2c1903448719cfe711b4f06b",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244"
+    }
+  ],
+  "releases": [
+    {
+      "tag": "v0.14.231-rc.1",
+      "draft": false,
+      "prerelease": true,
+      "sha": "a5b07f0c3277f5c7a7dc1edc3197dcb02679abd4",
+      "url": "https://github.com/mpuchara/HomeMind-HA/releases/tag/v0.14.231-rc.1"
+    },
+    {
+      "tag": "v0.14.184",
+      "draft": false,
+      "prerelease": false,
+      "sha": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+      "url": "https://github.com/mpuchara/HomeMind-HA/releases/tag/v0.14.184"
+    },
+    {
+      "tag": "v0.14.183",
+      "draft": false,
+      "prerelease": false,
+      "sha": "e1d434e9cf45f641e962c9e65c95e1f95cde4a3d",
+      "url": "https://github.com/mpuchara/HomeMind-HA/releases/tag/v0.14.183"
+    },
+    {
+      "tag": "v0.14.182",
+      "draft": false,
+      "prerelease": false,
+      "sha": "e0ca2687083f062378877649902eb17e5fb3d21f",
+      "url": "https://github.com/mpuchara/HomeMind-HA/releases/tag/v0.14.182"
+    },
+    {
+      "tag": "v0.14.181",
+      "draft": false,
+      "prerelease": false,
+      "sha": "537e06ae16d4be0aedc7c9e443c94d51b96ebc6a",
+      "url": "https://github.com/mpuchara/HomeMind-HA/releases/tag/v0.14.181"
+    }
+  ]
+}

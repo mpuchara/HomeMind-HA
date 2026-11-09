@@ -1,0 +1,294 @@
+## Gate D feasibility checkpoint — 2026-11-09
+
+**CURRENT REQUIREMENTS NOT DEMONSTRABLY ACHIEVABLE. Gate D remains BLOCKER.**
+The retained 0.14.232 add-on tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`
+from `9c245577` clears all four registered aggregate throughput targets, with
+9/13 timing screens passing against exact #368 `951dcd70`. The original
+50/10 scheduling experiment remains reverted. A separate four-arm diagnostic
+observed 50/10 p99 dominated by first-wave executor delay, with zero preparation
+overlap at the measured proxy boundaries. The cause of the original two
+unprofiled timing failures remains unknown.
+
+[CI 42674180258](https://github.com/mpuchara/HomeMind-HA/actions/runs/42674180258)
+is FAILURE on `dba0ceb1`. GitHub reports an internal server error and omits the
+image job. Both test jobs succeeded and package skipped as designed.
+
+**Resume with Option 3: Gate D criteria review.** Verify exact Draft PR #369
+reporting HEAD, CI, clean worktree and the unchanged retained tree first. Use
+the bounded independent 50/10 protocol in the decision report for the review.
+Keep the original acceptance matrix and thresholds in force. Runtime, version,
+Collector default and release status are unchanged. Candidate Recovery,
+production composition, actual-data migration, retention/rollback, four-hour
+soak and Pi/live HA remain open.
+
+[Feasibility](FINAL_RELEASE_GATE_D_FEASIBILITY.md) · [Performance limits](FINAL_RELEASE_PERFORMANCE_LIMITS.md) · [Decision and exact continuation](FINAL_RELEASE_GATE_D_DECISION.md)
+
+## Previous checkpoint (historical)
+
+# Evidence scheduling checkpoint — 2026-11-09
+
+**Gate D remains BLOCKER.** A same-source trace under controlled contention reproduces 13 → 12 qualified with all 384 decisions. A foreground drain finishes after priority expires and the collector then waits for a 250 ms poll. The next ingress closes the remaining opportunity. The traced miss is `light.fixture_12`. The historic 13 → 11 run has no equivalent scheduler trace.
+
+Candidate `b141ac0f` adds one readiness recheck at that boundary. It passes controlled scheduling, Universal and exact receipt writer tests. The native diagnostic replay twice recovers 12 → 13. Both unprofiled 50/10 pairs exceed a latency margin, so revert `267ec76b` restores the `9c245577` add-on tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`. Full acceptance against exact #368 awaits a repeatable improvement in the unprofiled workload.
+
+First unfinished action is to attribute the 50/10 tail regressions with matched same-source controls and targeted writer/inference wall and thread CPU spans. Preserve the identified wakeup case as a controlled replay, and check the measured cost before a narrower candidate. Study data are in `/home/mpuchara/homemind-evidence-scheduling-20261109`. Retained-tree reporting CI [42666974689](https://github.com/mpuchara/HomeMind-HA/actions/runs/42666974689) passed for `9d6bbfa9`. Draft PR #369 records the new reporting SHA and CI.
+
+[Root cause](FINAL_RELEASE_EVIDENCE_SCHEDULING_ROOT_CAUSE.md) · [Implementation and A/B](FINAL_RELEASE_EVIDENCE_SCHEDULING_OPTIMIZATION.md) · [Raw checksummed data](benchmarks/evidence-scheduling-20261109/)
+
+## Previous checkpoint
+
+# Storage budget and evidence checkpoint — 2026-11-09
+
+**Gate D remains BLOCKER.** The direct SQLite page reads passed an authorizer case that the combined statement failed. The filesystem path and SQL classification experiments improved their components and gave mixed process CPU results. Reverts `b8e11ab4` and `e822381e` restore the exact `9c245577` add-on tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`. The version is 0.14.232. The registered 13-pair matrix against #368 awaits a repeatable improvement.
+
+The same-revision controls include a 12 → 13 qualified pair with identical decisions. The unprofiled 13 → 11 A/B pair loses two masks at lookup. The exact timing of the missed preparation slot remains open. Next, capture the idle and budget admission outcomes for the affected targets in a run that reproduces the shortfall. Keep the original harness and separate this trace from acceptance timings.
+
+The retained add-on has checkpoint CI [42305210953](https://github.com/mpuchara/HomeMind-HA/actions/runs/42305210953) for `56fd84f8`. This study adds local safety, differential and Universal results for the isolated experiments. The reporting HEAD and its CI status are recorded in Draft PR #369. Raw study directory on WSL is `/home/mpuchara/homemind-storage-budget-20261108`.
+
+[Storage experiments](FINAL_RELEASE_STORAGE_BUDGET_OPTIMIZATION.md) · [Evidence trace](FINAL_RELEASE_EVIDENCE_THROUGHPUT_ANALYSIS.md) · [Raw checksummed data](benchmarks/storage-budget-study-20261108/)
+
+## Previous checkpoint
+
+# Receipt CPU investigation checkpoint — 2026-11-06
+
+**Gate D remains BLOCKER.** The isolated derived-universe experiment
+`4dc2d2d630aa8ee144c0e7d8492173c462647a34` was implemented, tested and **rejected**:
+it has no repeatable process-CPU improvement versus previous production.
+Restoration commit `c1dbfd9fd468a9ea24c114cdaf044fbe5b0d8244` returns the add-on tree
+to `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`, exactly the `9c245577` production tree.
+Version **0.14.232** is unchanged. Reporting-only HEAD is recorded in PR #369.
+
+[Checkpoint CI 42305210953](https://github.com/mpuchara/HomeMind-HA/actions/runs/42305210953)
+is **SUCCESS for exact `56fd84f8d8bb23fdcb88e127c4f60a07594cb26b`**: 3,176 tests
+on Python 3.11 and 3,176 on 3.13, required benchmarks and image build/smoke;
+package/release is skipped. Earlier reporting `630f4453` CI `42304381708` also
+passes. [Exact CI receipt](benchmarks/FINAL_RELEASE_RECEIPT_CI.json) distinguishes
+both sources. Neither run certifies rejected experimental `4dc2d2d6` or a final
+release. Later receipt/reporting commits leave add-on, tests and tools unchanged.
+
+The frozen rejected candidate completed all **13 pairs / 26 arms** against exact
+#368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`: **11/13 timing screens PASS**.
+All six Normal pairs, both Busy cases and OFF/incomplete/unsupported controls
+pass. CPU fails for **50/10 +16.057%** and **200/30 +16.121%** (limit +15%).
+Primary consumed/qualified are **41 -> 99 / 39 -> 95** (>2x), while the broader
+supported totals **187 -> 365 / 185 -> 361** are **below 2x**. Every active
+supported case improves. No failure was averaged away. All six registered
+same-revision timing controls pass; one varies consumed/qualified 13 -> 11.
+
+Every input fingerprint/original decision signature/count and native persistence/
+provenance check passes, with zero unauthorized HA calls, collector errors/drops
+or event drops. Unsupported 400 remains unqualified (`agent bound`). The earlier
+`9c245577` 9/13 matrix remains evidence for the restored runtime; the rejected
+candidate's matrix does not replace it or prove a cross-series causal speedup.
+
+Candidate local validation: **295 Universal PASS**; corrected positive exact-byte
+writer differential **2 PASS / 15 subcases**; journal differential **4 PASS**.
+Restored runtime: **2 differential + 4 journal PASS** after timing finishes.
+All **253 add-on files in each of four source trees** match exact archives;
+original and registered source/harness manifests remain unchanged.
+
+See [CPU profile](FINAL_RELEASE_RECEIPT_CPU_PROFILE.md),
+[optimization, full matrix and rejection](FINAL_RELEASE_RECEIPT_OPTIMIZATION.md),
+[parsed evidence](benchmarks/FINAL_RELEASE_RECEIPT_SUMMARY.json) and
+[raw evidence](benchmarks/FINAL_RELEASE_RECEIPT_RAW.tar.gz) with adjacent SHA-256.
+Next measured target is native storage-budget sampling/page accounting and guarded
+transaction lifecycle: 619 Normal load samples and 318 page observations in the
+extra diagnostic. Preserve fresh native checks, commit/rollback and all cadence,
+workload, qualification, receipt-byte and evidence-throughput contracts.
+
+PR #369 stays Draft/open. Collector stays default-off. Candidate Recovery,
+production composition, actual-installation migration, inherited intermittent
+retention/rollback, four-hour soak, release integration and Pi/live HA remain open.
+No merge, version bump, release/tag/ZIP or deployment.
+
+## Earlier checkpoint (historical)
+
+# Native collector writer checkpoint — 2026-11-06
+
+**Gate D remains BLOCKER: 9/13 registered pairs pass.** Measured/final production
+source is `9c245577727c93ede3c59100f11844bf336acb1a`, add-on tree
+`cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`, version **0.14.232** unchanged.
+Exact baseline remains #368 `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+
+Implemented a fresh, transaction-authoritative empty protection-link fast path
+in native FeatureJournal and a bounded native agent-cardinality preflight before
+RAM copying. Independent per-decision revision/schema/binding checks, receipt
+bytes, original inference, retention, cadence and native persistence remain.
+
+All 26 arms preserve inputs, original signatures, native decisions and fail-closed
+controls, with zero collector/event drops, collector errors or HA service calls.
+Normal 2/3/6 and 50/10 fail margins. Primary consumed **43 -> 112**, qualified
+**41 -> 107**; broader totals **170 -> 401** and **168 -> 396**, improving every
+active supported case. Unsupported 400 passes only its timing screen and stays
+unqualified (`agent bound`). Six same-revision pairs have two screen failures;
+the separate preflight ablation does not prove a repeatable aggregate CPU gain.
+
+Local final production: **295 Universal PASS**, 88 focused PASS, 19 observation
+contract PASS; 10 new differential/preflight PASS (overlapping runs, not additive).
+[CI 42277851913](https://github.com/mpuchara/HomeMind-HA/actions/runs/42277851913)
+is SUCCESS for exact `9c245577`, including 3.11/3.13 and image smoke.
+
+See [native writer report and complete matrix](FINAL_RELEASE_NATIVE_WRITER.md),
+[parsed evidence](benchmarks/FINAL_RELEASE_NATIVE_WRITER_SUMMARY.json) and
+[raw archive](benchmarks/FINAL_RELEASE_NATIVE_WRITER_RAW.tar.gz). Reporting HEAD
+is recorded in PR #369 and the final session reply; reporting changes after
+`9c245577` must have an empty `git diff 9c245577 HEAD -- adaptive_ai`.
+The earlier `cf09e214` matrix below remains historical and is not attributed to
+a later source SHA. PR #369 stays Draft; no merge/release/version change/deployment.
+Collector stays default-off. Other release gates remain open.
+
+## Earlier checkpoint (historical)
+
+# Current readiness — reusable arbiter snapshot, 2026-11-06
+
+**Overall BLOCKER; Gate D remains BLOCKER.** PR #369 remains Draft.
+No merge, release, ZIP, version change or deployment was performed.
+
+Final code `eb6650e2ba90a9e53470178386e623dd73bd4501`, add-on tree
+`3fc56e32a4001fd2c2cc7a36716d4c18f0944b67`, version **0.14.232** unchanged.
+Performance source `cf09e214b4a97f367e8a7ca9169b2f30273b2c63`.
+Later code adds stop-before-thread-start cleanup and optional lifecycle support
+for cache-free adapters. The timing matrix was not repeated after these lifecycle
+fixes. Reporting HEAD is recorded in PR #369; compare production against
+`eb6650e2` before resuming a docs/tools-only reporting checkpoint.
+
+Implemented one bounded revision/schema/trigger-validated durable snapshot,
+fresh full RAM each turn, original arbitration inside a rollback savepoint,
+and independent native writer revision/schema verification. Final focused
+validation passes 36 tests. The intermediate 295-test lifecycle run had one
+adapter error and is retained; final full regression and CI status are recorded
+in the current root-cause report.
+
+All 26 acceptance arms completed. Nine of 13 pairs clear every margin; Normal 4,
+unsupported 400, 50/10 and 200/30 fail. Every fingerprint, original decision count
+and signature matches. Native persistence and collector accounting pass, with
+zero unauthorized HA calls or collector errors/drops. Throughput clears 2x.
+The separate same-revision series has one tail failure and waives no limit.
+
+See the [current root-cause report](FINAL_RELEASE_GATE_D_ROOT_CAUSE.md) and
+[performance report](FINAL_RELEASE_PERFORMANCE.md) for profiles, raw results,
+rejected experiments, limitations and the next writer optimization unit.
+Candidate Recovery, Production Composition, actual-data migration, inherited
+retention regression and four-hour soak remain open. Pi/live HA is NOT RUN.
+Collector remains disabled by default.
+
+Final code `eb6650e2` local results: 295 Universal PASS (182.977s), 36 focused
+PASS (35.017s). Measured-source CI `42235276985` passed; final-code CI
+`42237574777` remains in progress at the saved receipt.
+
+## Prior readiness checkpoint (historical)
+
+# Final release readiness — development checkpoint, 2026-11-06
+
+**Overall: BLOCKER. The requested final release is not complete and must not be
+published or recommended for installation.** No HA/device deployment, stable
+release, tag, main merge, agent reset or user-data operation was performed.
+
+## Version, source and integration
+
+- Development version: **0.14.232**, unchanged. No new release number assigned.
+- Last code/harness checkpoint: `84563536831689588f90824887ddd2e936f31659`.
+- Active production runtime change: `f858414cd9ea494738211f2843ded44c5b770991`.
+- Add-on Git tree: `70af83dba9e631f9cc5002b20906bf372d561867`.
+- Exact performance baseline #368: `951dcd70ed20b5f74220307cfb7411fa2c6bcc5d`.
+- Branch: `codex/universal-u05b4c1g-evidence-scalability`, Draft
+  [PR #369](https://github.com/mpuchara/HomeMind-HA/pull/369), based on #368.
+- Main remains the audited 0.14.184 source `91c7343324d38a1922bfed6486b4ef6dd7a3ba06`;
+  published prerelease 0.14.231-rc.1 is a separate sibling branch.
+
+No PR was merged in this session. The development ancestry already contains
+#302–346 and #348–369, including #349–354 via the #355 compatibility integration.
+#347 is not an ancestor: its ingress-copy and capture-bookkeeping optimizations
+need a separate integration decision. All 68 saved open heads, exact refs,
+ancestry and individual CI check attempts are in the audit receipts. Open drafts
+are not automatically approved release inputs.
+
+## Changes and performance outcome
+
+The original detached predecision preparation evaluated an identical target
+descriptor three times per turn. The current implementation reuses it only on
+that private service, then removes the override in `finally`. The full RAM and
+SQLite snapshot, ownership, mappings, revision guards, clocks, original arbiter,
+default-off collector and physical dispatch boundaries remain in place.
+An initial implementation retained the snapshot through a reference cycle;
+the failing ownership regression and rejected experiment were preserved, and
+the cycle was fixed before the retained checkpoint.
+
+Separate profiles observed 93→31 descriptor evaluations for 31 turns and
+553.2→510.5ms preparation-thread CPU including finalization. This does **not**
+establish an end-to-end speedup or Gate D PASS.
+
+The complete 13-pair corrected matrix exposed three mismatched target orders.
+The diagnostic now retains original decision rows. A fixture-only repair fixes
+root order to the declared target list and exports an input fingerprint. Its
+reversed-enumeration regression fails before the repair and passes after it.
+
+Seven fresh post-repair pairs preserve identical input fingerprints and original
+384-intent signatures in both arms. There are no HA service calls or unexplained
+collector losses. Busy and control screens passed in those pairs, but Normal
+CPU still increased **39.1% and 27.0%** versus the registered **15%** limit.
+The forward Normal pair also exceeded p95/p99. **Gate D is BLOCKER.**
+See [performance evidence](FINAL_RELEASE_PERFORMANCE.md), including failed,
+unpaired, interrupted and input-mismatched results.
+
+## Tests and migration
+
+Local WSL Python 3.12.3 checks passed: 7 snapshot/ownership regressions,
+15 existing predecision tests, 44 collector tests, 4 new bounded Candidate
+recovery tests and 1 fixture-order regression. Initial failed test attempts and
+their corrections are retained rather than counted as successful runs.
+After the fixture-order repair, the complete 295-test Universal suite also
+passed on WSL in 164.730s. This overlaps the focused predecision/collector tests;
+these counts must not be added as if every test were distinct.
+
+Full checkpoint CI on `ed53f3e6c014bdeb4dd0557ad8a5a2314b0731db` passed
+**3,150 tests on Python 3.11 and 3,150 on 3.13**, required benchmarks and image
+build/smoke: [run 42200241646](https://github.com/mpuchara/HomeMind-HA/actions/runs/42200241646).
+That commit has the same add-on runtime tree as this checkpoint. The later
+`84563536` fixture/harness changes have their own CI, still running at the saved
+snapshot; do not transfer a green result to an untested SHA. Exact snapshots
+are recorded in `benchmarks/FINAL_RELEASE_CHECKPOINT_CI.json`.
+
+The copied previous-code fixture passed two current restarts, exact comparison
+of all existing rows/columns in 16 protected tables, six persisted model
+checksums, modes, Candidate generations, Correct/Undo and unchanged options.
+It also passed restoration of old code with the entire old data copy. No fixture
+agent required Rebuild. This verifies selected Store/schema/model guards, not
+complete startup on an actual installation. See
+[migration scope and preserved failures](FINAL_RELEASE_MIGRATION.md).
+
+## Release gates
+
+| Gate | Status | Evidence / remaining work |
+| --- | --- | --- |
+| A · Integration audit | PASS (source/inventory scope) | 68 PR heads and dependencies audited; approval/integration decisions still required |
+| B · Gate D Performance | BLOCKER | Input-matched Normal CPU exceeds +15% in both new orders; registered full acceptance still not met |
+| C · Candidate Recovery | BLOCKER | Four queue components PASS; real concurrent training/inference, interruption, full discard/restart and refreshed UI acceptance NOT RUN |
+| D · Production Composition | NOT RUN | Exact installed scheduler + controlled WS + local HTTP + Correct/Undo/storage load measurement pending |
+| E · Existing-installation migration | BLOCKER | Generated previous-code fixture PASS; actual copied installation, full runtime startup, interrupted jobs and storage fault matrix NOT RUN |
+| F · Four-hour soak | NOT RUN | No >=14,400s acceptance run; short component tests are not a full soak |
+| G · Approved integration/release | BLOCKER | No merges; #347 sibling unresolved; main workflow auto-publishes after green CI and must not be triggered prematurely |
+| Final release CI | NOT RUN | No final approved release SHA exists; green checkpoint CI is recorded separately |
+| Final image/packages/ZIP/SHA-256 | NOT RUN | No final install package built or release published while gates remain open |
+| Pi / real HA acceptance | NOT RUN | All new tests use disposable host data; physical acceptance is separate |
+
+The inherited intermittent retention/rollback receipt miss remains unresolved.
+The existing 256-durable-config evidence bound remains enforced; a 400-config
+control is unsupported and must not be described as a qualified scalability PASS.
+No long-term RSS/thread/queue/WAL trend, physical response or real Recorder
+performance conclusion is supported by this checkpoint.
+
+## Update, restore and continuation
+
+The [update and rollback procedure](FINAL_RELEASE_UPGRADE_AND_ROLLBACK.md)
+requires a consistent full data/application/options backup, a test of a **copy**,
+the same add-on/data identity, checksum/source verification and post-restart
+agent/model/history comparison. Ordinary update must not be replaced with
+Rebuild/reset. Application-only downgrade is not assumed safe; retain the
+complete-data restoration procedure.
+
+There is **no published installation-package link** for this task. The raw host
+evidence archive and its SHA-256 are development evidence, not an install package.
+The unfinished work and exact resume checks are in
+[FINAL_RELEASE_HANDOFF.md](FINAL_RELEASE_HANDOFF.md). This checkpoint can be
+continued with “Kontynuuj”; it is not completion of the final-release objective.

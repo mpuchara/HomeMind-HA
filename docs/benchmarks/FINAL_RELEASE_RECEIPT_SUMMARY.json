@@ -1,0 +1,5781 @@
+{
+  "diagnostics_only": {
+    "normal-base": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 951.662292,
+          "cpu_ms_per_batch": 475.831146,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                8,
+                735821836,
+                735821836
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                1000,
+                74444546,
+                51040874
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                8,
+                28136858,
+                27700350
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                8,
+                907427599,
+                25580793
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                951662292,
+                22015444
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+              [
+                8,
+                14071080,
+                14071080
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                8,
+                9374605,
+                9374605
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                8,
+                5993975,
+                5993975
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                1000,
+                4870046,
+                4870046
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                1000,
+                78647329,
+                4202783
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                3160235,
+                3160235
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                1000,
+                1995610,
+                1995610
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                1937374,
+                1937374
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:63:dict",
+              [
+                1000,
+                1912736,
+                1912736
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:60:parse_ts",
+              [
+                1000,
+                1775522,
+                1775522
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                2000,
+                1768131,
+                1768131
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:23:state.get",
+              [
+                2000,
+                1733731,
+                1733731
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256",
+              [
+                1000,
+                1720910,
+                1720910
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                2000,
+                1693912,
+                1693912
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:_writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256', hashlib.sha256, _writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:raw.encode', raw.encode, 'utf-8')).hexdigest",
+              [
+                1000,
+                1316933,
+                1316933
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:30:clamp",
+              [
+                1000,
+                1203622,
+                1203622
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:60:st.get",
+              [
+                1000,
+                1193383,
+                1193383
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:84:encoded",
+              [
+                1,
+                1075628,
+                1075628
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:64:st.get",
+              [
+                1000,
+                1027366,
+                1027366
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:63:seedrows.append",
+              [
+                1000,
+                1023481,
+                1023481
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:19:prepared.append",
+              [
+                1000,
+                1015767,
+                1015767
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:12:raw.get",
+              [
+                1000,
+                1014186,
+                1014186
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:65:seeds.append",
+              [
+                1000,
+                965991,
+                965991
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                8,
+                956806,
+                956806
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:19:str",
+              [
+                1000,
+                954203,
+                954203
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 44,
+          "writer_cpu_ms": 150.386266,
+          "cpu_ms_per_batch": 3.417869681818182,
+          "capture_calls": 5,
+          "cpu_ms_per_capture": 0.217062,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                14,
+                28491476,
+                28491476
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                44,
+                17581208,
+                17581208
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                44,
+                150386266,
+                13453753
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                44,
+                13263462,
+                13263462
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                14,
+                11093167,
+                10077243
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                368,
+                9195283,
+                9195283
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                44,
+                8284037,
+                8284037
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                44,
+                5153061,
+                5153061
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                13,
+                3991843,
+                3991843
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                44,
+                3001643,
+                3001643
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                44,
+                2993260,
+                2993260
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                14,
+                2721487,
+                2721487
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                14,
+                54081161,
+                2652206
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                44,
+                2315130,
+                2315130
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                44,
+                2139716,
+                2139716
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                14,
+                1893413,
+                1893413
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                46,
+                3184610,
+                1819141
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                368,
+                1484726,
+                1484726
+              ]
+            ],
+            [
+              "diagnostic_only_protection_empty_check",
+              [
+                14,
+                1015924,
+                1015924
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+              [
+                44,
+                14549371,
+                1008704
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+              [
+                13,
+                986364,
+                986364
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                13,
+                985327,
+                985327
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                14,
+                916311,
+                916311
+              ]
+            ],
+            [
+              "universal_affected_sensors.topology:5:json.loads",
+              [
+                2,
+                880717,
+                880717
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                5,
+                861391,
+                861391
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                14,
+                756413,
+                756413
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                14,
+                735578,
+                735578
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:96:self.flush_pending_prune",
+              [
+                14,
+                709185,
+                709185
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                44,
+                54939147,
+                623316
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:9:stable_event_id",
+              [
+                46,
+                553035,
+                553035
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 9.513841,
+          "cpu_ms_per_batch": 4.7569205,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                1,
+                3870280,
+                3870280
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                1,
+                1268590,
+                1152183
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                491145,
+                491145
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                9513841,
+                475814
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                438297,
+                438297
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                1,
+                6554330,
+                293284
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                16,
+                292778,
+                292778
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                2,
+                280652,
+                280652
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                266345,
+                266345
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                169153,
+                169153
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                155367,
+                155367
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                2,
+                133962,
+                133962
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                123543,
+                123543
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                1,
+                121663,
+                121663
+              ]
+            ],
+            [
+              "diagnostic_only_protection_empty_check",
+              [
+                1,
+                116407,
+                116407
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+              [
+                2,
+                97450,
+                97450
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                1,
+                89879,
+                89879
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:admission:enter",
+              [
+                1,
+                84141,
+                84141
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                2,
+                154963,
+                81834
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                81610,
+                81610
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                80290,
+                80290
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                69973,
+                69973
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                53504,
+                53504
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                1,
+                48006,
+                48006
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                16,
+                45607,
+                45607
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:9:stable_event_id",
+              [
+                2,
+                36107,
+                36107
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+              [
+                2,
+                536225,
+                35383
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:158:encoded",
+              [
+                2,
+                33993,
+                33993
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                2,
+                6602082,
+                28806
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:166:self._count_kind",
+              [
+                20,
+                20533,
+                20533
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 384,
+        "original_masks": 5,
+        "complete_predecision": 5,
+        "incomplete_predecision": 379,
+        "affected_sensor_evidence": 5,
+        "v2_receipts": 5,
+        "valid_provenance": 384,
+        "journal_rows": 1048
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 5,
+        "receipts": 5,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 379
+        },
+        "dataset_id": "a8e0ea324558a46e8cf88a7090756b34e74312fe77bbcbdeae1eb05ac0847ea0",
+        "supervision_revision": "59551c1e097a3725ed043e244c94da36ab91b71176301412e22043a60a86e7bd",
+        "source_id": "033fdca5098a2ecda3ca2dee8116bcfeda4179ec7f2df9fdc69399d332c5c4cb",
+        "export_ms": 2099.680204000151,
+        "elapsed_ms": 2141.1656820000644
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 18,
+        "setup/PRAGMA": 126,
+        "setup/INSERT": 12019,
+        "setup/SELECT": 46,
+        "setup/COMMIT": 18,
+        "setup/DELETE": 21,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 59,
+        "load/SELECT": 105,
+        "load/PRAGMA": 565,
+        "load/INSERT": 606,
+        "load/COMMIT": 59,
+        "load/UPDATE": 26,
+        "load/DELETE": 3,
+        "finalization/PRAGMA": 30,
+        "finalization/BEGIN": 3,
+        "finalization/SELECT": 6,
+        "finalization/INSERT": 26,
+        "finalization/COMMIT": 3,
+        "finalization/UPDATE": 4
+      },
+      "source_revision_counts": {
+        "200": 5
+      },
+      "declaration_revision_counts": {
+        "50bfb46c32e7a07dcd055449a3cce2dac4f266bb1c76c1c09c1437e10b1536ab": 1,
+        "a090574730817c8901687aa4bfc14a21bd095844188d67063f00ba92e361e5e3": 1,
+        "e66c003cbfdc215e1c384636227fc0f3b48845a380cdaef364bf1ca62c3134ca": 1,
+        "05e9356c9ce999bc4f5aee92568d9ef486e02e46e0f9889c1a7ad5672103005d": 1,
+        "f9b88fcf27afde5e078a01cba4f7bba8f15d7c22fd4f20a5da1445d53c647fff": 1
+      },
+      "topology_revision_counts": {
+        "8588d2887722815f23b1f1232a84cbd7a979f40e56f049e872a16f2a6556527b": 3
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 11,
+        "load/4": 1,
+        "load/2": 16,
+        "load/3": 5,
+        "load/57": 3,
+        "load/14": 1,
+        "load/52": 1,
+        "load/5": 1,
+        "load/19": 3,
+        "load/38": 2,
+        "finalization/19": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    },
+    "normal-before": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 829.552096,
+          "cpu_ms_per_batch": 414.776048,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                8,
+                684619576,
+                684619576
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                1000,
+                57608844,
+                39130837
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                8,
+                799281068,
+                19284274
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                829552096,
+                13909721
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+              [
+                8,
+                10790494,
+                10790494
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                8,
+                9925791,
+                9925791
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                8,
+                5552387,
+                5552387
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                1000,
+                3520476,
+                3520476
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                1000,
+                60655175,
+                3046331
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                1982379,
+                1982379
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                1000,
+                1499842,
+                1499842
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:23:state.get",
+              [
+                2000,
+                1466772,
+                1466772
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                2000,
+                1436362,
+                1436362
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                2000,
+                1354835,
+                1354835
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:84:encoded",
+              [
+                1,
+                1178432,
+                1178432
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256",
+              [
+                1000,
+                1150253,
+                1150253
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                1139933,
+                1139933
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:73:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:73:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                1063538,
+                1063538
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:_writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256', hashlib.sha256, _writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:raw.encode', raw.encode, 'utf-8')).hexdigest",
+              [
+                1000,
+                1046835,
+                1046835
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:60:parse_ts",
+              [
+                1000,
+                1009635,
+                1009635
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:30:clamp",
+              [
+                1000,
+                1008622,
+                1008622
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                8,
+                942314,
+                942314
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                8,
+                926684,
+                926684
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:63:dict",
+              [
+                1000,
+                897531,
+                897531
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:19:str",
+              [
+                1000,
+                887903,
+                887903
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows:7:TRAINING_BUDGET.checkpoint",
+              [
+                8,
+                835290,
+                835290
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:28:state.get",
+              [
+                1000,
+                785175,
+                785175
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:19:prepared.append",
+              [
+                1000,
+                782224,
+                782224
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:6:(state or {}).get",
+              [
+                1000,
+                753383,
+                753383
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:29:str",
+              [
+                1000,
+                742566,
+                742566
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 145,
+          "writer_cpu_ms": 319.372824,
+          "cpu_ms_per_batch": 2.2025712,
+          "capture_calls": 11,
+          "cpu_ms_per_capture": 0.24118354545454546,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                143,
+                48353657,
+                48353657
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                143,
+                34683731,
+                34683731
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                145,
+                319372824,
+                31276577
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                145,
+                28663812,
+                28663812
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                26,
+                24378228,
+                24378228
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                145,
+                19276446,
+                19276446
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                368,
+                15931544,
+                15931544
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                143,
+                10905861,
+                10905861
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                145,
+                10398849,
+                10398849
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                145,
+                8790860,
+                8790860
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                26,
+                8170920,
+                8170920
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                143,
+                7292891,
+                7292891
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                24,
+                6246877,
+                6246877
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                26,
+                6221965,
+                6221965
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                26,
+                63350993,
+                5373969
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+              [
+                143,
+                38963415,
+                3430141
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                5492754,
+                2930159
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                368,
+                2853293,
+                2853293
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+              [
+                26,
+                2770692,
+                2770692
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                26,
+                2766265,
+                2766265
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                26,
+                2434250,
+                2434250
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:40:c.execute",
+              [
+                26,
+                2315854,
+                2315854
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                26,
+                2112577,
+                2112577
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                11,
+                2105438,
+                2105438
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                145,
+                66064548,
+                2057899
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:32:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+              [
+                143,
+                1678684,
+                1678684
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+              [
+                24,
+                1644020,
+                1644020
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                24,
+                1485112,
+                1485112
+              ]
+            ],
+            [
+              "universal_affected_sensors.topology:5:json.loads",
+              [
+                2,
+                1194478,
+                1194478
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:9:stable_event_id",
+              [
+                50,
+                1153610,
+                1153610
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 4.606657,
+          "cpu_ms_per_batch": 2.3033285,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                4606657,
+                852977
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                602424,
+                602424
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                420340,
+                420340
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                1,
+                402468,
+                402468
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                331269,
+                331269
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                16,
+                305330,
+                305330
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                285148,
+                285148
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                266056,
+                266056
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                179435,
+                179435
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                177819,
+                177819
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                156386,
+                156386
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                1,
+                128430,
+                128430
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:152:flush_receipts",
+              [
+                2,
+                505364,
+                67236
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:161:seal_retention",
+              [
+                1,
+                55379,
+                55379
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                16,
+                50591,
+                50591
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:101:payload.get",
+              [
+                16,
+                48156,
+                48156
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:158:encoded",
+              [
+                1,
+                39853,
+                39853
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:166:self._count_kind",
+              [
+                17,
+                32996,
+                32996
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                2,
+                35798,
+                27928
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:13:metadata.append",
+              [
+                17,
+                22918,
+                22918
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:158:digest",
+              [
+                1,
+                22788,
+                22788
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:14:self._journal_rows",
+              [
+                2,
+                51155,
+                15357
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:32:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+              [
+                2,
+                13012,
+                13012
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:decision_rows.append",
+              [
+                16,
+                11168,
+                11168
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:155:c.execute', c.execute, 'SELECT start,through,topology,retention_epoch,proof_hash FROM universal_collection_segments WHERE id=?', (sid,)).fetchone",
+              [
+                1,
+                7846,
+                7846
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:23:decision_rows.clear",
+              [
+                2,
+                7692,
+                7692
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:170:self.latencies.extend",
+              [
+                2,
+                7399,
+                7399
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch",
+              [
+                2,
+                7357,
+                7357
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:22:insert_bounded_rows",
+              [
+                2,
+                7243,
+                7243
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn",
+              [
+                2,
+                6490,
+                6490
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 384,
+        "original_masks": 11,
+        "complete_predecision": 11,
+        "incomplete_predecision": 373,
+        "affected_sensor_evidence": 11,
+        "v2_receipts": 11,
+        "valid_provenance": 384,
+        "journal_rows": 1048
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 11,
+        "receipts": 11,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 373
+        },
+        "dataset_id": "d50f14d0831191817a9954b2f0c9b14b6562a09a5697b3374c3e4a1aae4d3eeb",
+        "supervision_revision": "bbd6a9cdd6b88b17b783b385a7bd32d7b29657789b319b52b544ed00ee47781d",
+        "source_id": "a9df756a4404d29717ab01333be10b2819c361bcea85d185ff6cce511e078283",
+        "export_ms": 2116.7780040000252,
+        "elapsed_ms": 2151.9259620001776
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 18,
+        "setup/PRAGMA": 102,
+        "setup/INSERT": 12019,
+        "setup/SELECT": 38,
+        "setup/COMMIT": 18,
+        "setup/DELETE": 21,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 172,
+        "load/SELECT": 231,
+        "load/PRAGMA": 1539,
+        "load/INSERT": 739,
+        "load/COMMIT": 170,
+        "load/UPDATE": 48,
+        "load/DELETE": 3,
+        "finalization/PRAGMA": 18,
+        "finalization/BEGIN": 2,
+        "finalization/SELECT": 3,
+        "finalization/INSERT": 1,
+        "finalization/COMMIT": 2,
+        "finalization/UPDATE": 2
+      },
+      "source_revision_counts": {
+        "200": 11
+      },
+      "declaration_revision_counts": {
+        "f18a145f46ba6b31cab13555275f577aab9098876841084897517fce4689d71c": 1,
+        "e56785c96b46298068c669f56b118bcaf13c3ed70bef50e20d731066290e9e40": 1,
+        "fb0a7ab820c2e5d851ec9c5257149fdd52ea7b49a789b15de9fa938cbf7c5853": 1,
+        "6fda1be48f612391ab31f45823de39a86f0ea79df01376e6666d0dc8c9fb3db6": 1,
+        "3fab59b4cf7acfdf5f9d8778a076e96166173082f08add5fa005f305ef031d35": 1,
+        "ee990f45de9322f2befb3b5d405bbc6845e701b6ce3b61e57a18f944376c5e0e": 1,
+        "2a747aef4b2b55946f8a51bdb7aaeb1ed525c92c1923726699b90ea8d83ebee5": 1,
+        "237136f635efebe421764b5cbca36076beb33a0dbf22e80b7e1d8986929f11b3": 1,
+        "909ffad117a8994ecc278ff1f1ac985393ffb2bd12c4286d14e7967dc0a4e984": 1,
+        "8c675655ae724bfbb4b45139e797258e19d4fc99878a4d802e1509ab6ec725a8": 1,
+        "d24afe4c3d98aac60d92d0240f0f6f6a0c9565944fd0cdf98697107efea11e87": 1
+      },
+      "topology_revision_counts": {
+        "8588d2887722815f23b1f1232a84cbd7a979f40e56f049e872a16f2a6556527b": 3
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 50,
+        "load/4": 1,
+        "load/2": 57,
+        "load/3": 24,
+        "load/12": 2,
+        "load/15": 1,
+        "load/19": 2,
+        "load/16": 8,
+        "finalization/16": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    },
+    "normal-source": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 852.913339,
+          "cpu_ms_per_batch": 426.4566695,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                8,
+                692620071,
+                692620071
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                1000,
+                59815203,
+                41690344
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                8,
+                811484697,
+                20082805
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                852913339,
+                14596079
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+              [
+                8,
+                11551241,
+                11551241
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                8,
+                9129704,
+                9129704
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                7834343,
+                7834343
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                8,
+                5618061,
+                5618061
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                1000,
+                3594485,
+                3594485
+              ]
+            ],
+            [
+              "universal_affected_sensors.topology:5:json.loads",
+              [
+                1,
+                3368218,
+                3368218
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                1000,
+                63006992,
+                3191789
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                2000,
+                1444036,
+                1444036
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                2000,
+                1405552,
+                1405552
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                1000,
+                1390223,
+                1390223
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:99:c.execute",
+              [
+                1,
+                1355906,
+                1355906
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:23:state.get",
+              [
+                2000,
+                1354267,
+                1354267
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                8,
+                1261710,
+                1261710
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:90:encoded",
+              [
+                1,
+                1254295,
+                1254295
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                1227260,
+                1227260
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256",
+              [
+                1000,
+                1214915,
+                1214915
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:66:parse_ts",
+              [
+                1000,
+                1147225,
+                1147225
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:_writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256', hashlib.sha256, _writer_probe_call('observation_contract.FeatureJournal._prepare_record:17:raw.encode', raw.encode, 'utf-8')).hexdigest",
+              [
+                1000,
+                1050667,
+                1050667
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:30:clamp",
+              [
+                1000,
+                1028942,
+                1028942
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:69:dict",
+              [
+                1000,
+                912854,
+                912854
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:79:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:79:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                886081,
+                886081
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:40:c.execute",
+              [
+                8,
+                870457,
+                870457
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:19:prepared.append",
+              [
+                1000,
+                830869,
+                830869
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:69:seedrows.append",
+              [
+                1000,
+                821468,
+                821468
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                8,
+                747957,
+                747957
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:raw.encode",
+              [
+                1000,
+                745984,
+                745984
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 161,
+          "writer_cpu_ms": 365.919132,
+          "cpu_ms_per_batch": 2.2727896397515526,
+          "capture_calls": 13,
+          "cpu_ms_per_capture": 0.2515481538461538,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                161,
+                56275766,
+                56275766
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                161,
+                53361304,
+                53361304
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                161,
+                37722304,
+                37722304
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                161,
+                365919132,
+                33717227
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                161,
+                24972104,
+                24972104
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                25,
+                24216194,
+                24216194
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:encoded",
+              [
+                368,
+                15815092,
+                15815092
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                161,
+                12676240,
+                12676240
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                161,
+                12304630,
+                12304630
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                161,
+                9919644,
+                9919644
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:c.execute",
+              [
+                161,
+                8266457,
+                8266457
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                25,
+                7337075,
+                7337075
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                25,
+                6151414,
+                6151414
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:167:c.execute",
+              [
+                24,
+                5678030,
+                5678030
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                25,
+                60247759,
+                5001400
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:160:flush_receipts",
+              [
+                161,
+                58622473,
+                4222683
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                25,
+                3381663,
+                3381663
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:156:digest",
+              [
+                368,
+                3003414,
+                3003414
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                48,
+                5014696,
+                2675881
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                13,
+                2597716,
+                2597716
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                161,
+                63070380,
+                2182814
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:33:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+              [
+                161,
+                2107485,
+                2107485
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                25,
+                2097711,
+                2097711
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                25,
+                2065635,
+                2065635
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:102:self.flush_pending_prune",
+              [
+                25,
+                1886993,
+                1886993
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:40:c.execute",
+              [
+                25,
+                1828301,
+                1828301
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:169:seal_retention",
+              [
+                24,
+                1720743,
+                1720743
+              ]
+            ],
+            [
+              "universal_affected_sensors.topology:5:json.loads",
+              [
+                3,
+                1201642,
+                1201642
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:163:c.execute",
+              [
+                24,
+                1143785,
+                1143785
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:9:stable_event_id",
+              [
+                48,
+                1062078,
+                1062078
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 4.68519,
+          "cpu_ms_per_batch": 2.342595,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                2207949,
+                2207949
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                4685190,
+                444625
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                380821,
+                380821
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:encoded",
+              [
+                16,
+                300099,
+                300099
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                227457,
+                227457
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                220712,
+                220712
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                166553,
+                166553
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:167:c.execute",
+              [
+                1,
+                122898,
+                122898
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                120492,
+                120492
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:c.execute",
+              [
+                2,
+                98838,
+                98838
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                85062,
+                85062
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:156:digest",
+              [
+                16,
+                45402,
+                45402
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:160:flush_receipts",
+              [
+                2,
+                429333,
+                38113
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:169:seal_retention",
+              [
+                1,
+                32744,
+                32744
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:163:c.execute",
+              [
+                1,
+                29603,
+                29603
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:166:encoded",
+              [
+                1,
+                19665,
+                19665
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:174:self._count_kind",
+              [
+                17,
+                17398,
+                17398
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._journal_rows",
+              [
+                2,
+                20506,
+                16013
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:107:payload.get",
+              [
+                16,
+                13377,
+                13377
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:13:metadata.append",
+              [
+                17,
+                11364,
+                11364
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:156:decision_rows.append",
+              [
+                16,
+                10432,
+                10432
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:166:digest",
+              [
+                1,
+                9979,
+                9979
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:14:self._journal_rows",
+              [
+                2,
+                29059,
+                8553
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:178:self.latencies.extend",
+              [
+                2,
+                5949,
+                5949
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:33:c.execute', c.execute, 'SELECT retention_epoch FROM universal_collection_meta WHERE id=1').fetchone",
+              [
+                2,
+                5115,
+                5115
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:23:decision_rows.clear",
+              [
+                2,
+                4122,
+                4122
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch",
+              [
+                2,
+                3849,
+                3849
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:22:insert_bounded_rows",
+              [
+                2,
+                3648,
+                3648
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:172:len",
+              [
+                2,
+                3272,
+                3272
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:173:self.cv:enter",
+              [
+                2,
+                2864,
+                2864
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 384,
+        "original_masks": 13,
+        "complete_predecision": 13,
+        "incomplete_predecision": 371,
+        "affected_sensor_evidence": 13,
+        "v2_receipts": 13,
+        "valid_provenance": 384,
+        "journal_rows": 1048
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 13,
+        "receipts": 13,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 371
+        },
+        "dataset_id": "cb25e0ab112b761ff76c2f3d3b45ad847c9e8753c63f63ece23502cca7445b98",
+        "supervision_revision": "f6453de0642ba712e2cbc60696ef57f0eed9120cb0185f08f3067fb2c26a4981",
+        "source_id": "e6bd3fb73cbc7a82943458d622c89216cf995f8bfdc68e6d746bc9abe3f2f780",
+        "export_ms": 2088.080765999848,
+        "elapsed_ms": 2117.5787319998562
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 18,
+        "setup/PRAGMA": 102,
+        "setup/INSERT": 12019,
+        "setup/SELECT": 38,
+        "setup/COMMIT": 18,
+        "setup/DELETE": 21,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 187,
+        "load/SELECT": 255,
+        "load/PRAGMA": 1688,
+        "load/INSERT": 739,
+        "load/COMMIT": 187,
+        "load/UPDATE": 48,
+        "load/DELETE": 3,
+        "finalization/PRAGMA": 18,
+        "finalization/BEGIN": 2,
+        "finalization/SELECT": 3,
+        "finalization/INSERT": 1,
+        "finalization/COMMIT": 2,
+        "finalization/UPDATE": 2
+      },
+      "source_revision_counts": {
+        "200": 13
+      },
+      "declaration_revision_counts": {
+        "94ac77d0c5aed16e8c07a7cf7b5ab63bd68f40e2c6eefcb3c91322185120b7d9": 1,
+        "259c1260351d69f99da6b854b1d29aa6eb26f838b340c410219ad1c96c95eceb": 1,
+        "26125a8820467706b389c4b549de934a566043de59ba16e4c1a4f6c43463edf3": 1,
+        "18c0e32987faa552c6738abf8d47ca417c4b124b8ae3499ead389eaf1c89335b": 1,
+        "75bda5785590cc6f8147ea363aff7b62b5f069257805858f7bb9519a08ee47bb": 1,
+        "ceace7966479f2687392cc31ef43993a5c812852ffba6dd382bb17e927a11475": 1,
+        "53b390cb01597fd7816fb021549b14e3901d112080eba3c8673ebba3316fc5a4": 1,
+        "11e33037781d2850aa5a440895dec58741854a4214075d07422d295cc65b1e63": 1,
+        "3ca8550c33ebada4b5e99c35fa9698a12cc43de14b968b1ae3e5660463ce196e": 1,
+        "57684fe7949e2a6ecfd830b793573a33f915783059114458bd7db4a71dcca1cb": 1,
+        "b08a92acadc97f0b6b3d3714dfd77407f34274315c39832473e0f85e98a4c0f0": 1,
+        "77390f879d4a53ed2893d4b88a2da3b240e91ee57d4160f35be51c70a55b728e": 1,
+        "7bfb5ae37511d6f026347e0d33a0909925b1044cefbae43221086a722e1f2d30": 1
+      },
+      "topology_revision_counts": {
+        "8588d2887722815f23b1f1232a84cbd7a979f40e56f049e872a16f2a6556527b": 4
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 56,
+        "load/4": 2,
+        "load/2": 67,
+        "load/3": 25,
+        "load/7": 1,
+        "load/16": 10,
+        "finalization/16": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    },
+    "small50-base": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 50.315454,
+          "cpu_ms_per_batch": 25.157727,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                1,
+                29291841,
+                29291841
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                6661127,
+                6661127
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                3302576,
+                2250994
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                1331147,
+                1331147
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                50315454,
+                1250790
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                1,
+                36894504,
+                1164956
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                1,
+                1034838,
+                993308
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                960155,
+                960155
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:73:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:73:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                930132,
+                930132
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                433865,
+                433865
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:46:c.execute",
+              [
+                1,
+                280322,
+                280322
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:74:origin",
+              [
+                1,
+                261942,
+                261942
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                50,
+                234075,
+                234075
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:73:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:73:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                212337,
+                212337
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:79:origin",
+              [
+                1,
+                200377,
+                200377
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                184927,
+                184927
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                182109,
+                182109
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                50,
+                3473234,
+                170658
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                165015,
+                165015
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                143102,
+                143102
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:30:c.execute",
+              [
+                1,
+                135514,
+                135514
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:77:c.execute",
+              [
+                1,
+                127328,
+                127328
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:43:encoded",
+              [
+                1,
+                115282,
+                115282
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:93:c.execute",
+              [
+                1,
+                105772,
+                105772
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:84:encoded",
+              [
+                1,
+                94644,
+                94644
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                1,
+                91740,
+                91740
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                50,
+                86342,
+                86342
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                83072,
+                83072
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                100,
+                82088,
+                82088
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                100,
+                75446,
+                75446
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 27,
+          "writer_cpu_ms": 164.603851,
+          "cpu_ms_per_batch": 6.096438925925925,
+          "capture_calls": 106,
+          "cpu_ms_per_capture": 0.1471726886792453,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                14,
+                19560160,
+                19560160
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                230,
+                14150371,
+                14150371
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                26,
+                12692043,
+                12692043
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                27,
+                164603851,
+                12435048
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                106,
+                9594281,
+                9594281
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                26,
+                7223854,
+                7223854
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                14,
+                7695918,
+                6717842
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                106,
+                11200960,
+                4903930
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                106,
+                15600305,
+                4527926
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                14,
+                3957661,
+                3957661
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                27,
+                3883204,
+                3883204
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                106,
+                8478447,
+                3027265
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                15,
+                44051640,
+                2966620
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                106,
+                2957627,
+                2957627
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                106,
+                2865973,
+                2865973
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                106,
+                2798693,
+                2798693
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                26,
+                2774063,
+                2774063
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+              [
+                106,
+                2654148,
+                2654148
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                106,
+                2619045,
+                2619045
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                48,
+                3860728,
+                2187464
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                230,
+                2042491,
+                2042491
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                106,
+                1981780,
+                1981780
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                15,
+                1952608,
+                1952608
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                26,
+                1765031,
+                1765031
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:26:encoded",
+              [
+                106,
+                1526996,
+                1526996
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                26,
+                1370016,
+                1370016
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                15,
+                1229616,
+                1229616
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest",
+              [
+                106,
+                4496940,
+                1215928
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                13,
+                1208711,
+                1208711
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                26,
+                1042220,
+                1042220
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 16.974093,
+          "cpu_ms_per_batch": 8.4870465,
+          "capture_calls": 7,
+          "cpu_ms_per_capture": 0.1367352857142857,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:75:_insert_journal_rows",
+              [
+                1,
+                4899044,
+                4899044
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                7,
+                1133144,
+                1133144
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                16974093,
+                911737
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                10,
+                841171,
+                841171
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                7,
+                686214,
+                686214
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                7,
+                619703,
+                619703
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                573820,
+                573820
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:73:read",
+              [
+                1,
+                593488,
+                530638
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                460562,
+                460562
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+              [
+                7,
+                435112,
+                435112
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                7,
+                776876,
+                289725
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                7,
+                693073,
+                269723
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                7,
+                262674,
+                262674
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                244401,
+                244401
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                7,
+                957147,
+                236770
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                1,
+                6722414,
+                228778
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                10,
+                220989,
+                220989
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                7,
+                207227,
+                207227
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                201543,
+                201543
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest",
+              [
+                7,
+                1433064,
+                188979
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                7,
+                159365,
+                159365
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                2,
+                157317,
+                157317
+              ]
+            ],
+            [
+              "universal_affected_sensors.topology:2:conn.execute",
+              [
+                1,
+                152515,
+                152515
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                151112,
+                151112
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                2,
+                247505,
+                147524
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                139351,
+                139351
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                2,
+                125734,
+                125734
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                1,
+                118080,
+                118080
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                112394,
+                112394
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                96401,
+                96401
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 240,
+        "original_masks": 113,
+        "complete_predecision": 113,
+        "incomplete_predecision": 127,
+        "affected_sensor_evidence": 113,
+        "v2_receipts": 113,
+        "valid_provenance": 240,
+        "journal_rows": 98
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 113,
+        "receipts": 113,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 127
+        },
+        "dataset_id": "867138fb7267c71793cc21c66982e1a0867819005669685c63f9e729651ca16e",
+        "supervision_revision": "3655eca0655336ae896bf4e2e071e011144bdfd0a51a798c498aea591deb2ef1",
+        "source_id": "d79daa0a146c6da0bee51debbb95312919856ff59c3cc2c0289ca483de14ff5d",
+        "export_ms": 2255.149834000008,
+        "elapsed_ms": 2546.108379999964
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 4,
+        "setup/PRAGMA": 21,
+        "setup/INSERT": 604,
+        "setup/SELECT": 11,
+        "setup/COMMIT": 4,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 41,
+        "load/SELECT": 399,
+        "load/PRAGMA": 397,
+        "load/INSERT": 590,
+        "load/COMMIT": 40,
+        "load/UPDATE": 26,
+        "finalization/PRAGMA": 30,
+        "finalization/BEGIN": 3,
+        "finalization/SELECT": 28,
+        "finalization/INSERT": 26,
+        "finalization/COMMIT": 3,
+        "finalization/UPDATE": 4
+      },
+      "source_revision_counts": {
+        "10": 113
+      },
+      "declaration_revision_counts": {
+        "dbb4630950e9b741e9855099f2a30c4684ad3d8a88a4b2d4c1522c7bee68b2e3": 18,
+        "3897c04292804d9f8dbe7bbce96c9e61b615020e17a8bbe7b17fbd632c5c8ace": 14,
+        "06750f63651f625b761ac9004bde8d3cb1c6974f48c27edc5202332b264cce03": 13,
+        "f5b11d5e1df1eaa77dfad82c0c681760ce70688aece9079eb31df336638e5279": 13,
+        "bd487ef4e87fdb8993dea50fb79d31f65582d2d193b85f787945515ef62201b4": 13,
+        "95448ff93a1d71967b4de60c509760a852ae459532661ae9ffe3a7ea0fe3e9bc": 11,
+        "6ba79a082a231601993c4b43063e7c69d5aef415b8cac9ab25b9158500d83c9f": 10,
+        "0eda4ec055e10aa05504e5c24d2249b34a2f3e8579a410b908c8bf1ef92c5616": 10,
+        "75eb9bea548ecdca738b25d73cf4a8df97cf6afc5dd398ccee8b3a8b002f8a15": 6,
+        "ae673a0d40ae836e419c697065a04e6b86cf6780005d4f80b855e38a970750a1": 5
+      },
+      "topology_revision_counts": {
+        "5e88a45aa95ac39b69e6044c0a294cb371238395251910f1c43b05fdb3cef600": 16
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 3,
+        "load/4": 1,
+        "load/2": 3,
+        "load/3": 5,
+        "load/10": 5,
+        "load/39": 2,
+        "load/34": 1,
+        "load/5": 1,
+        "load/13": 3,
+        "load/31": 1,
+        "load/8": 1,
+        "load/29": 1,
+        "finalization/13": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    },
+    "small50-before": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 50.382988,
+          "cpu_ms_per_batch": 25.191494,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                1,
+                27328966,
+                27328966
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                8450516,
+                8450516
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                3974959,
+                2702113
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:73:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:73:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                1416311,
+                1416311
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                1,
+                35062292,
+                1334505
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                1088109,
+                1088109
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                50382988,
+                1074307
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                943779,
+                943779
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:74:origin",
+              [
+                1,
+                525075,
+                525075
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                481614,
+                481614
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                50,
+                4319196,
+                344237
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:73:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:73:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                310365,
+                310365
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                50,
+                278756,
+                278756
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:63:dict",
+              [
+                50,
+                261575,
+                261575
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:79:origin",
+              [
+                1,
+                222829,
+                222829
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                153986,
+                153986
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                129632,
+                129632
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:44:digest",
+              [
+                1,
+                115452,
+                115452
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:17:hashlib.sha256",
+              [
+                50,
+                115362,
+                115362
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                50,
+                105675,
+                105675
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:19:prepared.append",
+              [
+                50,
+                101790,
+                101790
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:77:c.execute",
+              [
+                1,
+                99161,
+                99161
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:70:c.commit",
+              [
+                1,
+                97429,
+                97429
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                96983,
+                96983
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                100,
+                95298,
+                95298
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                1,
+                90411,
+                90411
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:93:c.execute",
+              [
+                1,
+                90074,
+                90074
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                87033,
+                87033
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                100,
+                86318,
+                86318
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:23:state.get",
+              [
+                100,
+                81491,
+                81491
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 52,
+          "writer_cpu_ms": 238.057237,
+          "cpu_ms_per_batch": 4.578023788461538,
+          "capture_calls": 166,
+          "cpu_ms_per_capture": 0.1431678313253012,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                52,
+                238057237,
+                19805524
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                230,
+                19026619,
+                19026619
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                26,
+                17872371,
+                17872371
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                166,
+                14823462,
+                14823462
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                51,
+                14272964,
+                14272964
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                51,
+                11727414,
+                11727414
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                26,
+                9333092,
+                9333092
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                52,
+                7393125,
+                7393125
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                166,
+                15431085,
+                6975681
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                166,
+                23765860,
+                6438139
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                52,
+                5967763,
+                5967763
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                26,
+                5136927,
+                5136927
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                26,
+                52443061,
+                5068676
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                166,
+                13042481,
+                4321831
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                166,
+                4229630,
+                4229630
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                166,
+                4195313,
+                4195313
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+              [
+                166,
+                3814944,
+                3814944
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                166,
+                3785500,
+                3785500
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:6:conn.execute",
+              [
+                166,
+                3603641,
+                3603641
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                51,
+                3462276,
+                3462276
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                166,
+                3430582,
+                3430582
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                166,
+                3348462,
+                3348462
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                52,
+                3340004,
+                3340004
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                26,
+                2971649,
+                2971649
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                5443090,
+                2969196
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                230,
+                2619552,
+                2619552
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                52,
+                2580265,
+                2580265
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write",
+              [
+                166,
+                26767545,
+                2540115
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                24,
+                2262580,
+                2262580
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:36:c.execute",
+              [
+                26,
+                2111494,
+                2111494
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 13.983897,
+          "cpu_ms_per_batch": 6.9919485,
+          "capture_calls": 9,
+          "cpu_ms_per_capture": 0.21736755555555554,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                13983897,
+                1425535
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:147:encoded",
+              [
+                10,
+                1318924,
+                1318924
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                9,
+                1177175,
+                1177175
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                9,
+                724256,
+                724256
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                706919,
+                706919
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                601317,
+                601317
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                9,
+                1362043,
+                597577
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                9,
+                1956308,
+                568018
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                9,
+                433961,
+                433961
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                9,
+                1198430,
+                391808
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                9,
+                370609,
+                370609
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:6:conn.execute",
+              [
+                9,
+                363524,
+                363524
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:132:c.execute",
+              [
+                9,
+                352507,
+                352507
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                348776,
+                348776
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                9,
+                330998,
+                330998
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                292582,
+                292582
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                9,
+                282998,
+                282998
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write",
+              [
+                9,
+                2954521,
+                256091
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                234906,
+                234906
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:148:digest",
+              [
+                10,
+                194628,
+                194628
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:26:encoded",
+              [
+                9,
+                187649,
+                187649
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                171727,
+                171727
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:32:c.execute",
+              [
+                2,
+                151521,
+                151521
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest",
+              [
+                9,
+                569358,
+                146169
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:159:c.execute",
+              [
+                1,
+                132895,
+                132895
+              ]
+            ],
+            [
+              "universal_predecision.revision",
+              [
+                9,
+                893088,
+                127720
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                93832,
+                93832
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:3:revision",
+              [
+                9,
+                985690,
+                92602
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:c.execute",
+              [
+                1,
+                88505,
+                88505
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:133:asdict",
+              [
+                9,
+                87833,
+                87833
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 240,
+        "original_masks": 175,
+        "complete_predecision": 175,
+        "incomplete_predecision": 65,
+        "affected_sensor_evidence": 175,
+        "v2_receipts": 175,
+        "valid_provenance": 240,
+        "journal_rows": 98
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 175,
+        "receipts": 175,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 65
+        },
+        "dataset_id": "e844881c662f06bb157afee99b5f2a9b9e5a6b0dd70ff6ad1a9b5f5e865d629a",
+        "supervision_revision": "e710baeb79245eb5d7f4461aee6e76e4423fb4ddf0b2fedd629ab3dc311941ed",
+        "source_id": "8bac52fc8d442c0d81c9a66a2bfc6fcea6ea1802e61f04e5c1446922963f6b67",
+        "export_ms": 2168.9230910000106,
+        "elapsed_ms": 2515.2252220000264
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 4,
+        "setup/PRAGMA": 18,
+        "setup/INSERT": 604,
+        "setup/SELECT": 10,
+        "setup/COMMIT": 4,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 78,
+        "load/SELECT": 621,
+        "load/PRAGMA": 854,
+        "load/INSERT": 644,
+        "load/COMMIT": 77,
+        "load/UPDATE": 48,
+        "finalization/PRAGMA": 27,
+        "finalization/BEGIN": 2,
+        "finalization/SELECT": 31,
+        "finalization/INSERT": 1,
+        "finalization/COMMIT": 2,
+        "finalization/UPDATE": 2
+      },
+      "source_revision_counts": {
+        "10": 175
+      },
+      "declaration_revision_counts": {
+        "f9e22c49fcdbe29d8c44f442e9e88786afbca0a0b3f236f1ce1750f770972d98": 22,
+        "190700472ab57c34302ec10d3590bd2740dcdee843a0520cb9e55fdcee775ac7": 21,
+        "d4ed94f54596f179181bdb9fbf04d93691ae0226aad4a48db1782a7071627b61": 20,
+        "e574bb25c65654d91b23e18ff72c6476231c13f5d9b81abf623d621970e02aea": 19,
+        "45284375eee667ca5becf1d8900a23a0ea903175d12931cb3e0bc70d7c815a47": 18,
+        "d2abb8471bc5db62a54cc6eed127d7c815e91928bc0005ec014ceb01ecba6e68": 17,
+        "2fb9d5943f7d28302ec928df0094166f64e3baad86e0fa52f803a4ac799fe0ad": 16,
+        "f5849c860b84c52bb7565f7aacb06dab93438292a5bc12b6862e603cc567e6ef": 15,
+        "8a84ed2860981040e024b95e9938c84793544129b07e695d6c8b2a07c7fd2f33": 14,
+        "91b143f9e4f5c8fadf791ece72083a753bcf4845849ad061269881c779d67804": 13
+      },
+      "topology_revision_counts": {
+        "5e88a45aa95ac39b69e6044c0a294cb371238395251910f1c43b05fdb3cef600": 24
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 3,
+        "load/4": 1,
+        "load/2": 3,
+        "load/3": 23,
+        "load/10": 21,
+        "load/13": 1,
+        "finalization/10": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    },
+    "small50-source": {
+      "phases": {
+        "setup": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 41.788714,
+          "cpu_ms_per_batch": 20.894357,
+          "capture_calls": 0,
+          "cpu_ms_per_capture": null,
+          "exclusive_top": [
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                1,
+                26423374,
+                26423374
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                4511853,
+                4511853
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                2632505,
+                1809657
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                41788714,
+                1112392
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                1,
+                32045461,
+                1088812
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                848418,
+                848418
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                825505,
+                825505
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:79:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:79:self.store.conn', self.store.conn):enter",
+              [
+                1,
+                786658,
+                786658
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                391057,
+                391057
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                211763,
+                211763
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:80:origin",
+              [
+                1,
+                197084,
+                197084
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:85:origin",
+              [
+                1,
+                191060,
+                191060
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                173832,
+                173832
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:24:json.dumps",
+              [
+                50,
+                158885,
+                158885
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:10:self._prepare_record",
+              [
+                50,
+                2775384,
+                142879
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                118445,
+                118445
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:79:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:79:self.store.conn', self.store.conn):exit",
+              [
+                1,
+                117842,
+                117842
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:83:c.execute",
+              [
+                1,
+                98602,
+                98602
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                97381,
+                97381
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:99:c.execute",
+              [
+                1,
+                90591,
+                90591
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                1,
+                90189,
+                90189
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:c.execute",
+              [
+                2,
+                80921,
+                80921
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:31:c.execute",
+              [
+                1,
+                76044,
+                76044
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:90:encoded",
+              [
+                1,
+                70807,
+                70807
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:5:float",
+              [
+                100,
+                66795,
+                66795
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:14:raw.get",
+              [
+                50,
+                65954,
+                65954
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:11:raw.get",
+              [
+                100,
+                65702,
+                65702
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:25:self._compact_attributes",
+              [
+                50,
+                65484,
+                65484
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record:23:state.get",
+              [
+                100,
+                60952,
+                60952
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                1,
+                56895,
+                56895
+              ]
+            ]
+          ]
+        },
+        "load": {
+          "writer_calls": 54,
+          "writer_cpu_ms": 223.557044,
+          "cpu_ms_per_batch": 4.139945259259259,
+          "capture_calls": 166,
+          "cpu_ms_per_capture": 0.1382523313253012,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:encoded",
+              [
+                230,
+                19454706,
+                19454706
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                54,
+                223557044,
+                18078792
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:81:_insert_journal_rows",
+              [
+                26,
+                17241254,
+                17241254
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                53,
+                15805573,
+                15805573
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                166,
+                14413391,
+                14413391
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                53,
+                11860446,
+                11860446
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                54,
+                6948929,
+                6948929
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                166,
+                22949887,
+                6197149
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                54,
+                5718186,
+                5718186
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):exit",
+              [
+                26,
+                5405157,
+                5405157
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:self.store.conn', self.store.conn):enter",
+              [
+                26,
+                4996608,
+                4996608
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                166,
+                4986429,
+                4986429
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                166,
+                9760942,
+                4651102
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                166,
+                13844211,
+                4579904
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                166,
+                4442836,
+                4442836
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch",
+              [
+                26,
+                44162157,
+                4375092
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                166,
+                3897680,
+                3897680
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:140:c.execute",
+              [
+                166,
+                3766734,
+                3766734
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                166,
+                3684040,
+                3684040
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:6:conn.execute",
+              [
+                166,
+                3492889,
+                3492889
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                166,
+                3448084,
+                3448084
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                53,
+                3430589,
+                3430589
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                54,
+                2999012,
+                2999012
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:156:digest",
+              [
+                230,
+                2942799,
+                2942799
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal._prepare_record",
+              [
+                50,
+                4423811,
+                2486537
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                54,
+                2425236,
+                2425236
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write",
+              [
+                166,
+                28277734,
+                2364534
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):enter",
+              [
+                26,
+                2077144,
+                2077144
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:167:c.execute",
+              [
+                24,
+                1847973,
+                1847973
+              ]
+            ],
+            [
+              "observation_contract.FeatureJournal.record_batch:28:_writer_probe_call('observation_contract.FeatureJournal.record_batch:28:c.storage_batch', c.storage_batch):exit",
+              [
+                26,
+                1789183,
+                1789183
+              ]
+            ]
+          ]
+        },
+        "finalization": {
+          "writer_calls": 2,
+          "writer_cpu_ms": 9.686543,
+          "cpu_ms_per_batch": 4.8432715,
+          "capture_calls": 9,
+          "cpu_ms_per_capture": 0.14115633333333333,
+          "exclusive_top": [
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:155:encoded",
+              [
+                10,
+                971914,
+                971914
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write",
+              [
+                2,
+                9686543,
+                933942
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture:16:json.dumps",
+              [
+                9,
+                821733,
+                821733
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:21:insert_bounded_rows",
+              [
+                2,
+                509108,
+                509108
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):exit",
+              [
+                2,
+                420694,
+                420694
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:156:digest",
+              [
+                10,
+                410627,
+                410627
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:conn.execute",
+              [
+                9,
+                364499,
+                364499
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:conn.execute",
+              [
+                9,
+                357364,
+                357364
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:3:require_storage_available",
+              [
+                2,
+                347083,
+                347083
+              ]
+            ],
+            [
+              "universal_training_data.HistoricalDecision.capture",
+              [
+                9,
+                1270407,
+                325307
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:140:c.execute",
+              [
+                9,
+                323888,
+                323888
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:6:conn.execute",
+              [
+                9,
+                310223,
+                310223
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate",
+              [
+                9,
+                514571,
+                241834
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:25:from_device_agent_mask",
+              [
+                9,
+                213992,
+                213992
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding",
+              [
+                9,
+                657342,
+                212089
+              ]
+            ],
+            [
+              "universal_affected_sensors.validate:5:validate_declaration",
+              [
+                9,
+                205778,
+                205778
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:self.store.conn', self.store.conn):enter",
+              [
+                2,
+                187428,
+                187428
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write:6:_writer_probe_call('universal_predecision.verify_for_write:6:conn.execute', conn.execute, 'PRAGMA schema_version').fetchone",
+              [
+                9,
+                183419,
+                183419
+              ]
+            ],
+            [
+              "universal_predecision.verify_for_write",
+              [
+                9,
+                1930867,
+                181528
+              ]
+            ],
+            [
+              "universal_predecision.validate_binding:17:encoded",
+              [
+                9,
+                176024,
+                176024
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:17:c.execute",
+              [
+                2,
+                152697,
+                152697
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):exit",
+              [
+                2,
+                127721,
+                127721
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest",
+              [
+                9,
+                575653,
+                117397
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:33:c.execute",
+              [
+                2,
+                106510,
+                106510
+              ]
+            ],
+            [
+              "universal_affected_sensors.latest:2:_writer_probe_call('universal_affected_sensors.latest:2:conn.execute', conn.execute, f'SELECT revision,CASE WHEN length(CAST(body AS BLOB))<=262144 THEN body ELSE NULL END,checksum\\n        FROM {TABLE} WHERE agent_id=? ORDER BY seq DESC LIMIT 1', (agent_id,)).fetchone",
+              [
+                9,
+                90242,
+                90242
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:16:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:16:c.storage_batch', c.storage_batch):enter",
+              [
+                2,
+                80861,
+                80861
+              ]
+            ],
+            [
+              "universal_predecision.revision",
+              [
+                9,
+                511764,
+                80376
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:167:c.execute",
+              [
+                1,
+                75468,
+                75468
+              ]
+            ],
+            [
+              "universal_predecision.revision:2:_writer_probe_call('universal_predecision.revision:2:conn.execute', conn.execute, 'SELECT revision FROM universal_arbiter_revision WHERE id=1').fetchone",
+              [
+                9,
+                66889,
+                66889
+              ]
+            ],
+            [
+              "universal_history_collector.HistoricalTrainingCollector._write:140:_writer_probe_call('universal_history_collector.HistoricalTrainingCollector._write:140:c.execute', c.execute, 'SELECT at FROM universal_collection_topology WHERE id=?', (self.topology,)).fetchone",
+              [
+                9,
+                63207,
+                63207
+              ]
+            ]
+          ]
+        }
+      },
+      "counts": {
+        "written_decisions": 240,
+        "original_masks": 175,
+        "complete_predecision": 175,
+        "incomplete_predecision": 65,
+        "affected_sensor_evidence": 175,
+        "v2_receipts": 175,
+        "valid_provenance": 240,
+        "journal_rows": 98
+      },
+      "dataset": {
+        "status": "qualified_source",
+        "eligible": 175,
+        "receipts": 175,
+        "coverage_version": 3,
+        "rejected": {
+          "missing_historical_decision_receipt": 65
+        },
+        "dataset_id": "c9089bba87c2adde397ff50b50f41ce34ef664374df7957f4c5c785799177646",
+        "supervision_revision": "4f5f28cdbe86acd7f35d659f73252e78a61b45e9f7371fd76e3f678b956276e8",
+        "source_id": "ee39b48fa31eccea79c3561d9f11dc9fe2dc5ae7686a25982fae7ca0ece3a098",
+        "export_ms": 2181.220822999876,
+        "elapsed_ms": 2793.687769999906
+      },
+      "sql_trace_events": {
+        "setup/BEGIN": 4,
+        "setup/PRAGMA": 18,
+        "setup/INSERT": 604,
+        "setup/SELECT": 10,
+        "setup/COMMIT": 4,
+        "setup/UPDATE": 3,
+        "load/BEGIN": 80,
+        "load/SELECT": 623,
+        "load/PRAGMA": 872,
+        "load/INSERT": 646,
+        "load/COMMIT": 79,
+        "load/UPDATE": 48,
+        "finalization/PRAGMA": 27,
+        "finalization/BEGIN": 2,
+        "finalization/SELECT": 31,
+        "finalization/INSERT": 1,
+        "finalization/COMMIT": 2,
+        "finalization/UPDATE": 2
+      },
+      "source_revision_counts": {
+        "10": 175
+      },
+      "declaration_revision_counts": {
+        "56e2c96b2bc848e497fecddab1c499e573140d592d7d532954eadc66965b9246": 22,
+        "bc485b336de19976c2e8bb5f1ef0b4150ff089a6e33839edcaf631a290cf6d7e": 21,
+        "8bb9ec6c6a0b5a931b862271eeb8994cad7c8dac85aff44fbd8c49a6746dfe70": 20,
+        "3afc85bf909a236d310a66831f543153eaa6add092be3cf4331ff6c8c6ee6c92": 19,
+        "8c759ffed325c02709edd0aa17f2cb8b1f3edc10627616a003d25106ed3fd37b": 18,
+        "5443851770f3f68786f4dbb1172c8da277cb78029b934545a30c34db4fe1d361": 17,
+        "58acd5ccac3191d18bc4d9250a9ddb73203481dacad5cb8f6d8285a0cbfa345c": 16,
+        "de570c72fa5899d7123770716e99b4dd67bae590015f68531580c8c5b05b5bcc": 15,
+        "c62ffe227e02f4fafdca7ffbf1b8071f15803e7f676806f690bb337600f7bb5e": 14,
+        "78a99ba61838dccc58ffe940503e317d81f92a697a05a347cea8c3d78be2cf23": 13
+      },
+      "topology_revision_counts": {
+        "5e88a45aa95ac39b69e6044c0a294cb371238395251910f1c43b05fdb3cef600": 24
+      },
+      "batch_sizes": {
+        "setup/4": 1,
+        "setup/2": 1,
+        "load/1": 7,
+        "load/4": 1,
+        "load/2": 1,
+        "load/3": 23,
+        "load/10": 21,
+        "load/13": 1,
+        "finalization/10": 1,
+        "finalization/1": 1
+      },
+      "harness_sha256": "6799236ba0476c09435dd40c9493b4bdcee798360e222287285bcb3f5d0739dd"
+    }
+  },
+  "screen": [
+    {
+      "name": "small50-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.02916983014727459,
+        "rss": 0.020216209613387992,
+        "p95": -0.035502547475683155,
+        "p99": -0.022954076641984344
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        175,
+        175
+      ],
+      "consumed": [
+        175,
+        175
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "small50-2",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.18152019586839385,
+        "rss": -0.04142228739002929,
+        "p95": 0.19477535738597695,
+        "p99": 0.0540182231551527
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        175,
+        175
+      ],
+      "consumed": [
+        175,
+        175
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.005368218700914085,
+        "rss": -0.025353857884954478,
+        "p95": -0.0015228029659360987,
+        "p99": 0.017290641384502203
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-2",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.03381873732683971,
+        "rss": -0.02354750348406942,
+        "p95": 0.007362079524808829,
+        "p99": -0.011884615211043892
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    }
+  ],
+  "matrix": [
+    {
+      "name": "normal-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.09636663080433605,
+        "rss": 0.005495321550571752,
+        "p95": 0.03277444283447184,
+        "p99": 0.07880819561519381
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        6,
+        11
+      ],
+      "consumed": [
+        6,
+        11
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-2",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.1111078779663548,
+        "rss": -0.00458626073380175,
+        "p95": 0.04570361374360976,
+        "p99": 0.057420091850036714
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-3",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.022071644182212635,
+        "rss": -0.0032190411159342958,
+        "p95": -0.03787713357749978,
+        "p99": -0.04459798391359082
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-4",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.03598216058079684,
+        "rss": -0.0066773894818931145,
+        "p95": -0.03347014278281979,
+        "p99": -0.04265121187093035
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-5",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.013205416439089346,
+        "rss": -0.004342522566479601,
+        "p95": -0.007661723942613663,
+        "p99": -0.006064647388940525
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        4,
+        13
+      ],
+      "consumed": [
+        4,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "normal-6",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.07327612036689812,
+        "rss": 0.0,
+        "p95": -0.019329228647164576,
+        "p99": -0.038121708800828324
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        5,
+        13
+      ],
+      "consumed": [
+        5,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "busy128",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.015952577368635756,
+        "rss": -0.011880687563195158,
+        "p95": 0.04830344090169825,
+        "p99": -0.016961248688686092
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        6,
+        12
+      ],
+      "consumed": [
+        7,
+        14
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "busy200",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.03300912080160234,
+        "rss": -0.016346027433279287,
+        "p95": 0.0030087514656174097,
+        "p99": 0.047025259729603475
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        3,
+        7
+      ],
+      "consumed": [
+        4,
+        9
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "off",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.005003271210217486,
+        "rss": -0.0379441879140735,
+        "p95": -0.008173833857226698,
+        "p99": -0.04423288693119254
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "incomplete",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.057520259576126054,
+        "rss": -0.02935072635635927,
+        "p95": -0.061925530938615414,
+        "p99": -0.08151431827448852
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "unsupported",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.02867481243007397,
+        "rss": -0.03684992570579493,
+        "p95": 0.016706100581501238,
+        "p99": 0.02965794343527617
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        0,
+        0
+      ],
+      "consumed": [
+        0,
+        0
+      ],
+      "rejection_reasons": [
+        {
+          "agent bound": 12
+        },
+        {
+          "agent bound": 27
+        }
+      ]
+    },
+    {
+      "name": "small50",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.16057268075106723,
+        "rss": -0.027834311025978664,
+        "p95": 0.08998289581319252,
+        "p99": -0.0591620454103825
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        100,
+        158
+      ],
+      "consumed": [
+        100,
+        158
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "small200",
+      "status": "FAIL",
+      "ratios": {
+        "cpu": 0.16121289092904378,
+        "rss": -0.023943245639964528,
+        "p95": -0.0456477495321187,
+        "p99": 0.003235674450134729
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        46,
+        108
+      ],
+      "consumed": [
+        46,
+        108
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    }
+  ],
+  "variance": [
+    {
+      "name": "variance-1",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.017039238026877013,
+        "rss": -0.005188448360254561,
+        "p95": 0.0006041250900379325,
+        "p99": -0.007907878235092869
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-2",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.030817470031248684,
+        "rss": 0.0005382658054413625,
+        "p95": -0.06657645145590729,
+        "p99": -0.11494499670192992
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-3",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.028006550941385266,
+        "rss": 0.0019570429081656737,
+        "p95": -0.03416596644004788,
+        "p99": -0.07488025327429926
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-4",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.04046279109533335,
+        "rss": -0.002747926787379118,
+        "p95": -0.003997401167387227,
+        "p99": 0.046158927057324384
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        11
+      ],
+      "consumed": [
+        13,
+        11
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-5",
+      "status": "PASS",
+      "ratios": {
+        "cpu": -0.0907399327894377,
+        "rss": -0.002542787286063608,
+        "p95": -0.11485204262507043,
+        "p99": -0.030375494164267547
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    },
+    {
+      "name": "variance-6",
+      "status": "PASS",
+      "ratios": {
+        "cpu": 0.001740535922926334,
+        "rss": -0.0024880476144013564,
+        "p95": -0.006171150002840298,
+        "p99": 0.008536962861418695
+      },
+      "parity": true,
+      "safe": true,
+      "qualified": [
+        13,
+        13
+      ],
+      "consumed": [
+        13,
+        13
+      ],
+      "rejection_reasons": [
+        {},
+        {}
+      ]
+    }
+  ],
+  "throughput": {
+    "primary": {
+      "totals": {
+        "consumed": [
+          41,
+          99
+        ],
+        "qualified": [
+          39,
+          95
+        ]
+      },
+      "twice": true,
+      "every_supported_improves": true
+    },
+    "including_small": {
+      "totals": {
+        "consumed": [
+          187,
+          365
+        ],
+        "qualified": [
+          185,
+          361
+        ]
+      },
+      "twice": false,
+      "every_supported_improves": true
+    }
+  },
+  "screen_passes": 11,
+  "gate_d": "BLOCKER",
+  "native_checks": [
+    {
+      "name": "busy128-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "busy128-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "busy200-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "busy200-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "incomplete-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "incomplete-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-1-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-1-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-2-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-2-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-3-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-3-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-4-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-4-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-5-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-5-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-6-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "normal-6-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "off-base",
+      "persisted_decisions": 0,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "off-source",
+      "persisted_decisions": 0,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "small200-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "small200-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "small50-base",
+      "persisted_decisions": 240,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "small50-source",
+      "persisted_decisions": 240,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "unsupported-base",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    },
+    {
+      "name": "unsupported-source",
+      "persisted_decisions": 384,
+      "native_persistence": true,
+      "provenance": true,
+      "negative_control": true,
+      "unsupported": true
+    }
+  ]
+}

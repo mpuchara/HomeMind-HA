@@ -111,6 +111,11 @@ class CooperativeTrainingBudget:
         name = str(thread_name or threading.current_thread().name)
         return any(name.startswith(prefix) for prefix in self._thread_prefixes)
 
+    @property
+    def duty_cycle(self):
+        with self._lock:
+            return self._duty_cycle
+
     def request_interactive_window(self, seconds=0.75, reason="interactive"):
         """Temporarily give HTTP/realtime inference priority over training.
 

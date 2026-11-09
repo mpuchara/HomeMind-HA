@@ -1,7 +1,7 @@
 """Measure native historical evidence on a disposable synthetic Engine/Store."""
 import argparse
 from collections import Counter
-from contextlib import closing, ExitStack, nullcontext
+from contextlib import closing, contextmanager, ExitStack, nullcontext
 import hashlib
 import json
 import os
@@ -16,7 +16,7 @@ import threading
 import time
 from unittest.mock import patch
 
-from runtime_scaling_probe import Probe
+from runtime_scaling_probe import Probe, thread_cpu_delta, thread_cpu_snapshot
 from universal_e2e_fixture import OriginalEvidenceScenario, ProducerClock, state
 
 
@@ -26,8 +26,10 @@ SCALES = "5:1,50:10,200:30,1000:200"
 
 def quantiles(values):
     ordered = sorted(values)
-    return {f"p{p}_ms": ordered[(len(ordered)-1)*p//100] if ordered else None
-            for p in (50, 95, 99)}
+    result = {f"p{p}_ms": ordered[(len(ordered)-1)*p//100] if ordered else None
+              for p in (50, 95, 99)}
+    result["max_ms"] = ordered[-1] if ordered else None
+    return result
 
 
 def wait_for_writer(collector, timeout=30):
@@ -133,7 +135,7 @@ def validate_offline(scenario, source, dataset):
     return result
 
 
-def seed_candidates(scenario):
+def seed_candidates(scenario, count=None):
     from agent_candidate_lineage import _ensure_root, _register_generation
     from agent_candidates import install, refresh_candidate_ids_cache
     from agent_candidate_shadow_runtime import install as install_shadow
@@ -147,7 +149,7 @@ def seed_candidates(scenario):
                                       _final_explicit_http_only=True), start_worker=False)
     install_shadow(manager)
     install_shadow_context(manager)
-    for agent in scenario.agents:
+    for agent in scenario.agents[:count]:
         child = store.create_agent({**agent, "id": None, "mode": "paused", "name": "Synthetic Candidate"})
         store.save_model(child["id"], engine.models[agent["id"]].serialize())
         store.set_training_state(child["id"], "qualified", score=1., samples=48,
@@ -226,7 +228,8 @@ def publish_event(scenario, entity, value, **attributes):
     return stamp
 
 
-def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_intent=None, fanout=1):
+def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_intent=None, fanout=1,
+           timeline=None, inference=None):
     from settings import OPTIONS
     engine, collector = scenario.engine, scenario.collector
     timings, intents, outstanding = [], [], {}
@@ -234,9 +237,19 @@ def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_in
     event_count = 0
     fanout = min(fanout, len(scenario.agents))
 
-    def infer(agent, frame, received_ts):
+    def infer(agent, frame, received_ts, decision_index):
+        if timeline is not None:
+            timeline.append(("agent_started", decision_index, time.perf_counter_ns()))
+            inference.index = decision_index
+            cpu = time.thread_time_ns()
         previous = engine.runtime.get(agent["id"], {}).get("last_intent")
-        result = engine.process_agent(agent, frame, {"binary_sensor.motion"})
+        try:
+            result = engine.process_agent(agent, frame, {"binary_sensor.motion"})
+        finally:
+            if timeline is not None:
+                timeline.append(("agent_finished", decision_index, time.perf_counter_ns(),
+                                 time.thread_time_ns()-cpu))
+                del inference.index
         intent = engine.runtime[agent["id"]].get("last_intent")
         if not intent or intent is previous:
             return None, None, result["status"]
@@ -264,22 +277,30 @@ def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_in
             reap()
             desired = tick % 2
             counters["ingress_while_writer_active"] += writer_active.is_set()
+            if timeline is not None:
+                timeline.append(("ingress", tick, time.perf_counter_ns(), writer_active.is_set()))
             received_ts = publish_event(scenario, "binary_sensor.motion", "on" if desired else "off",
                                     device_class="motion")
             event_count += 1
             frame = engine.state_map.copy()
+            if timeline is not None:
+                timeline.append(("inference_scheduled", tick, time.perf_counter_ns()))
             for lane in range(fanout):
                 decision_index = tick*fanout+lane
                 agent = scenario.agents[decision_index % len(scenario.agents)]
                 target = agent["target_entity"]
                 if target not in outstanding:
-                    future = engine.control_workers.submit(infer, agent, frame, received_ts)
+                    if timeline is not None:
+                        timeline.append(("worker_submitted", decision_index, time.perf_counter_ns()))
+                    future = engine.control_workers.submit(infer, agent, frame, received_ts, decision_index)
                     engine.in_flight[target] = future
                     outstanding[target] = (future, desired, decision_index)
                 else:
                     counters["target_still_running"] += 1
             counters["peak_inference_outstanding"] = max(counters["peak_inference_outstanding"], len(outstanding))
             counters["ingress_while_writer_active"] += writer_active.is_set()
+            if timeline is not None:
+                timeline.append(("lux_ingress", tick, time.perf_counter_ns(), writer_active.is_set()))
             publish_event(scenario, "sensor.lux", 1000 if desired else 5, device_class="illuminance")
             event_count += 1
             if mode != "off":
@@ -297,7 +318,7 @@ def stream(scenario, mode, ticks, period, writer_active, *, tick_offset=0, on_in
     return event_count, intents, timings, dict(counters), ingress_seconds
 
 
-def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False, fanout=1):
+def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=False, fanout=1, candidates=None, profile_prepare=False):
     from storage import Store
     from telemetry import rss_mb
     from universal_history_collector import foreground_idle
@@ -327,8 +348,13 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                     feedback_jobs.put_nowait((tick, desired, intent))
                 except Full:
                     background_stats["correct_queue_full"] += 1
-        if mode == "busy":
-            seed_candidates(scenario)
+        candidate_count = (devices if mode == "busy" else 0) if candidates is None else candidates
+        if not 0 <= candidate_count <= devices:
+            raise ValueError("Candidate count must be between zero and the root count")
+        if mode == "busy" or candidate_count:
+            seed_candidates(scenario, candidate_count)
+        with store.conn() as conn:
+            durable_configs = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         if mode == "off":
             engine.universal_training_collector = None
             engine.executor.device_agents.universal_training_collector = None
@@ -338,30 +364,235 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
             collector.capacity = 32  # Fault profile, after the original seed.
         errors = Counter()
         prepare = scenario.evidence.prepare_one
+        preparation_probe = Probe(capacity=32768 if profile_prepare else 2048)
+        timeline = [] if profile_prepare else None
+        inference = threading.local() if profile_prepare else None
+        materialization = Counter()
+        descriptor_state_reads = Counter()
+        cpu_profiles = []
+        writer_cpu_profiles = []
+        source_revisions = []
+        if profile_prepare:
+            from device_agents import DeviceAgentService
+            from intent import ActionIntent
+            from training_budget import TRAINING_BUDGET
+            import universal_predecision
+            import universal_affected_sensors
+            import device_agents
+
+            native_revision = universal_predecision.revision
+            def measured_revision(conn):
+                result = native_revision(conn)
+                if getattr(preparing, 'active', False):
+                    source_revisions.append(result)
+                return result
+            stack.enter_context(patch.object(universal_predecision, 'revision', measured_revision))
+
+            preparing = threading.local()
+            original_options = device_agents.target_options_for_state
+            original_descriptor = DeviceAgentService.descriptor
+
+            def measured_options(state):
+                if getattr(preparing, "active", False):
+                    descriptor_state_reads[str(state.get("entity_id"))] += 1
+                return original_options(state)
+
+            def measured_descriptor(service, agent):
+                result = original_descriptor(service, agent)
+                if getattr(preparing, "active", False):
+                    # The descriptor and mapping reads still use the original
+                    # detached database. Keep the full RAM snapshot unchanged.
+                    timeline.append(("descriptor_scope", agent["id"], time.perf_counter_ns(),
+                                     tuple(result["entities"]), result["logical_device_id"]))
+                return result
+
+            stack.enter_context(patch.object(device_agents, "target_options_for_state", measured_options))
+            stack.enter_context(patch.object(DeviceAgentService, "descriptor", measured_descriptor))
+            create_intent = ActionIntent.create
+
+            def measured_intent(*args, **kwargs):
+                intent = create_intent(*args, **kwargs)
+                if hasattr(inference, "index"):
+                    timeline.append(("intent_created", inference.index, time.perf_counter_ns(),
+                                     intent.created_at))
+                return intent
+
+            stack.enter_context(patch.object(ActionIntent, "create", measured_intent))
+
+            def observe_stage(owner, method, stage):
+                original = getattr(owner, method)
+
+                def measured(*args, **kwargs):
+                    if getattr(preparing, "active", False):
+                        with preparation_probe.span(stage):
+                            return original(*args, **kwargs)
+                    return original(*args, **kwargs)
+
+                stack.enter_context(patch.object(owner, method, measured))
+
+            conn = store.conn
+
+            @contextmanager
+            def measured_connection():
+                span = (preparation_probe.span("native_snapshot_transaction")
+                        if getattr(preparing, "active", False) else nullcontext())
+                with span, conn() as connection:
+                    yield connection
+
+            stack.enter_context(patch.object(store, "conn", measured_connection))
+            observe_stage(TRAINING_BUDGET, "checkpoint", "training_budget_checkpoint")
+            observe_stage(universal_affected_sensors, "latest", "affected_declaration_read")
+            observe_stage(universal_affected_sensors, "topology", "affected_topology_read")
+            observe_stage(universal_affected_sensors, "prepare", "affected_evidence")
+            observe_stage(DeviceAgentService, "legal_action_mask", "original_arbiter_mask")
+            observe_stage(DeviceAgentService, "_persist_runtime_manual_holds", "manual_override")
+            observe_stage(engine.context, "resolved_registry", "registry_snapshot")
+            observe_stage(store, "_agent_dict", "agent_normalization")
+            native_row_bytes = getattr(universal_predecision, '_sqlite_row_bytes', None)
+
+            def measured_row_bytes(rows):
+                with preparation_probe.span("sqlite_row_accounting"):
+                    size = native_row_bytes(rows)
+                materialization["native_snapshot_rows"] += len(rows)
+                materialization["native_snapshot_structural_bytes"] += size
+                return size
+
+            # #368 predates this accounting helper. Installing a dormant probe
+            # there preserves its original copy path and permits diagnostics.
+            stack.enter_context(patch.object(universal_predecision, "_sqlite_row_bytes", measured_row_bytes, create=True))
+
+            native_copy = universal_predecision.bounded_copy
+
+            def measured_copy(value, **kwargs):
+                snapshot = "states" in value
+                phase = "ram_snapshot_copy" if snapshot else "bounded_evidence_copy"
+                with preparation_probe.span(phase):
+                    result, size = native_copy(value, **kwargs)
+                materialization[phase + "_structural_bytes"] += size
+                if snapshot:
+                    materialization["state_entries"] += len(result["states"])
+                    materialization["registry_entries"] += len(result["entities"])
+                return result, size
+
+            stack.enter_context(patch.object(universal_predecision, "bounded_copy", measured_copy))
+
+            class DetachedConnection(sqlite3.Connection):
+                def execute(self, sql, parameters=()):
+                    with preparation_probe.span("detached_sql_execute"):
+                        return super().execute(sql, parameters)
+
+                def executemany(self, sql, parameters):
+                    materialization["detached_insert_rows"] += len(parameters)
+                    with preparation_probe.span("detached_sql_insert_batch"):
+                        return super().executemany(sql, parameters)
+
+                def close(self):
+                    with preparation_probe.span('detached_cleanup'):
+                        return super().close()
+
+            def connect_detached(*args, **kwargs):
+                with preparation_probe.span("detached_sql_connect"):
+                    return sqlite3.connect(*args, factory=DetachedConnection, **kwargs)
+
+            stack.enter_context(patch.object(universal_predecision, "sqlite3",
+                                             SimpleNamespace(connect=connect_detached, Row=sqlite3.Row)))
+
+            request = scenario.evidence.request
+            matches = scenario.evidence._matches
+            bind = scenario.evidence.bind
+
+            def measured_request(agent_id):
+                timeline.append(("requested", getattr(inference, "index", None), time.perf_counter_ns(),
+                                 agent_id))
+                return request(agent_id)
+
+            def measured_match(evidence, agent, state, values):
+                accepted = matches(evidence, agent, state, values)
+                if not accepted:
+                    timeline.append(("rejected_match", getattr(inference, "index", None),
+                                     time.perf_counter_ns(), agent["id"]))
+                return accepted
+
+            def measured_bind(ticket, intent, agent, state, values):
+                bound = bind(ticket, intent, agent, state, values)
+                if bound is not None:
+                    timeline.append(("consumed", getattr(inference, "index", None), time.perf_counter_ns(),
+                                     agent["id"]))
+                return bound
+
+            stack.enter_context(patch.object(scenario.evidence, "request", measured_request))
+            stack.enter_context(patch.object(scenario.evidence, "_matches", measured_match))
+            stack.enter_context(patch.object(scenario.evidence, "bind", measured_bind))
 
         def observed_prepare():
             try:
+                if profile_prepare and scenario.evidence.pending:
+                    preparing.active = True
+                    with scenario.evidence.lock:
+                        agent_id = next(iter(scenario.evidence.pending), None)
+                    timeline.append(("preparation_admitted", agent_id, time.perf_counter_ns()))
+                    with preparation_probe.span("prepare_pending_turn"):
+                        start, cpu = time.perf_counter_ns(), time.thread_time_ns()
+                        prepared_before = scenario.evidence.stats["prepared"]
+                        profiler = PreparationCPUProfile() if os.environ.get("HOMEMIND_PREPARATION_CPU_PROFILE") == "1" else None
+                        try:
+                            if profiler is not None: profiler.enable()
+                            return prepare()
+                        finally:
+                            if profiler is not None: profiler.disable()
+                            # Keep raw CPU rows; no profiler crosses threads.
+                            if profiler is not None:
+                                profiler.create_stats()
+                                cpu_profiles.append(profiler.stats)
+                            timeline.append(("preparation_turn", agent_id, start, time.perf_counter_ns(),
+                                             time.thread_time_ns()-cpu,
+                                             scenario.evidence.stats["prepared"] > prepared_before))
                 return prepare()
             except Exception as exc:
                 errors[str(exc)] += 1
                 raise
+            finally:
+                if profile_prepare:
+                    preparing.active = False
 
         scenario.evidence.prepare_one = observed_prepare
         collector.idle_ready = lambda: foreground_idle(engine)
+        if profile_prepare:
+            def measured_admission():
+                with preparation_probe.span("foreground_idle_check"):
+                    return foreground_idle(engine)
+
+            collector.idle_ready = measured_admission
         if mode == "positive":
             # The existing positive control deliberately prepares per decision.
             collector.idle_ready = lambda: False
             scenario.drain = lambda: wait_for_writer(collector)
         probe = Probe(capacity=256)
         probe.install(stack, engine, store)
+        if profile_prepare:
+            from storage_budget import BudgetCursor
+
+            observe_stage(BudgetCursor, "execute", "native_sql_execute")
         writer_active = threading.Event()
         native_write = collector._write
 
         def observed_write(*args):
             writer_active.set()
+            writer_profiler = None
+            if profile_prepare:
+                wall, cpu = time.perf_counter_ns(), time.thread_time_ns()
+                if os.environ.get('HOMEMIND_COLLECTOR_CPU_PROFILE') == '1':
+                    writer_profiler = PreparationCPUProfile()
+                    writer_profiler.enable()
             try:
                 return native_write(*args)
             finally:
+                if writer_profiler is not None:
+                    writer_profiler.disable()
+                    writer_cpu_profiles.append(writer_profiler.stats)
+                if profile_prepare:
+                    timeline.append(("collector_write", None, wall, time.perf_counter_ns(),
+                                     time.thread_time_ns()-cpu))
                 writer_active.clear()
 
         collector._write = observed_write
@@ -376,6 +607,9 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
 
         initial_files = {p.name: p.stat().st_size for p in path.parent.glob(path.name+"*")}
         cpu, started, rss_before = time.process_time(), time.perf_counter(), rss_mb()
+        if profile_prepare:
+            timeline.append(("load_started", None, time.perf_counter_ns()))
+        threads_before = thread_cpu_snapshot() if profile_prepare else None
         if mode == "positive":
             count = max(128 if run_lifecycle else 8, devices)
             scenario.collect_events(count)
@@ -400,7 +634,8 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
                     try:
                         event_count, intents, timings, statuses, ingress_seconds = stream(
                             scenario, mode, max((devices+fanout-1)//fanout, ticks), period, writer_active,
-                            on_intent=submit_feedback if mode == "busy" else None, fanout=fanout)
+                            on_intent=submit_feedback if mode == "busy" else None, fanout=fanout,
+                            timeline=timeline, inference=inference)
                     finally:
                         if lock is not None:
                             lock.rollback()
@@ -417,8 +652,13 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         signature = [(tick, desired, intent["target_entity"], intent["desired_value"], intent["decision_source"])
                      for tick, desired, intent in sorted(intents, key=lambda row: row[0])]
         collector_at_load_end = collector.diagnostics()
+        with scenario.evidence.lock:
+            preparation_pending_at_load_end = len(scenario.evidence.pending)
         load_cpu = time.process_time()-cpu
         load_seconds = time.perf_counter()-started
+        if profile_prepare:
+            timeline.append(("load_finished", None, time.perf_counter_ns()))
+        thread_cpu = thread_cpu_delta(threads_before, thread_cpu_snapshot()) if profile_prepare else None
         finalization_started = time.perf_counter()
         load_sql_calls = sql_calls(probe)
         store._flush_all_provenance()
@@ -463,10 +703,33 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         if mode == "incomplete" and (dataset["status"] != "qualified_source" or dataset["eligible"]):
             raise AssertionError(f"Missing evidence qualified: {dataset}")
         result = dict(mode=mode, sensors=sensors, devices=devices, fanout=min(fanout, devices),
+                      preparation_cpu_functions=(cpu_function_rows(cpu_profiles) if profile_prepare else None),
+                      collector_cpu_functions=(cpu_function_rows(writer_cpu_profiles) if profile_prepare else None),
+                      preparation_source_revisions=source_revisions if profile_prepare else None,
+                      root_target_order=[a['target_entity'] for a in scenario.agents],
+                      input_fingerprint=hashlib.sha256(json.dumps(dict(
+                          mode=mode,sensors=sensors,devices=devices,ticks=ticks,period=period,
+                          fanout=min(fanout,devices),candidates=candidate_count,
+                          root_targets=[a['target_entity'] for a in scenario.agents]),
+                          sort_keys=True).encode()).hexdigest(),
                       active_agents=len(scenario.agents),
-                      candidates=devices if mode == "busy" else 0, predecision_max_agents=MAX_AGENTS,
+                      candidates=candidate_count, durable_configs=durable_configs,
+                      preparation_profile=preparation_probe.snapshot() if profile_prepare else None,
+                      preparation_materialization=materialization if profile_prepare else None,
+                      descriptor_state_reads=descriptor_state_reads if profile_prepare else None,
+                      timeline=timeline, thread_cpu=thread_cpu,
+                      preparation_pending_at_load_end=preparation_pending_at_load_end,
+                      preparation_native_sql=snapshot.get("sqlite_execute.universal_predecision.prepare_one"),
+                      preparation_engine_lock={k: v for k, v in snapshot.items()
+                          if k.startswith("engine_lock_")
+                          and (".prepare_one:" in k or ".observed_prepare:" in k)}
+                          if profile_prepare else None,
+                      predecision_max_agents=MAX_AGENTS,
                       prepare_error_reasons=errors, original_intents=len(intents), event=events,
                       decision_status=statuses, decision_signature=hashlib.sha256(json.dumps(signature).encode()).hexdigest(),
+                      # Synthetic original decisions only. Retain the rows as well
+                      # as their digest so any same-revision mismatch is diagnosable.
+                      decision_trace=signature,
                       history=counts, dataset=dataset, collector=end,
                       collector_before_final_drain=before_final_drain, collector_at_load_end=collector_at_load_end,
                       background=background_stats,
@@ -485,6 +748,64 @@ def collect_case(path, sensors, devices, mode, ticks, period, *, run_lifecycle=F
         return result
 
 
+class PreparationCPUProfile:
+    """Thread-local CPU call tree; avoids Python 3.12 cProfile global hooks.
+
+    Includes diagnostic hook overhead. Never enabled in acceptance runs.
+    """
+    def __init__(self):
+        self.stack = []
+        self.stats = {}
+
+    def event(self, frame, event, arg):
+        if event not in ('call', 'return', 'c_call', 'c_return', 'c_exception'):
+            return
+        at = time.thread_time_ns()
+        if event in ('call', 'c_call'):
+            if event == 'call':
+                code = frame.f_code
+                key = (Path(code.co_filename).name, code.co_firstlineno, code.co_name)
+            else:
+                key = ('C', 0, getattr(arg, '__qualname__', str(type(arg))))
+            self.stack.append([key, at, 0])
+        elif self.stack:
+            key, started, child = self.stack.pop()
+            elapsed = at-started
+            old = self.stats.get(key, (0, 0, 0., 0., {}))
+            self.stats[key] = (old[0]+1, old[1]+1, old[2]+(elapsed-child)/1e9,
+                               old[3]+elapsed/1e9, {})
+            if self.stack:
+                self.stack[-1][2] += elapsed
+
+    def enable(self):
+        if sys.getprofile() is not None:
+            raise RuntimeError('another profiler is active')
+        sys.setprofile(self.event)
+
+    def disable(self):
+        sys.setprofile(None)
+
+    def create_stats(self):
+        pass
+
+
+def cpu_function_rows(profiles):
+    """Separate diagnostic only: exclusive/inclusive CPU in the preparation thread."""
+    import pstats
+    if not profiles:
+        return []
+    stats = pstats.Stats()
+    stats.stats = profiles[0].copy()
+    for profile in profiles[1:]:
+        other = pstats.Stats()
+        other.stats = profile
+        stats.add(other)
+    return [dict(file=Path(key[0]).name, line=key[1], function=key[2],
+                 primitive_calls=value[0], calls=value[1],
+                 exclusive_cpu_ms=value[2]*1000, inclusive_cpu_ms=value[3]*1000)
+            for key, value in sorted(stats.stats.items(), key=lambda item: -item[1][3])]
+
+
 def sql_calls(probe):
     return sum(row["count"] for key, row in probe.snapshot()["operations"].items()
                if key.startswith("sqlite_execute."))
@@ -497,6 +818,8 @@ def main():
     parser.add_argument("--ticks", type=int, default=24)
     parser.add_argument("--fanout", type=int, default=1, help="Root targets admitted per motion event")
     parser.add_argument("--period", type=float, default=.4)
+    parser.add_argument("--candidates", type=int, help="Override the number of seeded Candidate configs")
+    parser.add_argument("--profile-prepare", action="store_true", help="Record bounded per-stage preparation spans")
     parser.add_argument("--lifecycle", action="store_true")
     parser.add_argument("--output", type=Path, required=True, help="New JSONL checkpoint file")
     args = parser.parse_args()
@@ -511,7 +834,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="hm-load-") as tmp, args.output.open("x", encoding="utf-8") as output:
         os.environ["ADAPTIVE_AI_DATA"] = str(Path(tmp)/"bootstrap")
         output.write(json.dumps(dict(scope="host synthetic", python=sys.version, platform=platform.platform(),
-                                     cpus=os.cpu_count(), ticks=args.ticks, period=args.period, lifecycle=args.lifecycle, fanout=args.fanout))+"\n")
+                                     cpus=os.cpu_count(), sqlite=sqlite3.sqlite_version,
+                                     ticks=args.ticks, period=args.period, lifecycle=args.lifecycle,
+                                     fanout=args.fanout, candidates=args.candidates,
+                                     profile_prepare=args.profile_prepare))+"\n")
         output.flush()
         for index, item in enumerate(args.cases.split(",")):
             sensors, devices = map(int, item.split(":"))
@@ -521,7 +847,8 @@ def main():
                 folder.mkdir()
                 try:
                     row = collect_case(folder/"native.db", sensors, devices, mode, args.ticks, args.period,
-                                       run_lifecycle=args.lifecycle, fanout=args.fanout)
+                                       run_lifecycle=args.lifecycle, fanout=args.fanout,
+                                       candidates=args.candidates, profile_prepare=args.profile_prepare)
                 except Exception as exc:
                     import traceback
                     traceback.print_exc()

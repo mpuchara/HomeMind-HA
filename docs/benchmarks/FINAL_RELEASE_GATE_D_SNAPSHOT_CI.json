@@ -1,0 +1,68 @@
+{
+  "measured_source": "cf09e214b4a97f367e8a7ca9169b2f30273b2c63",
+  "final_code": "eb6650e2ba90a9e53470178386e623dd73bd4501",
+  "measured_ci": {
+    "status": "fulfilled",
+    "value": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Action completed."
+        }
+      ],
+      "structuredContent": {
+        "workflow_runs": [
+          {
+            "id": 42235276985,
+            "name": "Validate HomeMind",
+            "status": "completed",
+            "conclusion": "success",
+            "run_number": 6006,
+            "jobs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42235276985/jobs",
+            "logs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42235276985/logs",
+            "workflow_id": 357010785
+          }
+        ]
+      },
+      "isError": false
+    }
+  },
+  "final_code_ci": {
+    "status": "fulfilled",
+    "value": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Action completed."
+        }
+      ],
+      "structuredContent": {
+        "workflow_runs": [
+          {
+            "id": 42237574777,
+            "name": "Validate HomeMind",
+            "status": "in_progress",
+            "conclusion": null,
+            "run_number": 6008,
+            "jobs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42237574777/jobs",
+            "logs_url": "https://api.github.com/repos/mpuchara/HomeMind-HA/actions/runs/42237574777/logs",
+            "workflow_id": 357010785
+          }
+        ]
+      },
+      "isError": false
+    }
+  },
+  "local_final_tests": {
+    "universal": {
+      "count": 295,
+      "seconds": 182.977,
+      "status": "PASS"
+    },
+    "focused_with_adapter_regression": {
+      "count": 36,
+      "seconds": 35.017,
+      "status": "PASS"
+    }
+  }
+}

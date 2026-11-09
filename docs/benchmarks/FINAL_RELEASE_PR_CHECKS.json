@@ -1,0 +1,3954 @@
+{
+  "checked_date": "2026-11-06",
+  "scope": "Checks for each saved pre-session PR HEAD; not approval or final release CI",
+  "prs": [
+    {
+      "number": 369,
+      "sha": "07ed423daa760bce2c1903448719cfe711b4f06b",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244/job/127066026794"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971796849/job/127065944288"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971796849/job/127061528715"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971796849/job/127061528634"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971796849/job/127061528217"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244/job/127061511059"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244/job/127061510970"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41971791244/job/127061510679"
+        }
+      ]
+    },
+    {
+      "number": 368,
+      "sha": "951dcd70ed20b5f74220307cfb7411fa2c6bcc5d",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876936011/job/126745464328"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876948496/job/126745316275"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876948496/job/126738796961"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876948496/job/126738796734"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876948496/job/126738796357"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876936011/job/126738754374"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876936011/job/126738754264"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41876936011/job/126738753913"
+        }
+      ]
+    },
+    {
+      "number": 367,
+      "sha": "c4adb44512f8c1954a8cefdd7970710b249591d2",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816293453/job/126532195832"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816282951/job/126531483066"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816293453/job/126527816272"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816293453/job/126527764842"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816293453/job/126527762289"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816282951/job/126527731880"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816282951/job/126527728835"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41816282951/job/126527728247"
+        }
+      ]
+    },
+    {
+      "number": 366,
+      "sha": "7cf56533187a7db43a0d5d384b8e82444c0108d1",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41809329467/job/126508338647"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41809329467/job/126504314314"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41809329467/job/126504314131"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41809329467/job/126504313355"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800494332/job/126480019884"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800500067/job/126480007124"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800500067/job/126474786717"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800500067/job/126474786705"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800500067/job/126474786383"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800494332/job/126474768583"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800494332/job/126474768497"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41800494332/job/126474767953"
+        }
+      ]
+    },
+    {
+      "number": 365,
+      "sha": "613e2e2638df6ac58b873bbcc2a93d78fd63a8c2",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745234648/job/126301420733"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745242037/job/126301366398"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745242037/job/126296472198"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745242037/job/126296472089"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745242037/job/126296471786"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745234648/job/126296446909"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745234648/job/126296446732"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41745234648/job/126296446354"
+        }
+      ]
+    },
+    {
+      "number": 364,
+      "sha": "b3a67c0a2d264697ac69f5ee16bdd673b843f6d3",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718623548/job/126211684674"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718632216/job/126209772172"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718632216/job/126205156481"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718632216/job/126205156467"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718632216/job/126205156297"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718623548/job/126205126715"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718623548/job/126205126682"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41718623548/job/126205126205"
+        }
+      ]
+    },
+    {
+      "number": 363,
+      "sha": "e797439989dba56ca2ccf3d37cf1b3521c501b1c",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681155829/job/126081504072"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681143380/job/126080821672"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681155829/job/126074840326"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681155829/job/126074840317"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681155829/job/126074839830"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681143380/job/126074795366"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681143380/job/126074795356"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41681143380/job/126074795012"
+        }
+      ]
+    },
+    {
+      "number": 362,
+      "sha": "4755830a0244c6ae33e115e27ce321600806c341",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655642962/job/125991494191"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655632592/job/125991409819"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655642962/job/125985073127"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655642962/job/125985072854"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655642962/job/125985072401"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655632592/job/125985035925"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655632592/job/125985035839"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41655632592/job/125985035423"
+        }
+      ]
+    },
+    {
+      "number": 361,
+      "sha": "1b298554490a629cbc00d024c3879659bbfeb253",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613741094/job/125846821410"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613749739/job/125846149533"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613749739/job/125841887587"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613749739/job/125841887470"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613749739/job/125841887158"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613741094/job/125841858464"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613741094/job/125841858395"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41613741094/job/125841858167"
+        }
+      ]
+    },
+    {
+      "number": 360,
+      "sha": "72487b945d521c8564928cea770de73023b82136",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581946387/job/125742024311"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581951052/job/125741984411"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581951052/job/125738580964"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581951052/job/125738580956"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581951052/job/125738580716"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581946387/job/125738566428"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581946387/job/125738566391"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41581946387/job/125738566068"
+        }
+      ]
+    },
+    {
+      "number": 359,
+      "sha": "3c3ccee8354cc74aab8ac871a010883b7054cbf1",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554020141/job/125652542922"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554013100/job/125651703003"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554020141/job/125648347617"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554020141/job/125648347528"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554020141/job/125648347280"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554013100/job/125648324549"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554013100/job/125648324467"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41554013100/job/125648324203"
+        }
+      ]
+    },
+    {
+      "number": 358,
+      "sha": "6a9beaa30adbf7f848521a68ea323bb14a1962e5",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548469162/job/125633997831"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548460476/job/125633557227"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548469162/job/125629779819"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548469162/job/125629779757"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548469162/job/125629779635"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548460476/job/125629749814"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548460476/job/125629749727"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41548460476/job/125629749590"
+        }
+      ]
+    },
+    {
+      "number": 357,
+      "sha": "8d869fcffd8c5440546c8b82806ae163fcacd076",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406484895/job/125153071449"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406492032/job/125151762331"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406492032/job/125149579282"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406492032/job/125149579223"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406492032/job/125149579035"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406484895/job/125149555264"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406484895/job/125149555134"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41406484895/job/125149555032"
+        }
+      ]
+    },
+    {
+      "number": 356,
+      "sha": "e32f0b1802a66333d797af0d0fa87a2012975501",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393522874/job/125112833212"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393528805/job/125111871915"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393528805/job/125109834196"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393528805/job/125109834135"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393528805/job/125109833993"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393522874/job/125109816673"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393522874/job/125109816557"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41393522874/job/125109816478"
+        }
+      ]
+    },
+    {
+      "number": 355,
+      "sha": "859c372cf9418cf63dae7063f7ded78369a0dde3",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392544611/job/125108822776"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392540179/job/125108606916"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392544611/job/125106879175"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392544611/job/125106879170"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392544611/job/125106878999"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392540179/job/125106865481"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392540179/job/125106865439"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41392540179/job/125106865192"
+        }
+      ]
+    },
+    {
+      "number": 354,
+      "sha": "e2989925573a5bc2748e87652570125232d3f69c",
+      "total_count": 7,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290556307/job/124802448852"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290556307/job/124800727390"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290556307/job/124800727383"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290556307/job/124800727171"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290552103/job/124800714845"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290552103/job/124800714792"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290552103/job/124800714650"
+        }
+      ]
+    },
+    {
+      "number": 353,
+      "sha": "1c54cb865bc5b85d77cb930bf24ad18699fe56ac",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290119541/job/124800634072"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290119541/job/124799440963"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290119541/job/124799440937"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41290119541/job/124799440860"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282317631/job/124778076962"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282315091/job/124778063719"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282317631/job/124776564028"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282317631/job/124776563959"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282317631/job/124776563810"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282315091/job/124776556316"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282315091/job/124776556302"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41282315091/job/124776556129"
+        }
+      ]
+    },
+    {
+      "number": 352,
+      "sha": "a05c66a55a5dd0702f8c7cdbfc273a03be96d45e",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41281819961/job/124776670095"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41281819961/job/124775108070"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41281819961/job/124775108049"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41281819961/job/124775108010"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254426030/job/124696640750"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254422712/job/124696380642"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254426030/job/124694463933"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254426030/job/124694463820"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254426030/job/124694463630"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254422712/job/124694453807"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254422712/job/124694453803"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254422712/job/124694453773"
+        }
+      ]
+    },
+    {
+      "number": 351,
+      "sha": "deb5e9cdfe3398d6f0b756694c1f9a8024984fa9",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254151260/job/124694632175"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254151260/job/124693646996"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254151260/job/124693646976"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41254151260/job/124693646862"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253441203/job/124693331446"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253438040/job/124692615553"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253441203/job/124691535724"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253441203/job/124691535678"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253441203/job/124691535529"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253438040/job/124691526404"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253438040/job/124691525968"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253438040/job/124691525917"
+        }
+      ]
+    },
+    {
+      "number": 350,
+      "sha": "89ea8e01acf10fc5466739a5b5f18fde8eb08148",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253244237/job/124691975678"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253244237/job/124690942814"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253244237/job/124690942690"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41253244237/job/124690942475"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251493643/job/124687792947"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251488885/job/124687646370"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251493643/job/124685770537"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251493643/job/124685770480"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251493643/job/124685770334"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251488885/job/124685756876"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251488885/job/124685756820"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251488885/job/124685756680"
+        }
+      ]
+    },
+    {
+      "number": 349,
+      "sha": "d32b8cf927fea368717624d3b9dcc3a2947e05d5",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251282843/job/124686941123"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251282843/job/124685146577"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251282843/job/124685146576"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41251282843/job/124685146376"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248410927/job/124678492304"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248414460/job/124678324458"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248414460/job/124676631198"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248414460/job/124676631159"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248414460/job/124676630969"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248410927/job/124676620783"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248410927/job/124676620704"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/41248410927/job/124676620606"
+        }
+      ]
+    },
+    {
+      "number": 348,
+      "sha": "f7384ba5476f26155ecb138034cc3350fa5bfda2",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949874438/job/123720120429"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949885227/job/123718297637"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949885227/job/123714881462"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949885227/job/123714881307"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949885227/job/123714880971"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949874438/job/123714840616"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949874438/job/123714840595"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40949874438/job/123714840267"
+        }
+      ]
+    },
+    {
+      "number": 347,
+      "sha": "a5b07f0c3277f5c7a7dc1edc3197dcb02679abd4",
+      "total_count": 0,
+      "checks": []
+    },
+    {
+      "number": 346,
+      "sha": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
+      "total_count": 0,
+      "checks": []
+    },
+    {
+      "number": 345,
+      "sha": "8e47cd6652c1364f0b048f79d507929b1cca6168",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297968349/job/121492098047"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297959747/job/121491295073"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297968349/job/121488578995"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297968349/job/121488578762"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297968349/job/121488578756"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297959747/job/121488551208"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297959747/job/121488551105"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/40297959747/job/121488550742"
+        }
+      ]
+    },
+    {
+      "number": 344,
+      "sha": "7b0c54ca53cb7b4b608c7b628f20a4d99f2697ce",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942372708/job/120379310569"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942367253/job/120379082511"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942372708/job/120376669536"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942372708/job/120376669512"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942372708/job/120376669224"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942367253/job/120376651520"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942367253/job/120376651339"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39942367253/job/120376650967"
+        }
+      ]
+    },
+    {
+      "number": 343,
+      "sha": "e60ee69ef1c432a54d44cc85ef7534348f6070b4",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902837138/job/120250796132"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902832399/job/120249883442"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902837138/job/120248044987"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902837138/job/120248044964"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902837138/job/120248044678"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902832399/job/120248029558"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902832399/job/120248029531"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39902832399/job/120248029274"
+        }
+      ]
+    },
+    {
+      "number": 342,
+      "sha": "43c6fc7f94630aa93189348255b2a857a8101ad6",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838831545/job/120039170630"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838822215/job/120038670864"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838831545/job/120034159426"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838831545/job/120034159227"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838831545/job/120034158852"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838822215/job/120034124623"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838822215/job/120034124537"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39838822215/job/120034124195"
+        }
+      ]
+    },
+    {
+      "number": 341,
+      "sha": "9fd5a24f81ad17d853c8b6e10cddc69502cf0ccb",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816361393/job/119961096901"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816372315/job/119960161950"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816372315/job/119955854435"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816372315/job/119955854385"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816372315/job/119955853551"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816361393/job/119955818657"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816361393/job/119955818410"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39816361393/job/119955817942"
+        }
+      ]
+    },
+    {
+      "number": 340,
+      "sha": "c28ac86d79d675f41a30bb39ac795ea8da5c7e40",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644814663/job/119381884818"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644805370/job/119381199786"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644814663/job/119377461665"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644814663/job/119377461618"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644814663/job/119377461175"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644805370/job/119377428394"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644805370/job/119377428005"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39644805370/job/119377427599"
+        }
+      ]
+    },
+    {
+      "number": 339,
+      "sha": "9721c29138b106e176e707b6b0f349b73f50a2f9",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632368333/job/119338967310"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632359592/job/119338915513"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632368333/job/119333730062"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632368333/job/119333730038"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632368333/job/119333729764"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632359592/job/119333700372"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632359592/job/119333700259"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39632359592/job/119333699976"
+        }
+      ]
+    },
+    {
+      "number": 338,
+      "sha": "dbe5be5720d2b7bae5b779654fc8b619766f68d8",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478701613/job/118826029640"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478693597/job/118824779025"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478701613/job/118821313480"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478701613/job/118821313384"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478701613/job/118821312860"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478693597/job/118821284496"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478693597/job/118821284493"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39478693597/job/118821284083"
+        }
+      ]
+    },
+    {
+      "number": 337,
+      "sha": "898bffa2cde6fd1d0c1de0d7d19130eb45695e91",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445817804/job/118710995211"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445809596/job/118710995046"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445817804/job/118707304811"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445817804/job/118707304772"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445817804/job/118707304148"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445809596/job/118707278207"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445809596/job/118707278185"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39445809596/job/118707277902"
+        }
+      ]
+    },
+    {
+      "number": 336,
+      "sha": "724e5e5b6936f3fd38e249bc08ba0fd5d47e69db",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332308454/job/118337217473"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332301599/job/118336896109"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332308454/job/118333230626"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332308454/job/118333229551"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332308454/job/118333229294"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332301599/job/118333206646"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332301599/job/118333206526"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39332301599/job/118333206247"
+        }
+      ]
+    },
+    {
+      "number": 335,
+      "sha": "196ce914dcb31a9c9f98c3897abdec10c66de987",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287106859/job/118183285705"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287099382/job/118183111188"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287106859/job/118176994352"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287106859/job/118176993682"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287106859/job/118176992438"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287099382/job/118176960008"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287099382/job/118176959954"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39287099382/job/118176959357"
+        }
+      ]
+    },
+    {
+      "number": 334,
+      "sha": "0eae5b9cab5e37c1d09114affa4ada419408ef77",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245498112/job/118039895901"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245504500/job/118038870860"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245504500/job/118036322184"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245504500/job/118036322114"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245504500/job/118036321865"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245498112/job/118036301645"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245498112/job/118036301621"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39245498112/job/118036301141"
+        }
+      ]
+    },
+    {
+      "number": 333,
+      "sha": "f84211d676cf07c8ef80ea72aa6868d8747f38f7",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174091602/job/117815179660"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174094029/job/117815143863"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174094029/job/117813064957"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174094029/job/117813064942"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174094029/job/117813064663"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174091602/job/117813057879"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174091602/job/117813057756"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39174091602/job/117813057744"
+        }
+      ]
+    },
+    {
+      "number": 332,
+      "sha": "b4e3e22d7881c9cf7380386ff027b05e4471780b",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116286305/job/117644497053"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116283948/job/117644483040"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116286305/job/117642627854"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116286305/job/117642627853"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116286305/job/117642627619"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116283948/job/117642620960"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116283948/job/117642620959"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39116283948/job/117642620810"
+        }
+      ]
+    },
+    {
+      "number": 331,
+      "sha": "7c52470a0889cb3d4cfbd240666ae4b658a27e39",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062450026/job/117485114122"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062447942/job/117485108668"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062450026/job/117483018914"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062450026/job/117483018888"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062450026/job/117483018781"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062447942/job/117483012804"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062447942/job/117483012744"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39062447942/job/117483012635"
+        }
+      ]
+    },
+    {
+      "number": 330,
+      "sha": "5e6fd19518ba09449c923714cd9b144dc137e1bb",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053089364/job/117457601214"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053080911/job/117456982494"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053089364/job/117455477997"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053089364/job/117455477977"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053089364/job/117455477822"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053080911/job/117455454726"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053080911/job/117455454673"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39053080911/job/117455454469"
+        }
+      ]
+    },
+    {
+      "number": 329,
+      "sha": "b529bbd09aef665987db323aba9001e2d2c2762b",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041392083/job/117423405553"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041382614/job/117423171398"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041392083/job/117421441775"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041392083/job/117421441771"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041392083/job/117421441597"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041382614/job/117421415504"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041382614/job/117421415489"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39041382614/job/117421415398"
+        }
+      ]
+    },
+    {
+      "number": 328,
+      "sha": "fcd85455ce2f4d499ccbf18e3065c51d80aff8ea",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035215316/job/117405070490"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035207884/job/117404651885"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035215316/job/117403539591"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035215316/job/117403539582"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035215316/job/117403539459"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035207884/job/117403518483"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035207884/job/117403518325"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39035207884/job/117403518086"
+        }
+      ]
+    },
+    {
+      "number": 327,
+      "sha": "5efd9327456a3b054e09db9e908a240148ae55c4",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031711850/job/117395180878"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031714479/job/117394801018"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031714479/job/117393325956"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031714479/job/117393325942"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031714479/job/117393325763"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031711850/job/117393318559"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031711850/job/117393318527"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/39031711850/job/117393318397"
+        }
+      ]
+    },
+    {
+      "number": 326,
+      "sha": "781c44f9461d2f19656e6f2d3f7327e5563a6408",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959174851/job/117173560034"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959190484/job/117173557714"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959190484/job/117169660941"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959190484/job/117169660708"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959190484/job/117169660168"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959174851/job/117169607579"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959174851/job/117169607373"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38959174851/job/117169607148"
+        }
+      ]
+    },
+    {
+      "number": 325,
+      "sha": "0601094c2136e8db754f2684c4071b1de634412f",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884191955/job/116921393585"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884188151/job/116921074172"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884191955/job/116917863443"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884191955/job/116917863376"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884191955/job/116917863022"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884188151/job/116917849875"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884188151/job/116917849689"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884188151/job/116917849565"
+        }
+      ]
+    },
+    {
+      "number": 324,
+      "sha": "6abe0f95c946d33839e26eff5f483682b4316d36",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884186236/job/116921119833"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884186236/job/116917844229"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884186236/job/116917844171"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38884186236/job/116917843884"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844758287/job/116795124192"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844716877/job/116794965109"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844758287/job/116792637354"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844758287/job/116792637347"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844758287/job/116792637125"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844716877/job/116792507592"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844716877/job/116792507535"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844716877/job/116792507353"
+        }
+      ]
+    },
+    {
+      "number": 323,
+      "sha": "bf9bce389a6a15601d48f933d493b43bbbe8ff34",
+      "total_count": 16,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844711034/job/116794972535"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844711034/job/116792489024"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844711034/job/116792489011"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38844711034/job/116792488842"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792731281/job/116625550988"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792521855/job/116624796331"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792482787/job/116624732460"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792731281/job/116621162163"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792731281/job/116621161906"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792731281/job/116621161619"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792521855/job/116620436683"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792521855/job/116620436493"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792521855/job/116620435920"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792482787/job/116620300579"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792482787/job/116620300294"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792482787/job/116620299897"
+        }
+      ]
+    },
+    {
+      "number": 322,
+      "sha": "d0b98210b49c34102d403350a943fbf21336191f",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792468828/job/116624576137"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792468828/job/116620254277"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792468828/job/116620253719"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38792468828/job/116620253687"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783075680/job/116591779486"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783067718/job/116590902098"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783075680/job/116588003528"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783075680/job/116588003498"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783075680/job/116588002799"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783067718/job/116587974606"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783067718/job/116587974413"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783067718/job/116587974005"
+        }
+      ]
+    },
+    {
+      "number": 321,
+      "sha": "653b8b4f2e387d9c1b17319f84c073d964f953fe",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783065288/job/116592349015"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783065288/job/116587966957"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783065288/job/116587966457"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38783065288/job/116587966124"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747638682/job/116468512001"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747645909/job/116468483271"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747645909/job/116465397036"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747645909/job/116465396941"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747645909/job/116465396520"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747638682/job/116465372765"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747638682/job/116465372619"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38747638682/job/116465372135"
+        }
+      ]
+    },
+    {
+      "number": 320,
+      "sha": "058f3a32ff55474d516fcd564ccd1f1bf0fbfbd4",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738709493/job/116438557358"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738715972/job/116438420436"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738715972/job/116434558695"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738715972/job/116434558620"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738715972/job/116434558080"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738709493/job/116434534712"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738709493/job/116434534679"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38738709493/job/116434534431"
+        }
+      ]
+    },
+    {
+      "number": 319,
+      "sha": "2571538d2eaf902222fe5685c93cdaecea376719",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717571976/job/116367547886"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717549231/job/116366711552"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717571976/job/116363899899"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717571976/job/116363899812"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717571976/job/116363899558"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717549231/job/116363823405"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717549231/job/116363823257"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38717549231/job/116363822901"
+        }
+      ]
+    },
+    {
+      "number": 318,
+      "sha": "ec217ca5457e598d2583e4cb216b48872a441d46",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704157897/job/116322976958"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704125788/job/116322121932"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704157897/job/116319290789"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704157897/job/116319290782"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704157897/job/116319290523"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704125788/job/116319181553"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704125788/job/116319181361"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38704125788/job/116319180842"
+        }
+      ]
+    },
+    {
+      "number": 317,
+      "sha": "aa79300971b369b1815b128cb895f89f032b3883",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665719993/job/116199653074"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665741087/job/116199183373"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665741087/job/116197174565"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665741087/job/116197174525"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665741087/job/116197174198"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665719993/job/116197106421"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665719993/job/116197106411"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38665719993/job/116197106179"
+        }
+      ]
+    },
+    {
+      "number": 316,
+      "sha": "be2aac45cf71518f58b79b0fd9c31d91e0bf80a5",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655103637/job/116165148109"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655107397/job/116164608851"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655107397/job/116162894254"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655107397/job/116162894011"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655107397/job/116162893780"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655103637/job/116162882146"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655103637/job/116162882004"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38655103637/job/116162881869"
+        }
+      ]
+    },
+    {
+      "number": 315,
+      "sha": "21c12ef8a8ad023d1cf158fed85d5e97ede538fa",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38654437194/job/116163727217"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38654437194/job/116160745956"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38654437194/job/116160745879"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38654437194/job/116160745471"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175811/job/116110850882"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175673/job/116110253307"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175673/job/116106602239"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175673/job/116106602145"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175673/job/116106601929"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175811/job/116106599942"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175811/job/116106599818"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38638175811/job/116106599083"
+        }
+      ]
+    },
+    {
+      "number": 314,
+      "sha": "daae55611e5f5ae8905beeca8305040f739bb03a",
+      "total_count": 12,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38617199105/job/116039528228"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38617199105/job/116035221292"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38617199105/job/116035219687"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38617199105/job/116035219249"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604892812/job/115997547249"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604885825/job/115997146020"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604892812/job/115993129594"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604892812/job/115993129543"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604892812/job/115993129248"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604885825/job/115993105873"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604885825/job/115993105841"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38604885825/job/115993105257"
+        }
+      ]
+    },
+    {
+      "number": 313,
+      "sha": "1b4d961c3da764bff9a925700ea5c5c29ff5915f",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595420342/job/115965399073"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595425400/job/115965382871"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595425400/job/115960780887"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595425400/job/115960780779"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595425400/job/115960780462"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595420342/job/115960763230"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595420342/job/115960763224"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38595420342/job/115960763222"
+        }
+      ]
+    },
+    {
+      "number": 312,
+      "sha": "141e064e3d62eb36fdaa2553eb05936c3224a475",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581607930/job/115917336862"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581600690/job/115917005617"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581607930/job/115912661074"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581607930/job/115912661059"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581607930/job/115912660622"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581600690/job/115912634809"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581600690/job/115912634744"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38581600690/job/115912634292"
+        }
+      ]
+    },
+    {
+      "number": 311,
+      "sha": "e5b14217dd26a071bc698f89b34fa7d16afa0514",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571597273/job/115882295174"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571603537/job/115881531887"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571603537/job/115877945432"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571603537/job/115877945272"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571603537/job/115877945094"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571597273/job/115877926080"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571597273/job/115877925795"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38571597273/job/115877925366"
+        }
+      ]
+    },
+    {
+      "number": 310,
+      "sha": "be7621c3514fd7ec145ae534c28c1fd2833f646a",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553524309/job/115820620824"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553520501/job/115820366330"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553524309/job/115816944508"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553524309/job/115816944493"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553524309/job/115816944206"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553520501/job/115816933216"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553520501/job/115816933212"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38553520501/job/115816932923"
+        }
+      ]
+    },
+    {
+      "number": 309,
+      "sha": "70e3d94ae843996d66b13717e01351ff53a70e53",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533205578/job/115753094431"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533160271/job/115753007485"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533205578/job/115749747388"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533205578/job/115749747258"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533205578/job/115749747250"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533160271/job/115749598559"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533160271/job/115749598538"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38533160271/job/115749598257"
+        }
+      ]
+    },
+    {
+      "number": 308,
+      "sha": "4a82f3a23cf8dd05c6db4f62272da26c816c6837",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457658725/job/115508440826"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457620764/job/115507033215"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457658725/job/115504417583"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457658725/job/115504417352"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457658725/job/115504417014"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457620764/job/115504292043"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457620764/job/115504291995"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38457620764/job/115504291842"
+        }
+      ]
+    },
+    {
+      "number": 307,
+      "sha": "ce332508a36d906423103ced218791edf0d3edd5",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439180204/job/115445194999"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439133945/job/115444914019"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439180204/job/115440994426"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439180204/job/115440994223"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439180204/job/115440993965"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439133945/job/115440833765"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439133945/job/115440833630"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38439133945/job/115440833176"
+        }
+      ]
+    },
+    {
+      "number": 306,
+      "sha": "82a39ae352fee3f58275359d1be63ff604729820",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320855831/job/115050886891"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320858912/job/115050861923"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320858912/job/115048339505"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320858912/job/115048339307"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320858912/job/115048339063"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320855831/job/115048329392"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320855831/job/115048329061"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38320855831/job/115048328958"
+        }
+      ]
+    },
+    {
+      "number": 305,
+      "sha": "7b89870cdd35f2cda53fb6f9e56bdd81e94bde27",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304985093/job/114999811762"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304945581/job/114999286283"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304985093/job/114996724673"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304985093/job/114996724392"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304985093/job/114996724173"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304945581/job/114996592091"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304945581/job/114996591931"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38304945581/job/114996591715"
+        }
+      ]
+    },
+    {
+      "number": 304,
+      "sha": "9de14cfe5d48b08ba75471f0e3d1071a32f4cd21",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291347705/job/114955219289"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291390463/job/114954237602"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291390463/job/114952078438"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291390463/job/114952078397"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291390463/job/114952078006"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291347705/job/114951941365"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291347705/job/114951941329"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38291347705/job/114951940934"
+        }
+      ]
+    },
+    {
+      "number": 303,
+      "sha": "8acf7011e63cd7e3e438de3ff386d929ea0d2ffe",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265769393/job/114871165207"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265807671/job/114869838934"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265807671/job/114867545705"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265807671/job/114867545547"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265807671/job/114867545435"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265769393/job/114867419071"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265769393/job/114867418854"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38265769393/job/114867418542"
+        }
+      ]
+    },
+    {
+      "number": 302,
+      "sha": "f4efd1fd9da39d6189d7d5db519f89481896f213",
+      "total_count": 8,
+      "checks": [
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232173668/job/114757289684"
+        },
+        {
+          "name": "package",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232177681/job/114756666893"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232177681/job/114754054225"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232177681/job/114754054221"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232177681/job/114754053939"
+        },
+        {
+          "name": "tests (3.11)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232173668/job/114754041230"
+        },
+        {
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232173668/job/114754041019"
+        },
+        {
+          "name": "tests (3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/mpuchara/HomeMind-HA/actions/runs/38232173668/job/114754040839"
+        }
+      ]
+    }
+  ]
+}
