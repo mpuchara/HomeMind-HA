@@ -1,9 +1,9 @@
 {
-  "version": "0.14.233",
+  "version": "0.14.234",
   "release_date": "2026-11-09",
   "base_version": "0.14.230",
   "base_commit": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
-  "release_status": "pi5-manual-validation-candidate-not-general-release-gates-open",
+  "release_status": "pi5-manual-validation-candidate-recorder-triage-gates-open",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4031,12 +4031,19 @@
   },
   "pi_validation_candidate": {
     "status": "manual-test-only",
-    "derived_from_reporting_sha": "4e31467b38957c3379757ef7bb45ea69f4a5f44a",
+    "derived_from_reporting_sha": "9bd5a61b9cdf7758aef0b2e94c0b7ec5a578e1a1",
     "retained_runtime_sha": "9c245577727c93ede3c59100f11844bf336acb1a",
     "retained_runtime_tree": "cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f",
     "gate_d": "BLOCKER-9-of-13-timing-pairs",
     "collector_default_enabled": false,
     "environments": "aarch64 Pi5 test installation on restored clone only; no Pi/HA acceptance claimed",
-    "note": "version metadata, test-only package verification and CI smoke; no intentional runtime logic changes"
+    "note": "Pi 0.14.233 Recorder backoff reproducible screenshot: classify transient/permanent HA history errors, avoid 120s backoff for local response split/HTTP413, expose sanitized failure detail, suspend futile auto retry on HTTP400/401/403/404 until manual Rescan; retain original 120s transient circuit breaker. Not a proven fix for unknown original HA error."
+  },
+  "recorder_014234": {
+    "scope": "Recorder error triage from first Pi5 startup; no policy/training/collector changes",
+    "safety": "no URL/token/entity logging, terminal HTTP 4xx suspends auto retry until manual Rescan, all other transient errors retain backoff, local oversize responds via existing resilient splitter",
+    "source_baseline": "9bd5a61b9cdf7758aef0b2e94c0b7ec5a578e1a1",
+    "pi_hardware_acceptance": "NOT RUN",
+    "gate_d": "BLOCKER"
   }
 }

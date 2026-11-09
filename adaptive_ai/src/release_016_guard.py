@@ -13,6 +13,67 @@ from __future__ import annotations
 import threading
 import time
 import traceback
+from urllib.error import HTTPError, URLError
+
+def recorder_failure_diagnostics(exc):
+    """Classify a failed HA Recorder request without recording a URL, token or entity ID.
+
+    Nonretryable HTTP errors need an explicit operator intervention.  Local
+    8 MiB response-limit failures and HTTP 413/414 are requests for the existing
+    resilient history splitter, not evidence of HA overload.
+    """
+    error_type = type(exc).__name__
+    status = None
+    if isinstance(exc, HTTPError):
+        status = int(exc.code)
+        if status in (400, 401, 403, 404):
+            category = "authentication" if status in (401, 403) else "unsupported_request"
+            return {
+                "category": category, "exception_type": error_type,
+                "http_status": status, "retryable": False, "backoff": False,
+                "action": "Check Home Assistant Recorder API, permissions and integration configuration; then run manual Rescan",
+            }
+        if status in (413, 414):
+            return {
+                "category": "request_too_large", "exception_type": error_type,
+                "http_status": status, "retryable": True, "backoff": False,
+                "action": "Retry using bounded entity/time slices",
+            }
+        return {
+            "category": "ha_server_or_rate_limit", "exception_type": error_type,
+            "http_status": status, "retryable": True, "backoff": True,
+            "action": "Allow Home Assistant Recorder to recover before retry",
+        }
+    if isinstance(exc, OSError) and type(exc) is OSError and str(exc) == "HA response too large; split the request":
+        return {
+            "category": "response_too_large", "exception_type": error_type,
+            "http_status": None, "retryable": True, "backoff": False,
+            "action": "Retry using bounded entity/time slices",
+        }
+    if isinstance(exc, URLError):
+        reason = getattr(exc, "reason", None)
+        category = "timeout" if isinstance(reason, TimeoutError) else "network_error"
+        errno = getattr(reason, "errno", None)
+    elif isinstance(exc, TimeoutError):
+        category = "timeout"
+        errno = getattr(exc, "errno", None)
+    elif isinstance(exc, OSError):
+        category = "network_error"
+        errno = getattr(exc, "errno", None)
+    else:
+        category = "unexpected_recorder_error"
+        errno = None
+    retryable = category != "unexpected_recorder_error"
+    result = {
+        "category": category, "exception_type": error_type,
+        "http_status": None, "retryable": retryable, "backoff": retryable,
+        "action": ("Check HA connectivity and Recorder performance"
+                   if retryable else "Inspect add-on logs and fix the Recorder response before manual Rescan"),
+    }
+    if isinstance(errno, int):
+        result["errno"] = errno
+    return result
+
 
 
 CONTRACT_VERSION = 1
@@ -57,6 +118,9 @@ def install(runtime):
         "recorder_backoff_seconds": RECORDER_BACKOFF_SECONDS,
         "recorder_backoff_until_monotonic": 0.0,
         "recorder_timeout_count": 0,
+        "recorder_failure_count": 0,
+        "recorder_last_failure": None,
+        "recorder_terminal_error": None,
         "automation_scan_workers": 1,
         "initial_discovery_scheduled": False,
         "initial_discovery_completed": False,
@@ -232,7 +296,9 @@ def install(runtime):
                     # apparent cold-start stall.
                     history_self.stop_event.wait(0.25)
                     continue
-                if discovery_needed and not history_self.discovery_job_active:
+                with state_lock:
+                    recorder_terminal = bool(state["recorder_terminal_error"])
+                if discovery_needed and not recorder_terminal and not history_self.discovery_job_active:
                     request = getattr(history_self, "request_discovery_rescan", None)
                     reason = "fresh_install" if initial_needed else "deep_history_reconcile"
                     if callable(request) and request(
@@ -309,26 +375,42 @@ def install(runtime):
                 return original_ha_history(*args, **kwargs)
             except Exception as exc:
                 if HEAVY_JOBS.owner == "discovery":
+                    failure = recorder_failure_diagnostics(exc)
                     now = time.monotonic()
                     with state_lock:
-                        first = now >= state["recorder_backoff_until_monotonic"]
-                        state["recorder_backoff_until_monotonic"] = (
-                            now + RECORDER_BACKOFF_SECONDS
-                        )
-                        state["recorder_timeout_count"] += 1
-                    if first:
+                        state["recorder_failure_count"] += 1
+                        state["recorder_last_failure"] = dict(failure)
+                        if not failure["retryable"]:
+                            first = state["recorder_terminal_error"] != failure
+                            state["recorder_terminal_error"] = dict(failure)
+                            state["recorder_backoff_until_monotonic"] = 0.0
+                        elif failure["backoff"]:
+                            first = now >= state["recorder_backoff_until_monotonic"]
+                            # Do not extend a pending cooldown on each recursive
+                            # split failure; preserve the existing 120 s ceiling.
+                            if first:
+                                state["recorder_backoff_until_monotonic"] = (
+                                    now + RECORDER_BACKOFF_SECONDS
+                                )
+                            state["recorder_timeout_count"] += 1
+                        else:
+                            first = False  # Existing splitter retries immediately.
+                    if not failure["retryable"] and first:
                         store.event(
-                            None,
-                            "warning",
-                            "history_background_backoff",
+                            None, "error", "history_background_unavailable",
+                            "Recorder request rejected; automatic discovery suspended until manual Rescan",
+                            dict(failure),
+                        )
+                    elif failure["backoff"] and first:
+                        store.event(
+                            None, "warning", "history_background_backoff",
                             (
-                                "Recorder background request failed; pausing discovery "
-                                f"for {int(RECORDER_BACKOFF_SECONDS)} s"
+                                "Recorder background request failed "
+                                f"({failure['category']}"
+                                + (f", HTTP {failure['http_status']}" if failure["http_status"] else "")
+                                + f"); pausing discovery for {int(RECORDER_BACKOFF_SECONDS)} s"
                             ),
-                            {
-                                "error": f"{type(exc).__name__}: {exc}",
-                                "backoff_seconds": RECORDER_BACKOFF_SECONDS,
-                            },
+                            dict(failure, backoff_seconds=RECORDER_BACKOFF_SECONDS),
                         )
                 raise
 
@@ -364,6 +446,29 @@ def install(runtime):
             return original_fetch(history_self, *args, **kwargs)
 
         history_module.HistoryManager._fetch_history_resilient = fetch_with_circuit_breaker
+
+        # A manual Rescan is an explicit operator retry after a permanent API
+        # response (e.g. 401). Keep the automatic job suspended until then.
+        original_request_discovery = history_module.HistoryManager.request_discovery_rescan
+
+        def request_discovery_with_recovery(history_self, *args, **kwargs):
+            if kwargs.get("reason") != "manual":
+                return original_request_discovery(history_self, *args, **kwargs)
+            with state_lock:
+                prior = state["recorder_terminal_error"]
+                state["recorder_terminal_error"] = None
+            try:
+                accepted = original_request_discovery(history_self, *args, **kwargs)
+            except BaseException:
+                with state_lock:
+                    state["recorder_terminal_error"] = prior
+                raise
+            if not accepted:
+                with state_lock:
+                    state["recorder_terminal_error"] = prior
+            return accepted
+
+        history_module.HistoryManager.request_discovery_rescan = request_discovery_with_recovery
 
         # ----- Automation API pressure ------------------------------------
         # ha.py uses this imported executor for config reads. Serialize those reads on
@@ -410,6 +515,7 @@ def install(runtime):
         "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
+        "recorder_diagnostics": "sanitized_transient_vs_terminal_manual_rescan_v1",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
         "physical_control": "unchanged",
