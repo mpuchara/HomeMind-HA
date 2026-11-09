@@ -674,12 +674,15 @@ class HistoricalTrainingCollector(threading.Thread):
         if callable(getattr(evidence, 'close', None)):
             evidence.close()
         self.ready.set()
+        recheck_preparation = False
         while True:
             with self.cv:
-                if not self.pending and self.pending_gap is None and not self.stopping:
+                if (not recheck_preparation and not self.pending and self.pending_gap is None
+                        and not self.stopping):
                     self.cv.wait(self._idle_wait())
                 if self.stopping and not self.pending and self.pending_gap is None:
                     break
+            recheck_preparation = False
             if self.retry.delay()>0:
                 with self.cv:self.cv.wait(min(.5,self.retry.delay()))
             elif not self.stopping and not self.idle_ready():
@@ -695,6 +698,14 @@ class HistoricalTrainingCollector(threading.Thread):
                     if not is_sqlite_busy(exc):
                         self.stats['errors']+=1;self.stats['last_error']=type(exc).__name__
                 self.halt.wait(.005)
+                # A foreground drain can finish after the idle window opens.
+                # Re-enter normal admission before waiting for another poll.
+                recheck_preparation = (
+                    evidence is not None and bool(evidence.pending) and not self.stopping
+                    and foreground_priority_remaining(evidence.engine) <= 0
+                    and self.preparation_budget.remaining() <= 0
+                    and self.retry.delay() <= 0 and self.idle_ready()
+                )
             else:
                 if self.drain():
                     self._prepare_turn()
