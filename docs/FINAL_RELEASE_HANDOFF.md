@@ -1,3 +1,30 @@
+## Gate D feasibility checkpoint — 2026-11-09
+
+**CURRENT REQUIREMENTS NOT DEMONSTRABLY ACHIEVABLE. Gate D remains BLOCKER.**
+The retained 0.14.232 add-on tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`
+from `9c245577` clears all four registered aggregate throughput targets, with
+9/13 timing screens passing against exact #368 `951dcd70`. The original
+50/10 scheduling experiment remains reverted. A separate four-arm diagnostic
+observed 50/10 p99 dominated by first-wave executor delay, with zero preparation
+overlap at the measured proxy boundaries. The cause of the original two
+unprofiled timing failures remains unknown.
+
+[CI 42674180258](https://github.com/mpuchara/HomeMind-HA/actions/runs/42674180258)
+is FAILURE on `dba0ceb1`. GitHub reports an internal server error and omits the
+image job. Both test jobs succeeded and package skipped as designed.
+
+**Resume with Option 3: Gate D criteria review.** Verify exact Draft PR #369
+reporting HEAD, CI, clean worktree and the unchanged retained tree first. Use
+the bounded independent 50/10 protocol in the decision report for the review.
+Keep the original acceptance matrix and thresholds in force. Runtime, version,
+Collector default and release status are unchanged. Candidate Recovery,
+production composition, actual-data migration, retention/rollback, four-hour
+soak and Pi/live HA remain open.
+
+[Feasibility](FINAL_RELEASE_GATE_D_FEASIBILITY.md) · [Performance limits](FINAL_RELEASE_PERFORMANCE_LIMITS.md) · [Decision and exact continuation](FINAL_RELEASE_GATE_D_DECISION.md)
+
+## Previous checkpoint (historical)
+
 # Evidence scheduling checkpoint — 2026-11-09
 
 **Gate D remains BLOCKER.** A same-source trace under controlled contention reproduces 13 → 12 qualified with all 384 decisions. A foreground drain finishes after priority expires and the collector then waits for a 250 ms poll. The next ingress closes the remaining opportunity. The traced miss is `light.fixture_12`. The historic 13 → 11 run has no equivalent scheduler trace.
