@@ -6,6 +6,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python: ['3.11', '3.13']
     steps:
@@ -349,6 +350,8 @@ jobs:
             -t homemind-pi-canary:0.14.233 adaptive_ai
           docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.14.233 \
             -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.14.233"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
+          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.14.233)" = "arm64/aarch64/0.14.233"
+          python tools/smoke_image.py homemind-pi-canary:0.14.233
       - name: Package exact committed source and check all ZIP manifests
         run: |
           python tools/package_install_release.py

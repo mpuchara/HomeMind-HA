@@ -23,6 +23,12 @@ def check(expected_version):
         with zipfile.ZipFile(path) as archive:
             assert archive.testzip() is None
             names = set(archive.namelist())
+            assert len(names) == len(archive.infolist()), (kind, "duplicate ZIP entries")
+            assert ("repository.yaml" in names) == (kind == "repository")
+            for entry in archive.infolist():
+                mode = entry.external_attr >> 16
+                assert entry.create_system == 3, entry.filename
+                assert mode == (0o100755 if entry.filename.endswith(".sh") else 0o100644), entry.filename
             assert archive.read("SOURCE_COMMIT.txt") == (commit + "\n").encode("ascii")
             manifest = archive.read("MANIFEST.sha256").decode("ascii")
             manifest_names = set()
@@ -46,13 +52,15 @@ def check(expected_version):
             assert "  - aarch64" in config
             for flag in FLAGS:
                 assert f"  {flag}: false" in config
-            assert prefix+"src/run.sh" in names
+            for required in ("src/run.sh", "src/trial_queue_main.py", "src/static/index.html", "src/static/style.css"):
+                assert prefix + required in names, (kind, required)
             assert b"\r" not in archive.read(prefix+"src/run.sh")
             packages[kind] = {name[len(prefix):]: archive.read(name)
                               for name in names if name.startswith(prefix) and name not in ("MANIFEST.sha256", "SOURCE_COMMIT.txt")}
         print(json.dumps({"kind": kind, "path": str(path), "sha256": expected, "source": commit, "files": len(names)}, sort_keys=True))
+    assert packages["addon"].keys() == packages["repository"].keys()
     for name, data in packages["addon"].items():
-        assert packages["repository"].get(name) == data, name
+        assert packages["repository"][name] == data, name
     return True
 
 
