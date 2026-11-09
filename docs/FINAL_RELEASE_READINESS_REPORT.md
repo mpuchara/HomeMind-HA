@@ -1,3 +1,15 @@
+# Storage budget and evidence checkpoint — 2026-11-09
+
+**Gate D remains BLOCKER.** The direct SQLite page reads passed an authorizer case that the combined statement failed. The filesystem path and SQL classification experiments improved their components and gave mixed process CPU results. Reverts `b8e11ab4` and `e822381e` restore the exact `9c245577` add-on tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`. The version is 0.14.232. The registered 13-pair matrix against #368 awaits a repeatable improvement.
+
+The same-revision controls include a 12 → 13 qualified pair with identical decisions. The unprofiled 13 → 11 A/B pair loses two masks at lookup. The exact timing of the missed preparation slot remains open. Next, capture the idle and budget admission outcomes for the affected targets in a run that reproduces the shortfall. Keep the original harness and separate this trace from acceptance timings.
+
+The retained add-on has checkpoint CI [42305210953](https://github.com/mpuchara/HomeMind-HA/actions/runs/42305210953) for `56fd84f8`. This study adds local safety, differential and Universal results for the isolated experiments. The reporting HEAD and its CI status are recorded in Draft PR #369. Raw study directory on WSL is `/home/mpuchara/homemind-storage-budget-20261108`.
+
+[Storage experiments](FINAL_RELEASE_STORAGE_BUDGET_OPTIMIZATION.md) · [Evidence trace](FINAL_RELEASE_EVIDENCE_THROUGHPUT_ANALYSIS.md) · [Raw checksummed data](benchmarks/storage-budget-study-20261108/)
+
+## Previous checkpoint
+
 # Receipt CPU investigation checkpoint — 2026-11-06
 
 **Gate D remains BLOCKER.** The isolated derived-universe experiment

@@ -1,0 +1,146 @@
+[
+  {
+    "name": "variance-1",
+    "status": "PASS",
+    "ratios": {
+      "cpu": 0.032548033614805405,
+      "rss": 0.0006382247533016638,
+      "p95": 0.06922288127073495,
+      "p99": 0.14488797304594714
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      13,
+      13
+    ],
+    "consumed": [
+      13,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  },
+  {
+    "name": "variance-2",
+    "status": "PASS",
+    "ratios": {
+      "cpu": 0.03494332008213252,
+      "rss": 0.0007366301625497673,
+      "p95": 0.02067067047957938,
+      "p99": -0.017549962892281612
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      13,
+      13
+    ],
+    "consumed": [
+      13,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  },
+  {
+    "name": "variance-3",
+    "status": "FAIL",
+    "ratios": {
+      "cpu": 0.10467672579713638,
+      "rss": 0.0001961168856638995,
+      "p95": 0.07860931428277174,
+      "p99": 0.5847287888975456
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      12,
+      13
+    ],
+    "consumed": [
+      12,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  },
+  {
+    "name": "variance-4",
+    "status": "PASS",
+    "ratios": {
+      "cpu": -0.1143613348754533,
+      "rss": 0.0020647952411385617,
+      "p95": -0.24943276357585842,
+      "p99": -0.4065789183234033
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      13,
+      13
+    ],
+    "consumed": [
+      13,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  },
+  {
+    "name": "variance-5",
+    "status": "FAIL",
+    "ratios": {
+      "cpu": 0.10263894799689277,
+      "rss": -0.0028930077473766636,
+      "p95": 0.13380912699479408,
+      "p99": 0.19377799495072878
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      13,
+      13
+    ],
+    "consumed": [
+      13,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  },
+  {
+    "name": "variance-6",
+    "status": "PASS",
+    "ratios": {
+      "cpu": -0.08265124777775235,
+      "rss": -0.004419563936358228,
+      "p95": -0.08429433631680339,
+      "p99": 0.1404522153677381
+    },
+    "parity": true,
+    "safe": true,
+    "qualified": [
+      13,
+      13
+    ],
+    "consumed": [
+      13,
+      13
+    ],
+    "rejection_reasons": [
+      {},
+      {}
+    ]
+  }
+]

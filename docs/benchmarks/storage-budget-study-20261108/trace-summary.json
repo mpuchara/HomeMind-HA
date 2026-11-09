@@ -1,0 +1,368 @@
+{
+  "normal-1-before.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 31,
+    "preparation_published": 31,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 49,
+    "median_observed_first_request_to_attempt_ms": 6217.318109,
+    "median_preparation_wall_ms": 8.865949,
+    "preparation_cpu_ms": 342.674995,
+    "preparation_native_cursor_calls": 440,
+    "preparation_native_cursor_wall_ms": 21.116384,
+    "verify_rejected": {},
+    "verify_wall_ms": 4.398857,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 8.6625925,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21374,
+    "clean_sql_timed_cpu_ms_whole_process": 72.369436
+  },
+  "normal-2-source.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 30,
+    "preparation_published": 30,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 47,
+    "median_observed_first_request_to_attempt_ms": 6001.717972,
+    "median_preparation_wall_ms": 8.432386,
+    "preparation_cpu_ms": 304.624515,
+    "preparation_native_cursor_calls": 426,
+    "preparation_native_cursor_wall_ms": 16.645831,
+    "verify_rejected": {},
+    "verify_wall_ms": 6.083168,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 8.34717,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21272,
+    "clean_sql_timed_cpu_ms_whole_process": 74.280914
+  },
+  "normal-3-source.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 31,
+    "preparation_published": 31,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 49,
+    "median_observed_first_request_to_attempt_ms": 6220.371232,
+    "median_preparation_wall_ms": 9.109956,
+    "preparation_cpu_ms": 317.571692,
+    "preparation_native_cursor_calls": 440,
+    "preparation_native_cursor_wall_ms": 16.739433,
+    "verify_rejected": {},
+    "verify_wall_ms": 3.450832,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 8.076145,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21328,
+    "clean_sql_timed_cpu_ms_whole_process": 73.475836
+  },
+  "normal-4-before.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 31,
+    "preparation_published": 31,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 49,
+    "median_observed_first_request_to_attempt_ms": 6198.437237,
+    "median_preparation_wall_ms": 10.236006,
+    "preparation_cpu_ms": 361.383695,
+    "preparation_native_cursor_calls": 440,
+    "preparation_native_cursor_wall_ms": 21.754929,
+    "verify_rejected": {},
+    "verify_wall_ms": 3.645225,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 9.07442,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21384,
+    "clean_sql_timed_cpu_ms_whole_process": 79.192675
+  },
+  "normal-5-before.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 31,
+    "preparation_published": 31,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 49,
+    "median_observed_first_request_to_attempt_ms": 6233.623837,
+    "median_preparation_wall_ms": 9.078552,
+    "preparation_cpu_ms": 323.347214,
+    "preparation_native_cursor_calls": 440,
+    "preparation_native_cursor_wall_ms": 18.498621,
+    "verify_rejected": {},
+    "verify_wall_ms": 3.221157,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 8.7048845,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21414,
+    "clean_sql_timed_cpu_ms_whole_process": 75.909239
+  },
+  "normal-6-before.trace.json": {
+    "overflow": 0,
+    "fingerprint": "dc64154ff53db334aae7c891df6b9934d186069f2785ef605765780a844145a4",
+    "signature": "f770aa4e4cc128548288517f9ca8da38602cd24943f08a91a098248dd9bee14a",
+    "original_decisions": 384,
+    "begins": {
+      "not_prepared_at_lookup": 371,
+      "available": 13
+    },
+    "binds": {
+      "no_ticket": 371,
+      "consumed": 13
+    },
+    "observed_match_rejections": {},
+    "requests": 371,
+    "preparation_attempts": 31,
+    "preparation_published": 31,
+    "preparation_errors": [],
+    "peak_pending": 188,
+    "misses_with_later_preparation_started": 49,
+    "median_observed_first_request_to_attempt_ms": 6188.906687,
+    "median_preparation_wall_ms": 9.648324,
+    "preparation_cpu_ms": 334.928235,
+    "preparation_native_cursor_calls": 440,
+    "preparation_native_cursor_wall_ms": 22.25467,
+    "verify_rejected": {},
+    "verify_wall_ms": 2.926663,
+    "accepted_submissions": 384,
+    "write_completed": 384,
+    "receipts": 13,
+    "median_queued_to_write_completed_ms": 8.748617,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 371
+    },
+    "qualified": 13,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 371
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 21406,
+    "clean_sql_timed_cpu_ms_whole_process": 80.24131
+  },
+  "small50-1-before.trace.json": {
+    "overflow": 0,
+    "fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+    "signature": "34b85aab69c8ab66e7cb0c115cce8ab1d8d40ae04bdba1c4ee434a4f98b00916",
+    "original_decisions": 240,
+    "begins": {
+      "not_prepared_at_lookup": 55,
+      "available": 175,
+      "rejected_after_lookup": 10
+    },
+    "binds": {
+      "no_ticket": 65,
+      "consumed": 175
+    },
+    "observed_match_rejections": {
+      "observed_expired": 10
+    },
+    "requests": 65,
+    "preparation_attempts": 20,
+    "preparation_published": 20,
+    "preparation_errors": [],
+    "peak_pending": 10,
+    "misses_with_later_preparation_started": 55,
+    "median_observed_first_request_to_attempt_ms": 298.2047695,
+    "median_preparation_wall_ms": 1.968779,
+    "preparation_cpu_ms": 40.563473,
+    "preparation_native_cursor_calls": 286,
+    "preparation_native_cursor_wall_ms": 8.131004,
+    "verify_rejected": {},
+    "verify_wall_ms": 18.667083,
+    "accepted_submissions": 240,
+    "write_completed": 240,
+    "receipts": 175,
+    "median_queued_to_write_completed_ms": 12.995304,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 65
+    },
+    "qualified": 175,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 65
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 7992,
+    "clean_sql_timed_cpu_ms_whole_process": 22.148776
+  },
+  "small50-2-source.trace.json": {
+    "overflow": 0,
+    "fingerprint": "fa7ec978c25bd560b4674b2ac95e402b10152a3505af39be98e6dfd2cec407db",
+    "signature": "34b85aab69c8ab66e7cb0c115cce8ab1d8d40ae04bdba1c4ee434a4f98b00916",
+    "original_decisions": 240,
+    "begins": {
+      "not_prepared_at_lookup": 55,
+      "available": 175,
+      "rejected_after_lookup": 10
+    },
+    "binds": {
+      "no_ticket": 65,
+      "consumed": 175
+    },
+    "observed_match_rejections": {
+      "observed_expired": 10
+    },
+    "requests": 65,
+    "preparation_attempts": 20,
+    "preparation_published": 20,
+    "preparation_errors": [],
+    "peak_pending": 10,
+    "misses_with_later_preparation_started": 55,
+    "median_observed_first_request_to_attempt_ms": 300.9862145,
+    "median_preparation_wall_ms": 2.263065,
+    "preparation_cpu_ms": 48.027533,
+    "preparation_native_cursor_calls": 286,
+    "preparation_native_cursor_wall_ms": 10.984512,
+    "verify_rejected": {},
+    "verify_wall_ms": 21.617591,
+    "accepted_submissions": 240,
+    "write_completed": 240,
+    "receipts": 175,
+    "median_queued_to_write_completed_ms": 13.6281215,
+    "persisted_missing_proof": {
+      "no_predecision_legal_mask": 65
+    },
+    "qualified": 175,
+    "qualification_rejections": {
+      "missing_historical_decision_receipt": 65
+    },
+    "collector_drops": 0,
+    "collector_errors": 0,
+    "event_drops": 0,
+    "ha_calls": 0,
+    "clean_sql_calls_whole_process": 8018,
+    "clean_sql_timed_cpu_ms_whole_process": 26.248511
+  }
+}
