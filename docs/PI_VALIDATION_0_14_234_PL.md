@@ -8,7 +8,7 @@ Wersja 0.14.234 identyfikuje przyczyny błędów pobierania historii w polach `r
 
 ## Co zawiera paczka
 
-Branch `test/pi-0.14.234` oparty o reporting HEAD PR #369 `4e31467b38957c3379757ef7bb45ea69f4a5f44a`. Punktem wyjścia był ten sam runtime co zachowany `9c245577727c93ede3c59100f11844bf336acb1a` (tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`), z aktualizacją numeru wersji w `src/settings.py` i etykiety oraz kluczy cache JS/CSS w `src/static/index.html`. Nie przywracamy wycofanych eksperymentów. `config.yaml`, `Dockerfile`, `BUILD_INFO.json` mają wersję 0.14.234.
+Branch `test/pi-0.14.234` oparty o reporting HEAD PR #369 `4e31467b38957c3379757ef7bb45ea69f4a5f44a`. Punktem wyjścia był ten sam runtime co zachowany `9c245577727c93ede3c59100f11844bf336acb1a` (tree `cd0c22a0193f91cc3b9ac7dc7e477dbf73aa7f0f`), z aktualizacją numeru wersji i cache JS/CSS oraz poprawką `release_016_guard.py` dotyczącą diagnostyki Recorder i klasyfikacji błędów. Nie przywracamy wycofanych eksperymentów. `config.yaml`, `Dockerfile`, `BUILD_INFO.json` mają wersję 0.14.234.
 
 GitHub Actions `Validate HomeMind` po pełnym SUCCESS obu Pythonów, image smoke i emulowanego build/smoke ARM64 przygotowuje **artefakt do ręcznej instalacji**, nie GitHub Release:
 - `HomeMind-HA-0.14.234-repository.zip`: rozpakuj do katalogu /addons (zawiera `adaptive_ai/`).

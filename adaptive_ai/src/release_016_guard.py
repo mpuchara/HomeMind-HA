@@ -388,10 +388,10 @@ def install(runtime):
                             first = now >= state["recorder_backoff_until_monotonic"]
                             # Do not extend a pending cooldown on each recursive
                             # split failure; preserve the existing 120 s ceiling.
-                            state["recorder_backoff_until_monotonic"] = max(
-                                state["recorder_backoff_until_monotonic"],
-                                now + RECORDER_BACKOFF_SECONDS,
-                            )
+                            if first:
+                                state["recorder_backoff_until_monotonic"] = (
+                                    now + RECORDER_BACKOFF_SECONDS
+                                )
                             state["recorder_timeout_count"] += 1
                         else:
                             first = False  # Existing splitter retries immediately.
