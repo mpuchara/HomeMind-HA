@@ -1,3 +1,11 @@
+# 0.14.233 — Raspberry Pi validation candidate (TEST ONLY)
+
+- Based on the retained 0.14.232 Universal/runtime source from PR #369. **No inference, training, evidence, scheduler, or storage logic changes.** This branch only updates version metadata, adds a gated test-package artifact and ARM64-emulated image smoke, and supplies the Pi validation/rollback procedure.
+- Gate D remains **BLOCKER (9/13 timing pairs)** despite 2.36–2.61× aggregate evidence throughput. Candidate Recovery, production composition, actual-data migration, retention/rollback, 4 h soak and physical Pi/HA acceptance remain OPEN. **Not a stable release.**
+- Keep `universal_observer_enabled`, `universal_action_observer_enabled` and `universal_training_collector_enabled` at their shipped default false. Use a restored test HA instance / copied full add-on data, with no physical control until separately authorized and verified.
+- Install ZIP artifacts are generated only after both Python CI versions, the existing image smoke and the ARM64 emulated import smoke pass. ZIPs include `SOURCE_COMMIT.txt`, `MANIFEST.sha256` and separate `.sha256` files.
+- See `docs/PI_VALIDATION_0_14_233_PL.md` for manual backup, installation, observation, failure and full-data rollback instructions.
+
 # 0.14.232
 
 - Stage 1 from the exact 0.14.230 predecessor: bound repeated SQLite session syntax classification to 512 immutable boolean results with a 2048-character key limit. Every SQL operation, data read, budget check and commit still executes.
