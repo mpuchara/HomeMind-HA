@@ -1,3 +1,11 @@
+# 0.14.234 — Pi Recorder diagnosis and retry safety (TEST ONLY)
+
+- First Raspberry Pi 5 run of 0.14.233 showed repeated "Recorder background request failed; pausing discovery for 120 s". The screenshot alone does NOT reveal the underlying exception.
+- Classify Recorder failures into transient timeout/network/HA server pressure versus terminal HTTP 400/401/403/404 and local oversized response/HTTP 413/414. Record **sanitized**, actionable category, HTTP status, exception type, retryability and last failure in the existing resource-guard status; never log token, query URL or entity ID.
+- Preserve 120-second overload cooldown for transient failures. Existing safe recursive splitting now immediately handles locally oversized history responses instead of waiting 120 seconds to split. Avoid repeated automatic discovery requests on terminal HTTP errors; explicit manual Rescan re-enables a new attempt after the user fixes HA configuration.
+- No policy, inference, models, Candidate, Correct/Undo, Collector default or history-coverage admission behavior was intentionally changed. The original Recorder failure root cause remains **UNKNOWN** until the new structured error is observed.
+- Pi manual-install package is strictly for isolated/test HA after CI (Python 3.11/3.13 + AMD64 image + QEMU ARM64 + ZIP checksums); Gate D and production acceptance remain BLOCKER.
+
 # 0.14.233 — Raspberry Pi validation candidate (TEST ONLY)
 
 - Based on the retained 0.14.232 Universal/runtime source from PR #369. **No inference, training, evidence, scheduler, or storage logic changes.** This branch only updates version metadata, adds a gated test-package artifact and ARM64-emulated image smoke, and supplies the Pi validation/rollback procedure.
