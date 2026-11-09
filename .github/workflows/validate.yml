@@ -307,6 +307,65 @@ jobs:
           assert row["scalar_reference"]["execution_backend"] == "python_scalar_fallback", row["scalar_reference"]
           assert row["scalar_reference"]["decision_parity"], row["scalar_reference"]
           PY
+  pi_canary_package:
+    name: Pi aarch64 canary / test ZIP (NOT RELEASE)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test/pi-0.14.233'
+    needs: [tests, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify retained test-only branch and default-off opt-in features
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import re
+          info=json.loads(Path("adaptive_ai/BUILD_INFO.json").read_text())
+          config=Path("adaptive_ai/config.yaml").read_text()
+          settings=Path("adaptive_ai/src/settings.py").read_text()
+          dockerfile=Path("adaptive_ai/Dockerfile").read_text()
+          assert re.search(r'^version: "0\.14\.233"$', config, re.MULTILINE)
+          assert re.search(r'^APP_VERSION = "0\.14\.233"$', settings, re.MULTILINE)
+          assert "ARG BUILD_VERSION=0.14.233" in dockerfile
+          assert info["version"] == "0.14.233"
+          assert info["release_status"].startswith("pi5-manual-validation-candidate")
+          for name in ("universal_observer_enabled", "universal_action_observer_enabled", "universal_training_collector_enabled"):
+              assert ("  "+name+": false") in config, name
+          assert "  - aarch64" in config
+          PY
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - name: Build aarch64 image under QEMU (hardware Pi test still required)
+        run: |
+          docker buildx build --platform linux/arm64 --load \
+            --build-arg BUILD_VERSION=0.14.233 --build-arg BUILD_ARCH=aarch64 \
+            -t homemind-pi-canary:0.14.233 adaptive_ai
+          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.14.233 \
+            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.14.233"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
+      - name: Package exact committed source and check all ZIP manifests
+        run: |
+          python tools/package_install_release.py
+          python tools/verify_pi_test_artifacts.py --expected-version 0.14.233
+      - name: Upload manual-install candidate (no GitHub Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomeMind-HA-0.14.233-Pi-TEST-${{ github.sha }}
+          path: |
+            dist/HomeMind-HA-0.14.233-addon.zip
+            dist/HomeMind-HA-0.14.233-addon.zip.sha256
+            dist/HomeMind-HA-0.14.233-repository.zip
+            dist/HomeMind-HA-0.14.233-repository.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   package:
     needs: tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
