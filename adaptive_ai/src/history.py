@@ -2125,6 +2125,10 @@ class HistoryManager(threading.Thread):
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
             written = self._archive_history_payload(data, source)
+            if HEAVY_JOBS.owner == "discovery":
+                # Count consecutive 5xx/429 requests, not failures separated by
+                # successful Recorder reads in a long-running discovery.
+                self._discovery_recorder_failures = 0
             # The top-level chunk is marked by _import_section. Recursive successful
             # children are also checkpointed: a later failing sibling must not
             # erase their progress when the scan is resumed after restart.

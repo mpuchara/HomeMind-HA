@@ -111,6 +111,8 @@ class RecorderDiscovery235Tests(unittest.TestCase):
     def test_recursive_successful_children_survive_failed_sibling(self):
         store = MemoryMetadata()
         obj = manager()
+        # Use the real recursive method, not manager()'s test-only stub.
+        del obj._fetch_history_resilient
         obj.training_job_agent_id = None
         obj.training_preparation_profile = {}
         called = []
