@@ -2130,13 +2130,17 @@ class HistoryManager(threading.Thread):
         try:
             history_options = {}
             if discovery:
-                # HA selects changes strictly after start and strictly before end.
-                # On right-hand splits include the exact boundary without asking HA
-                # to synthesize a new state from the preceding window.
+                # Discovery classifies *recorded transitions*, not the synthetic
+                # state carried over from before each scan window.  HA's default
+                # include-start-state path performs an additional historical SQL
+                # lookback even for a one-entity / 30-minute request.  Avoid that
+                # query for every discovery slice (not only split right halves).
+                # Keep the one-microsecond overlap for exact boundary events;
+                # the archive de-duplicates identical (entity_id, ts) rows.
+                skip_initial_state = True
                 start = datetime.fromtimestamp(start_ts, timezone.utc)
-                if skip_initial_state:
-                    start -= start.resolution
-                    history_options["skip_initial_state"] = True
+                start -= start.resolution
+                history_options["skip_initial_state"] = True
                 request_start = start.isoformat()
                 request_end = datetime.fromtimestamp(end_ts, timezone.utc).isoformat()
             else:

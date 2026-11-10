@@ -310,7 +310,7 @@ jobs:
           PY
   pi_canary_package:
     name: Pi aarch64 canary / test ZIP (NOT RELEASE)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/test/pi-0.14.237'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test/pi-0.14.238'
     needs: [tests, image]
     runs-on: ubuntu-latest
     permissions:
@@ -330,10 +330,10 @@ jobs:
           config=Path("adaptive_ai/config.yaml").read_text()
           settings=Path("adaptive_ai/src/settings.py").read_text()
           dockerfile=Path("adaptive_ai/Dockerfile").read_text()
-          assert re.search(r'^version: "0\.14\.237"$', config, re.MULTILINE)
-          assert re.search(r'^APP_VERSION = "0\.14\.237"$', settings, re.MULTILINE)
-          assert "ARG BUILD_VERSION=0.14.237" in dockerfile
-          assert info["version"] == "0.14.237"
+          assert re.search(r'^version: "0\.14\.238"$', config, re.MULTILINE)
+          assert re.search(r'^APP_VERSION = "0\.14\.238"$', settings, re.MULTILINE)
+          assert "ARG BUILD_VERSION=0.14.238" in dockerfile
+          assert info["version"] == "0.14.238"
           assert info["release_status"].startswith("pi5-manual-validation-candidate")
           for name in ("universal_observer_enabled", "universal_action_observer_enabled", "universal_training_collector_enabled"):
               assert ("  "+name+": false") in config, name
@@ -346,25 +346,25 @@ jobs:
       - name: Build aarch64 image under QEMU (hardware Pi test still required)
         run: |
           docker buildx build --platform linux/arm64 --load \
-            --build-arg BUILD_VERSION=0.14.237 --build-arg BUILD_ARCH=aarch64 \
-            -t homemind-pi-canary:0.14.237 adaptive_ai
-          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.14.237 \
-            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.14.237"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
-          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.14.237)" = "arm64/aarch64/0.14.237"
-          python tools/smoke_image.py homemind-pi-canary:0.14.237
+            --build-arg BUILD_VERSION=0.14.238 --build-arg BUILD_ARCH=aarch64 \
+            -t homemind-pi-canary:0.14.238 adaptive_ai
+          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.14.238 \
+            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.14.238"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
+          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.14.238)" = "arm64/aarch64/0.14.238"
+          python tools/smoke_image.py homemind-pi-canary:0.14.238
       - name: Package exact committed source and check all ZIP manifests
         run: |
           python tools/package_install_release.py
-          python tools/verify_pi_test_artifacts.py --expected-version 0.14.237
+          python tools/verify_pi_test_artifacts.py --expected-version 0.14.238
       - name: Upload manual-install candidate (no GitHub Release)
         uses: actions/upload-artifact@v4
         with:
-          name: HomeMind-HA-0.14.237-Pi-TEST-${{ github.sha }}
+          name: HomeMind-HA-0.14.238-Pi-TEST-${{ github.sha }}
           path: |
-            dist/HomeMind-HA-0.14.237-addon.zip
-            dist/HomeMind-HA-0.14.237-addon.zip.sha256
-            dist/HomeMind-HA-0.14.237-repository.zip
-            dist/HomeMind-HA-0.14.237-repository.zip.sha256
+            dist/HomeMind-HA-0.14.238-addon.zip
+            dist/HomeMind-HA-0.14.238-addon.zip.sha256
+            dist/HomeMind-HA-0.14.238-repository.zip
+            dist/HomeMind-HA-0.14.238-repository.zip.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
