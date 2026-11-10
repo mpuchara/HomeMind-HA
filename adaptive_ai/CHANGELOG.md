@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.14.239 — Ręczna diagnostyka Recorder HTTP 500
+
+- Pięć kontrolowanych odczytów historii z kontenera dodatku, z raportem HTTP, czasu i liczby rekordów.
+
 ## 0.14.238 — Recorder discovery avoids start-state SQL lookback
 
 - Discovery requests `skip_initial_state` in every chunk, including the initial and minimum slice, rather than requesting synthetic carry-forward states from HA Recorder. The default HA history endpoint otherwise performs a separate unbounded start-state SQL lookback that can fail on large Recorder databases even for a tiny time window. This is a targeted recovery hypothesis; live HA Core HTTP 500 root cause is **not confirmed** without the matching Core traceback.
