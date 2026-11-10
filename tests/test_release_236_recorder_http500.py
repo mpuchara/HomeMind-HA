@@ -75,7 +75,10 @@ class RecorderHTTP500Tests(unittest.TestCase):
         self.assertGreater(detail["request_size"], 0)
         self.assertGreaterEqual(detail["duration_ms"], 0)
         self.assertIn("/api/history/period", detail["endpoint"])
-        self.assertEqual(datetime.fromisoformat(detail["start_time"]).timestamp(), 100)
+        # Skip initial state needs one microsecond of overlap so events exactly
+        # on a split boundary are still included without a synthetic seed.
+        self.assertAlmostEqual(datetime.fromisoformat(detail["start_time"]).timestamp(),
+                               100 - 0.000001, places=6)
         self.assertEqual(datetime.fromisoformat(detail["end_time"]).timestamp(), 1900)
         self.assertNotIn("secret-token", str(self.local_logs.call_args_list))
 
