@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 
 import history as history_module
 from history import DiscoveryRecorderIncomplete, HistoryManager
+from release_016_guard import _initial_discovery_needed
 from support import state
 
 
@@ -97,6 +98,43 @@ class RecorderDiscovery235Tests(unittest.TestCase):
                 "ha_history_full", "light.a", 0, 14400), [(3600.0, 7200.0), (10800.0, 14400.0)])
             self.assertEqual(obj2._discovery_missing_intervals(
                 "ha_history_discovery_coarse", "light.a", 0, 14400), [(0.0, 14400.0)])
+
+    def test_interrupted_discovery_with_created_agents_resumes(self):
+        store = MemoryMetadata()
+        store.list_agent_configs = lambda: [{"id": "agent-from-interrupted-scan"}]
+        self.assertFalse(_initial_discovery_needed(store))
+        store.values["discovery_recorder_coverage_v1"] = '{"contract":"discovery_recorder_coverage_v1","rows":[]}'
+        self.assertTrue(_initial_discovery_needed(store))
+        store.values["initial_discovery_complete"] = "older_valid_marker"
+        self.assertFalse(_initial_discovery_needed(store))
+
+    def test_recursive_successful_children_survive_failed_sibling(self):
+        store = MemoryMetadata()
+        obj = manager()
+        obj.training_job_agent_id = None
+        obj.training_preparation_profile = {}
+        called = []
+        def fake_history(ids, start, end, **kw):
+            called.append(tuple(ids))
+            if len(ids) == 2 or ids == ["light.b"]:
+                raise TimeoutError("timeout")
+            return []
+        with patch.object(history_module, "STORE", store), patch.object(
+            history_module, "rss_mb", return_value=0
+        ), patch.object(history_module.HA, "history", side_effect=fake_history):
+            obj.discovery_recorder_coverage = {}
+            obj._archive_history_payload = lambda data, source: 0
+            self.assertEqual(obj.__class__._fetch_history_resilient(
+                obj, ["light.a", "light.b"], 0, 1800, minimal=True,
+                no_attributes=True, source="ha_history_discovery_coarse",
+                on_successful_leaf=lambda ids, lo, hi: obj._mark_discovery_coverage(
+                    "ha_history_discovery_coarse", ids, lo, hi
+                )), 0)
+        self.assertEqual(obj._discovery_missing_intervals(
+            "ha_history_discovery_coarse", "light.a", 0, 1800), [])
+        self.assertEqual(obj._discovery_missing_intervals(
+            "ha_history_discovery_coarse", "light.b", 0, 1800), [(0.0, 1800.0)])
+        self.assertEqual(called, [("light.a", "light.b"), ("light.a",), ("light.b",)])
 
     def test_invalid_progress_metadata_is_only_cache_miss(self):
         store = MemoryMetadata()

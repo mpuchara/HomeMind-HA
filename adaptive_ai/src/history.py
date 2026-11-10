@@ -2094,7 +2094,8 @@ class HistoryManager(threading.Thread):
             return False
         return True
 
-    def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes, source, depth=0):
+    def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes,
+                                 source, depth=0, on_successful_leaf=None):
         """Fetch Recorder history without allowing one large query to kill bootstrap.
 
         A Raspberry Pi can legitimately need >45 s for a multi-day multi-entity Recorder query.
@@ -2123,7 +2124,13 @@ class HistoryManager(threading.Thread):
                 # auto-discovery in v0.3.3. Whole-home context remains significant-only.
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
-            return self._archive_history_payload(data, source)
+            written = self._archive_history_payload(data, source)
+            # The top-level chunk is marked by _import_section. Recursive successful
+            # children are also checkpointed: a later failing sibling must not
+            # erase their progress when the scan is resumed after restart.
+            if depth > 0 and on_successful_leaf is not None:
+                on_successful_leaf(entity_ids, start_ts, end_ts)
+            return written
         except InterruptedError:
             # Cancellation during a committed-batch pause is not a Recorder timeout.
             # InterruptedError also inherits OSError; propagate it before that handler.
@@ -2132,6 +2139,12 @@ class HistoryManager(threading.Thread):
             # Authentication / malformed-request errors will not improve by splitting.
             status = getattr(exc, "code", 500)
             if status in (400, 401, 403, 404):
+                if HEAVY_JOBS.owner == "discovery":
+                    # HTTPError.__str__ can include a full URL/query. The guard
+                    # already classified the status; discovery must not log it.
+                    raise DiscoveryRecorderIncomplete(
+                        f"Recorder rejected discovery with HTTP {status}; manual Rescan required"
+                    ) from None
                 raise
             if HEAVY_JOBS.owner == "discovery" and (status >= 500 or status == 429):
                 failures = int(getattr(self, "_discovery_recorder_failures", 0)) + 1
@@ -2155,10 +2168,12 @@ class HistoryManager(threading.Thread):
                 return (
                     self._fetch_history_resilient(entity_ids[:mid], start_ts, end_ts,
                                                    minimal=minimal, no_attributes=no_attributes,
-                                                   source=source, depth=depth + 1)
+                                                   source=source, depth=depth + 1,
+                                                   on_successful_leaf=on_successful_leaf)
                     + self._fetch_history_resilient(entity_ids[mid:], start_ts, end_ts,
                                                      minimal=minimal, no_attributes=no_attributes,
-                                                     source=source, depth=depth + 1)
+                                                     source=source, depth=depth + 1,
+                                                     on_successful_leaf=on_successful_leaf)
                 )
         # A single very chatty entity can still be expensive; reduce its time window.
         if span > 1800 and depth <= 14:
@@ -2166,10 +2181,12 @@ class HistoryManager(threading.Thread):
             return (
                 self._fetch_history_resilient(entity_ids, start_ts, mid_ts,
                                                minimal=minimal, no_attributes=no_attributes,
-                                               source=source, depth=depth + 1)
+                                               source=source, depth=depth + 1,
+                                               on_successful_leaf=on_successful_leaf)
                 + self._fetch_history_resilient(entity_ids, mid_ts, end_ts,
                                                  minimal=minimal, no_attributes=no_attributes,
-                                                 source=source, depth=depth + 1)
+                                                 source=source, depth=depth + 1,
+                                                 on_successful_leaf=on_successful_leaf)
             )
 
         # Explicit selected-agent training retains its historical skip policy;
@@ -2250,8 +2267,14 @@ class HistoryManager(threading.Thread):
             self._recorder_chunk_report = report
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             try:
+                fetch_kwargs = {}
+                if resume_discovery:
+                    fetch_kwargs["on_successful_leaf"] = (
+                        lambda ids, lo, hi: self._mark_discovery_coverage(source, ids, lo, hi)
+                    )
                 count = self._fetch_history_resilient(
-                    batch, ws, we, minimal=minimal, no_attributes=no_attributes, source=source
+                    batch, ws, we, minimal=minimal, no_attributes=no_attributes,
+                    source=source, **fetch_kwargs
                 )
             finally:
                 self._recorder_chunk_report = None

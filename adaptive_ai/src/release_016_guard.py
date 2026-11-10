@@ -89,8 +89,13 @@ def _initial_discovery_needed(store):
     """True only before the first completed classification on an empty install."""
     if store.meta_get(INITIAL_DISCOVERY_META_KEY, ""):
         return False
-    # Existing agent configuration proves this is an upgrade/restart, not a clean
-    # installation.  Do not surprise an established system with Recorder work.
+    # An interrupted initial discovery may have created some agents before the
+    # final marker. Its persisted Recorder coverage proves this is unfinished,
+    # NOT a legacy upgrade to mark complete. Resume only the uncovered chunks.
+    if store.meta_get("discovery_recorder_coverage_v1"):
+        return True
+    # Legacy existing-agent installs without progress metadata keep their
+    # original quiet-start contract.
     return not bool(store.list_agent_configs())
 
 
@@ -187,7 +192,10 @@ def install(runtime):
             # Upgrades that already contain agent configuration are not fresh installs.
             # Persist the boundary once so future restarts do not need to infer it.
             initial_marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
-            if not initial_marker and all_existing:
+            if (not initial_marker and all_existing
+                    and not store.meta_get("discovery_recorder_coverage_v1")):
+                # Old upgrades are considered classified, but an interrupted
+                # first scan with persisted partial coverage must resume instead.
                 initial_marker = history_module.iso_from_ts(history_module.now_ts())
                 store.meta_set(INITIAL_DISCOVERY_META_KEY, initial_marker)
             with state_lock:

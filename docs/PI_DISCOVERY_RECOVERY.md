@@ -16,3 +16,7 @@ Maksymalnie 4096 wpisów przedziałów, jeden worker Recorder, oryginalny 120-se
 ## Testy
 
 `python -m unittest tests.test_release_235_recorder_discovery -v` w środowisku repo; dodatkowo pełne CI Python 3.11/3.13, Docker amd64 i ARM64. W testach symulujemy częściowy sukces i restart, luki między przedziałami, przerwanie, HTTP 500, timeout, prawidłowy koniec i brak wycieku sekretów.
+
+## Przerwana klasyfikacja i częściowo utworzeni agenci
+
+Jeśli nowy skan utworzył część agentów, ale nie zdążył zapisać `initial_discovery_complete`, metadane `discovery_recorder_coverage_v1` identyfikują proces jako niedokończony. W tej sytuacji cichy startup nie może uznać instalacji za starą tylko na podstawie istnienia agentów — wraca do przerwanej klasyfikacji. Udany podfragment zapytania, który wymagał dzielenia listy encji/okna, zapisuje też osobny postęp, nawet gdy inny podfragment się nie udał. Nie dotyczy to starszych istniejących instalacji bez znacznika postępu.
