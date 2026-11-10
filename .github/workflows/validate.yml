@@ -330,8 +330,8 @@ jobs:
           config=Path("adaptive_ai/config.yaml").read_text()
           settings=Path("adaptive_ai/src/settings.py").read_text()
           dockerfile=Path("adaptive_ai/Dockerfile").read_text()
-          assert re.search(r'^version: "0\.14\.234"$', config, re.MULTILINE)
-          assert re.search(r'^APP_VERSION = "0\.14\.234"$', settings, re.MULTILINE)
+          assert re.search(r'^version: "0\.14\.235"$', config, re.MULTILINE)
+          assert re.search(r'^APP_VERSION = "0\.14\.235"$', settings, re.MULTILINE)
           assert "ARG BUILD_VERSION=0.14.235" in dockerfile
           assert info["version"] == "0.14.235"
           assert info["release_status"].startswith("pi5-manual-validation-candidate")
