@@ -127,15 +127,15 @@ class RecorderDiscovery235Tests(unittest.TestCase):
             obj.discovery_recorder_coverage = {}
             obj._archive_history_payload = lambda data, source: 0
             self.assertEqual(obj.__class__._fetch_history_resilient(
-                obj, ["light.a", "light.b"], 0, 1800, minimal=True,
+                obj, ["light.a", "light.b"], 1700000000, 1700001800, minimal=True,
                 no_attributes=True, source="ha_history_discovery_coarse",
                 on_successful_leaf=lambda ids, lo, hi: obj._mark_discovery_coverage(
                     "ha_history_discovery_coarse", ids, lo, hi
                 )), 0)
         self.assertEqual(obj._discovery_missing_intervals(
-            "ha_history_discovery_coarse", "light.a", 0, 1800), [])
+            "ha_history_discovery_coarse", "light.a", 1700000000, 1700001800), [])
         self.assertEqual(obj._discovery_missing_intervals(
-            "ha_history_discovery_coarse", "light.b", 0, 1800), [(0.0, 1800.0)])
+            "ha_history_discovery_coarse", "light.b", 1700000000, 1700001800), [(1700000000.0, 1700001800.0)])
         self.assertEqual(called, [("light.a", "light.b"), ("light.a",), ("light.b",)])
 
     def test_invalid_progress_metadata_is_only_cache_miss(self):
@@ -214,10 +214,10 @@ class RecorderDiscovery235Tests(unittest.TestCase):
             TimeoutError("secret token=PRIVATE"),
         ]):
             self.assertEqual(obj.__class__._fetch_history_resilient(
-                obj, ["light.secret"], 0, 1800, minimal=False,
+                obj, ["light.secret"], 1700000000, 1700001800, minimal=False,
                 no_attributes=False, source="ha_history_full"), 0)
             self.assertEqual(obj.__class__._fetch_history_resilient(
-                obj, ["light.secret"], 0, 1800, minimal=False,
+                obj, ["light.secret"], 1700000000, 1700001800, minimal=False,
                 no_attributes=False, source="ha_history_full"), 0)
         self.assertEqual(obj.recorder_skipped_slices, 2)
         self.assertNotIn("PRIVATE", str(store.events))

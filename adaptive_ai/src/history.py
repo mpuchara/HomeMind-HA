@@ -1,6 +1,7 @@
 from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
+from datetime import datetime, timezone
 import gc
 import json
 import math
@@ -39,10 +40,15 @@ from long_memory import (
 # Recorder responses can contain many thousands of rows. Bound writer ownership,
 # independently of the archive reader's fetch size or the response's entity count.
 HISTORY_IMPORT_BATCH_ROWS = 128
+DISCOVERY_HTTP_500_LIMIT = 32
 
 
 class DiscoveryRecorderIncomplete(RuntimeError):
     """A discovery scan may not classify or record completion with missing Recorder slices."""
+
+
+class DiscoveryRecorderHTTP500(DiscoveryRecorderIncomplete):
+    """HTTP 500 persisted to the minimum slice or exhausted the split budget."""
 
 
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
@@ -1950,6 +1956,8 @@ class HistoryManager(threading.Thread):
             if len(rows) >= batch_rows or buffered_bytes >= batch_bytes:
                 flush()
 
+        use_updated_at = source == "ha_history_full" and HEAVY_JOBS.owner == "discovery"
+
         def import_groups():
             nonlocal scanned
             for group in data or []:
@@ -1964,7 +1972,8 @@ class HistoryManager(threading.Thread):
                     check_cancelled()
                     TRAINING_BUDGET.checkpoint("history_import_parse_row")
                     eid = item.get("entity_id") or group_entity
-                    ts = parse_ts(item.get("last_changed") or item.get("last_updated"))
+                    timestamp = item.get("last_updated") if use_updated_at else None
+                    ts = parse_ts(timestamp or item.get("last_changed") or item.get("last_updated"))
                     if not eid or not ts:
                         continue
                     keep = True
@@ -2095,7 +2104,8 @@ class HistoryManager(threading.Thread):
         return True
 
     def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes,
-                                 source, depth=0, on_successful_leaf=None):
+                                 source, depth=0, on_successful_leaf=None,
+                                 http_500_budget=None, skip_initial_state=False):
         """Fetch Recorder history without allowing one large query to kill bootstrap.
 
         A Raspberry Pi can legitimately need >45 s for a multi-day multi-entity Recorder query.
@@ -2114,10 +2124,27 @@ class HistoryManager(threading.Thread):
             raise MemoryError(f'{memory_limit} MB training preparation memory limit reached')
         if not entity_ids or end_ts <= start_ts:
             return 0
+        discovery = HEAVY_JOBS.owner == "discovery"
+        if discovery and http_500_budget is None:
+            http_500_budget = [DISCOVERY_HTTP_500_LIMIT]
         try:
+            history_options = {}
+            if discovery:
+                # HA selects changes strictly after start and strictly before end.
+                # On right-hand splits include the exact boundary without asking HA
+                # to synthesize a new state from the preceding window.
+                start = datetime.fromtimestamp(start_ts, timezone.utc)
+                if skip_initial_state:
+                    start -= start.resolution
+                    history_options["skip_initial_state"] = True
+                request_start = start.isoformat()
+                request_end = datetime.fromtimestamp(end_ts, timezone.utc).isoformat()
+            else:
+                request_start = iso_from_ts(start_ts)
+                request_end = iso_from_ts(end_ts)
             data = HA.history(
-                entity_ids, iso_from_ts(start_ts), iso_from_ts(end_ts),
-                minimal=minimal, no_attributes=no_attributes,
+                entity_ids, request_start, request_end,
+                minimal=minimal, no_attributes=no_attributes, **history_options,
                 # Controllable-device history needs attribute-only changes too (e.g.
                 # brightness 30% → 50% while light.state stays "on"). Using
                 # significant_changes_only here hid exactly the activity required for
@@ -2150,7 +2177,13 @@ class HistoryManager(threading.Thread):
                         f"Recorder rejected discovery with HTTP {status}; manual Rescan required"
                     ) from None
                 raise
-            if HEAVY_JOBS.owner == "discovery" and (status >= 500 or status == 429):
+            if discovery and status == 500:
+                http_500_budget[0] -= 1
+                if http_500_budget[0] <= 0:
+                    raise DiscoveryRecorderHTTP500(
+                        "Recorder HTTP 500 split budget exhausted; see history_http_error in add-on logs"
+                    ) from None
+            elif discovery and (status >= 500 or status == 429):
                 failures = int(getattr(self, "_discovery_recorder_failures", 0)) + 1
                 self._discovery_recorder_failures = failures
                 # With the 120s circuit breaker, recursive 5xx splitting must not
@@ -2165,33 +2198,33 @@ class HistoryManager(threading.Thread):
             err = exc
 
         span = end_ts - start_ts
-        # Split the entity set first. This is normally enough for busy HA databases.
-        if len(entity_ids) > 1:
-            mid = max(1, len(entity_ids) // 2)
-            if depth <= 8:
-                return (
-                    self._fetch_history_resilient(entity_ids[:mid], start_ts, end_ts,
-                                                   minimal=minimal, no_attributes=no_attributes,
-                                                   source=source, depth=depth + 1,
-                                                   on_successful_leaf=on_successful_leaf)
-                    + self._fetch_history_resilient(entity_ids[mid:], start_ts, end_ts,
-                                                     minimal=minimal, no_attributes=no_attributes,
-                                                     source=source, depth=depth + 1,
-                                                     on_successful_leaf=on_successful_leaf)
-                )
-        # A single very chatty entity can still be expensive; reduce its time window.
+        split_options = {
+            "minimal": minimal, "no_attributes": no_attributes, "source": source,
+            "depth": depth + 1, "on_successful_leaf": on_successful_leaf,
+            "http_500_budget": http_500_budget,
+        }
+        # Split the entity set first, then reduce the time window.
+        if len(entity_ids) > 1 and depth <= 8:
+            mid = len(entity_ids) // 2
+            return (
+                self._fetch_history_resilient(entity_ids[:mid], start_ts, end_ts,
+                                              skip_initial_state=skip_initial_state, **split_options)
+                + self._fetch_history_resilient(entity_ids[mid:], start_ts, end_ts,
+                                                skip_initial_state=skip_initial_state, **split_options)
+            )
         if span > 1800 and depth <= 14:
             mid_ts = start_ts + span / 2.0
             return (
                 self._fetch_history_resilient(entity_ids, start_ts, mid_ts,
-                                               minimal=minimal, no_attributes=no_attributes,
-                                               source=source, depth=depth + 1,
-                                               on_successful_leaf=on_successful_leaf)
+                                              skip_initial_state=skip_initial_state, **split_options)
                 + self._fetch_history_resilient(entity_ids, mid_ts, end_ts,
-                                                 minimal=minimal, no_attributes=no_attributes,
-                                                 source=source, depth=depth + 1,
-                                                 on_successful_leaf=on_successful_leaf)
+                                                skip_initial_state=discovery, **split_options)
             )
+
+        if discovery and isinstance(err, HTTPError) and err.code == 500:
+            raise DiscoveryRecorderHTTP500(
+                "Recorder returned HTTP 500 for a minimum slice; see history_http_error in add-on logs"
+            ) from None
 
         # Explicit selected-agent training retains its historical skip policy;
         # discovery, below, treats even one such skip as incomplete (fail closed).

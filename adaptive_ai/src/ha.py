@@ -1,3 +1,5 @@
+from contextlib import suppress
+from http.client import HTTPException
 from urllib.error import HTTPError
 from urllib.request import Request
 from concurrent.futures import ThreadPoolExecutor
@@ -6,7 +8,8 @@ import json
 from urllib.parse import quote
 import re
 import threading
-from urllib.parse import urlencode
+import time
+from urllib.parse import urlencode, urlsplit
 from urllib.request import urlopen
 from settings import (HA_BASE_URL, HA_TOKEN, OPTIONS, now_ts)
 from storage import STORE
@@ -47,7 +50,7 @@ class HAClient:
     def service(self, domain, service, data):
         return self.request("POST", f"services/{domain}/{service}", data)
 
-    def history(self, entity_ids, start_dt, end_dt, minimal=True, no_attributes=True, significant=True, timeout=20):
+    def history(self, entity_ids, start_dt, end_dt, minimal=True, no_attributes=True, significant=True, timeout=20, skip_initial_state=False):
         params = {"filter_entity_id": ",".join(entity_ids), "end_time": end_dt}
         if minimal:
             params["minimal_response"] = ""
@@ -59,9 +62,49 @@ class HAClient:
             # HA defaults this query flag to true; omission does not request
             # attribute-only transitions required by full controllable history.
             params["significant_changes_only"] = "0"
+        if skip_initial_state:
+            params["skip_initial_state"] = ""
         query = urlencode(params, doseq=True)
         # minimal_response/no_attributes use presence; significance also accepts 0.
-        return self.request("GET", f"history/period/{quote(start_dt, safe='')}?{query}", timeout=timeout)
+        path = f"history/period/{quote(start_dt, safe='')}?{query}"
+        started = time.monotonic()
+        try:
+            return self.request("GET", path, timeout=timeout)
+        except HTTPError as exc:
+            duration_ms = round((time.monotonic() - started) * 1000)
+            # The Supervisor/HA error body is untrusted and may contain secrets.
+            # Keep only known, exact error phrases. Never print the URL or headers.
+            excerpt = None
+            try:
+                first_line = exc.read(512).splitlines()[:1] if exc.fp is not None else []
+                if first_line and first_line[0] in (
+                    b"500 Internal Server Error", b"Server got itself in trouble",
+                    b"502 Bad Gateway", b"503 Service Unavailable",
+                    b"504 Gateway Timeout", b"Internal Server Error",
+                ):
+                    excerpt = first_line[0].decode("ascii")
+            except (OSError, ValueError, HTTPException):
+                pass
+            finally:
+                with suppress(OSError):
+                    exc.close()
+            detail = {
+                "endpoint": "/api/history/period/{timestamp}",
+                "status_code": exc.code,
+                "entity_ids": [eid if ENTITY_ID_RE.fullmatch(eid) else "<invalid>" for eid in entity_ids],
+                "entity_count": len(entity_ids),
+                "start_time": start_dt,
+                "end_time": end_dt,
+                "duration_ms": duration_ms,
+                "request_size": len((urlsplit(self.base_url).path + "/" + path).encode("utf-8")),
+                "response_error_excerpt": excerpt,
+                "minimal": minimal,
+                "no_attributes": no_attributes,
+                "significant": significant,
+                "skip_initial_state": skip_initial_state,
+            }
+            print("[recorder] history_http_error " + json.dumps(detail), flush=True)
+            raise
 
     def automation_config(self, automation_id, timeout=8):
         return self.request("GET", f"config/automation/config/{quote(str(automation_id), safe='')}", timeout=timeout)

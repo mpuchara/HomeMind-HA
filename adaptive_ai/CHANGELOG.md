@@ -1,3 +1,9 @@
+# 0.14.236 — Pi Recorder HTTP 500 diagnostics (TEST ONLY)
+
+- Isolate HTTP 500 by entity and time without sleeping between child requests.
+- Suspend automatic discovery on a failing minimum slice or exhausted split budget. Successful coverage is retained and the operator can run Rescan.
+- Correlate each failing request in the add-on logs with the HA Core traceback. The origin of the reported HTTP 500 remains unconfirmed.
+
 # 0.14.235 — Pi Recorder integrity and recoverable discovery (TEST ONLY)
 
 - Fail closed when any Recorder slice is skipped or discovery is cancelled: neither `initial_discovery_complete` nor `manual_discovery_refresh` may be advanced on incomplete data. Deep completion is persisted only after both older and recent windows finish.

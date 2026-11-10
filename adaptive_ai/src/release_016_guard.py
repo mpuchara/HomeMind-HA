@@ -33,6 +33,12 @@ def recorder_failure_diagnostics(exc):
                 "http_status": status, "retryable": False, "backoff": False,
                 "action": "Check Home Assistant Recorder API, permissions and integration configuration; then run manual Rescan",
             }
+        if status == 500:
+            return {
+                "category": "history_http_500", "exception_type": error_type,
+                "http_status": status, "retryable": True, "backoff": False,
+                "action": "Isolate the failure with bounded discovery slices; correlate add-on and HA Core logs",
+            }
         if status in (413, 414):
             return {
                 "category": "request_too_large", "exception_type": error_type,
@@ -469,7 +475,18 @@ def install(runtime):
                     history_self.stop_event.wait(min(1.0, max(0.05, remaining)))
                 if history_self.stop_event.is_set():
                     raise InterruptedError("History discovery stopped during Recorder backoff")
-            return original_fetch(history_self, *args, **kwargs)
+            try:
+                return original_fetch(history_self, *args, **kwargs)
+            except history_module.DiscoveryRecorderHTTP500:
+                if kwargs.get("depth", 0) == 0:
+                    with state_lock:
+                        state["recorder_terminal_error"] = {
+                            "category": "history_http_500",
+                            "http_status": 500,
+                            "retryable": False,
+                            "action": "Inspect history_http_error and the HA Core traceback, then run manual Rescan",
+                        }
+                raise
 
         history_module.HistoryManager._fetch_history_resilient = fetch_with_circuit_breaker
 
@@ -541,7 +558,7 @@ def install(runtime):
         "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
-        "recorder_diagnostics": "sanitized_request_shape_and_bounded_5xx_split_v2",
+        "recorder_diagnostics": "local_http_error_detail_and_bounded_500_split_v3",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
         "physical_control": "unchanged",

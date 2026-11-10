@@ -24,7 +24,7 @@ class RecorderFailureDiagnosticsTests(unittest.TestCase):
                 self.assertNotIn("light.secret", str(result))
 
     def test_transient_ha_errors_preserve_backoff(self):
-        for code in (429, 500, 502, 503, 504):
+        for code in (429, 502, 503, 504):
             with self.subTest(code=code):
                 result = recorder_failure_diagnostics(self.http(code))
                 self.assertTrue(result["retryable"])
@@ -33,7 +33,7 @@ class RecorderFailureDiagnosticsTests(unittest.TestCase):
 
     def test_splittable_responses_do_not_incur_recorder_cooldown(self):
         for error in (OSError("HA response too large; split the request"),
-                      self.http(413), self.http(414)):
+                      self.http(413), self.http(414), self.http(500)):
             with self.subTest(error=type(error).__name__):
                 result = recorder_failure_diagnostics(error)
                 self.assertTrue(result["retryable"])
