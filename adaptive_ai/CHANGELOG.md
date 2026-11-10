@@ -1,5 +1,11 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.14.238 — Recorder discovery avoids start-state SQL lookback
+
+- Discovery requests `skip_initial_state` in every chunk, including the initial and minimum slice, rather than requesting synthetic carry-forward states from HA Recorder. The default HA history endpoint otherwise performs a separate unbounded start-state SQL lookback that can fail on large Recorder databases even for a tiny time window. This is a targeted recovery hypothesis; live HA Core HTTP 500 root cause is **not confirmed** without the matching Core traceback.
+- One-microsecond overlap preserves changes at split boundaries; the archive's unique constraint avoids duplicate rows. Full target requests still include attribute-only transitions using `significant_changes_only=0`.
+- Focused tests cover the baseline query failure case and full-attribute fidelity. The discovery/fresh-install contract is unchanged.
+
 - Log the encoded History REST target, UTC failure time and the comparison target using the historical Home Assistant significance default.
 - The comparison target is diagnostic data only. HomeMind issues no additional requests from this diagnostic.
 - The cause of the reported HTTP 500 remains unconfirmed.

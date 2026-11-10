@@ -92,7 +92,7 @@ class RecorderHTTP500Tests(unittest.TestCase):
             self.assertEqual(query["significant_changes_only"], ["0"])
             self.assertNotIn("minimal_response", query)
             self.assertNotIn("no_attributes", query)
-            self.assertEqual("skip_initial_state" in query, lo > 100)
+            self.assertIn("skip_initial_state", query)
             return [[{
                 "entity_id": ids[0], "state": "on", "attributes": {"brightness": ts},
                 "last_changed": datetime.fromtimestamp(500, timezone.utc).isoformat(),
@@ -103,6 +103,42 @@ class RecorderHTTP500Tests(unittest.TestCase):
         self.run_fetch(["light.a"], span=3600)
         self.assertEqual([row["ts"] for row in self.store.archive_iter()], [500, 1900, 2000])
         self.assertEqual(len({(ids, lo, hi) for ids, lo, hi, _ in self.requests}), 3)
+
+    def test_first_discovery_slice_avoids_recorder_start_state_sql_lookup(self):
+        """A HA Core start-state query may 500 even for one entity and 30 min.
+
+        This synthetic server reproduces that failure only when
+        skip_initial_state is omitted. Discovery must never request it.
+        """
+        requested = []
+
+        def open_request(request, timeout):
+            query = parse_qs(urlsplit(request.full_url).query, keep_blank_values=True)
+            requested.append(query)
+            if "skip_initial_state" not in query:
+                raise HTTPError(request.full_url, 500, "start-state SQL failed", {},
+                                io.BytesIO(b"500 Internal Server Error"))
+            return io.BytesIO(b"[]")
+
+        self.enterContext(patch.object(ha, "urlopen", side_effect=open_request))
+        self.assertEqual(self.run_fetch(["light.a"], minimal=True), 0)
+        self.assertEqual(len(requested), 1)
+        self.assertIn("skip_initial_state", requested[0])
+
+    def test_full_attribute_history_still_requests_non_significant_changes(self):
+        requested = []
+
+        def open_request(request, timeout):
+            query = parse_qs(urlsplit(request.full_url).query, keep_blank_values=True)
+            requested.append(query)
+            return io.BytesIO(b"[]")
+
+        self.enterContext(patch.object(ha, "urlopen", side_effect=open_request))
+        self.run_fetch(["light.a"], minimal=False)
+        self.assertEqual(requested[0].get("significant_changes_only"), ["0"])
+        self.assertIn("skip_initial_state", requested[0])
+        self.assertNotIn("minimal_response", requested[0])
+        self.assertNotIn("no_attributes", requested[0])
 
     def test_minimum_request_fails_once_and_opaque_body_is_never_logged(self):
         self.simulate(lambda *args: True, error_body=b"Bearer secret-token and private response content")
