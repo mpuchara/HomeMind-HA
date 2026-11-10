@@ -41,10 +41,15 @@ from long_memory import (
 # independently of the archive reader's fetch size or the response's entity count.
 HISTORY_IMPORT_BATCH_ROWS = 128
 DISCOVERY_HTTP_500_LIMIT = 32
+DISCOVERY_HTTP_500_ENTITY_LIMIT = 16
 
 
 class DiscoveryRecorderIncomplete(RuntimeError):
     """A discovery scan may not classify or record completion with missing Recorder slices."""
+
+
+class DiscoveryRecorderUnavailable(DiscoveryRecorderIncomplete):
+    """Independent Recorder control reads could not establish availability."""
 
 
 class DiscoveryRecorderHTTP500(DiscoveryRecorderIncomplete):
@@ -268,6 +273,10 @@ class HistoryManager(threading.Thread):
         # collecting target history. Expose whether the activity classifier has run so
         # the UI can distinguish "pending" from a real zero-device result.
         self.discovery_classified = False
+        self.discovery_recorder_report = (
+            self._read_discovery_metadata(self.DISCOVERY_RESULT_KEY, {})
+            if not self.worker_mode and not self.session_mode else {}
+        )
         if (not self.worker_mode) and (not self.session_mode) and bool(OPTIONS.get("manual_agent_training", True)):
             paused = STORE.pause_stale_training_agents()
             if paused:
@@ -354,6 +363,7 @@ class HistoryManager(threading.Thread):
                 "discovery_job_active": bool(self.discovery_job_active),
                 "discovery_job_started_at": self.discovery_job_started_at,
                 "discovery_classified": bool(self.discovery_classified),
+                "discovery_recorder": getattr(self, "discovery_recorder_report", {}),
                 "discovery_deep_history_complete": bool(getattr(self, "discovery_deep_history_complete", False)),
                 "discovery_reason_counts": dict(getattr(self, "discovery_reason_counts", {}) or {}),
                 "discovery_inactive_examples": list(getattr(self, "discovery_inactive_examples", []) or []),
@@ -1163,7 +1173,7 @@ class HistoryManager(threading.Thread):
             self._persist_training_recorder_coverage()
         return inserted
 
-    def _refresh_agent_history(self, agent, start_ts, end_ts, rebuild=False):
+    def _refresh_agent_history(self, agent, start_ts, end_ts, rebuild=False, replay_start=None):
         """Explicit jobs backfill only what they need from Recorder.
 
         Resume is cheap: target + already selected feature entities from the saved cursor.
@@ -1177,7 +1187,7 @@ class HistoryManager(threading.Thread):
                 self._training_recorder_lock_held = True
                 try:
                     return self._refresh_agent_history(
-                        agent, start_ts, end_ts, rebuild=rebuild
+                        agent, start_ts, end_ts, rebuild=rebuild, replay_start=replay_start
                     )
                 finally:
                     self._training_recorder_lock_held = False
@@ -1204,6 +1214,9 @@ class HistoryManager(threading.Thread):
             from training_context_selection import candidates
             context_ids = candidates(agent, seed.get("selection_meta") or {},
                                      live_states, live_registry, context_ids)
+        if replay_start is not None:
+            inputs = set(agent.get("input_entities") or ())
+            self._require_agent_history({target, *context_ids, *inputs}, replay_start, end_ts)
         fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
         fast_set = set(fast_ids)
         regular_ids = [eid for eid in context_ids if eid not in fast_set]
@@ -1284,7 +1297,9 @@ class HistoryManager(threading.Thread):
             work_done=0, work_total=0, stage_eta_seconds=0,
             eta_source="measuring Recorder import", phase_detail="Preparing Recorder history for the selected agent",
         )
-        self._refresh_agent_history(agent, refresh_start, target_end, rebuild=rebuild)
+        self._refresh_agent_history(
+            agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
+        )
         self.set_status(
             progress=0.10 + 0.90 * float(getattr(self, "training_job_start_progress", 0) or 0),
             message=f"Training {agent['name']}: history prepared; starting replay",
@@ -2024,6 +2039,131 @@ class HistoryManager(threading.Thread):
     # A crash may duplicate a fetch, but can never certify an uncommitted fragment.
     DISCOVERY_COVERAGE_META_KEY = "discovery_recorder_coverage_v1"
     DISCOVERY_COVERAGE_MAX_ROWS = 4096
+    DISCOVERY_RESULT_KEY = "discovery_recorder_result_v1"
+    DISCOVERY_GAPS_KEY = "discovery_recorder_gaps_v1"
+
+    @staticmethod
+    def _read_discovery_metadata(key, default):
+        raw = STORE.meta_get(key)
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except ValueError:
+            data = None
+        if isinstance(data, type(default)):
+            return data
+        if raw is None or isinstance(default, dict):
+            return default
+        raise DiscoveryRecorderIncomplete("Recorder gap metadata cannot be read safely")
+
+    def _save_discovery_gaps(self, gaps):
+        STORE.meta_set(self.DISCOVERY_GAPS_KEY, json.dumps(gaps, separators=(",", ":")))
+
+    def _save_discovery_result(self, status, **details):
+        result = {"status": status, **details}
+        STORE.meta_set(self.DISCOVERY_RESULT_KEY, json.dumps(result, separators=(",", ":")))
+        self.discovery_recorder_report = result
+
+    def _discovery_control_reads(self, entity, lo, hi, source, minimal, no_attributes):
+        cycle = self._discovery_recorder_cycle
+        alternate = next((eid for eid in cycle["targets"] if eid != entity), None)
+        # Check another entity in the failing window and the same entity in a
+        # disjoint window. Neither control contributes rows or coverage.
+        other_window = min(cycle["end"], lo)
+        if cycle["end"] - hi >= 1800:
+            other_window = cycle["end"]
+        controls = ([(alternate, lo, min(hi, lo + 1800))] if alternate else []) + [
+            (entity, other_window - 1800, other_window)
+        ]
+        results = []
+        for eid, start, end in controls:
+            if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
+                raise InterruptedError("Discovery cancelled before Recorder control read")
+            try:
+                data = HA.history(
+                    [eid], datetime.fromtimestamp(start, timezone.utc).isoformat(),
+                    datetime.fromtimestamp(end, timezone.utc).isoformat(),
+                    minimal=minimal, no_attributes=no_attributes,
+                    significant=(source != "ha_history_full"), timeout=20, skip_initial_state=True,
+                )
+                status = 200 if isinstance(data, list) else "invalid_response"
+            except HTTPError as exc:
+                status = exc.code
+            except (URLError, TimeoutError, OSError) as exc:
+                status = type(exc).__name__
+            results.append({"entity_id": eid, "start": start, "end": end, "result": status})
+        STORE.event(None, "info", "discovery_recorder_controls", "Independent Recorder control reads", {
+            "source": source, "controls": results,
+        })
+        if not any(row["result"] == 200 for row in results):
+            raise DiscoveryRecorderUnavailable(
+                "RECORDER_UNAVAILABLE: independent history reads did not establish availability"
+            )
+        cycle["confirmed"].add(source)
+        cycle["consecutive_skips"] = 0
+
+    def _record_discovery_gap(self, entity, lo, hi, source, reason):
+        cycle = self._discovery_recorder_cycle
+        cycle["skipped"] += 1
+        matching, remaining = [], []
+        for row in cycle["gaps"]:
+            if (row["source"], row["entity_id"]) != (source, entity):
+                remaining.append(row)
+            elif row["reason"] == reason:
+                matching.append((row["start"], row["end"]))
+            elif row["end"] <= lo or row["start"] >= hi:
+                remaining.append(row)
+            else:
+                if row["start"] < lo:
+                    remaining.append(dict(row, end=lo))
+                if row["end"] > hi:
+                    remaining.append(dict(row, start=hi))
+        for start, end in self._merge_discovery_intervals(matching + [(lo, hi)]):
+            remaining.append({"source": source, "entity_id": entity, "start": start,
+                              "end": end, "reason": reason})
+        self._save_discovery_gaps(remaining)
+        cycle["gaps"] = remaining
+        STORE.event(None, "warning", "discovery_recorder_slice_skipped", reason, {
+            "source": source, "entity_id": entity, "start": lo, "end": hi,
+        })
+
+    def _clear_recovered_discovery_gaps(self, source, entities, start, end):
+        cycle = getattr(self, "_discovery_recorder_cycle", None)
+        if cycle is None or not cycle["gaps"]:
+            return
+        gaps = cycle["gaps"]
+        remaining = []
+        for row in gaps:
+            lo, hi = row["start"], row["end"]
+            if row["source"] != source or row["entity_id"] not in entities or hi <= start or lo >= end:
+                remaining.append(row)
+            else:
+                if lo < start:
+                    remaining.append(dict(row, end=start))
+                if hi > end:
+                    remaining.append(dict(row, start=end))
+        if remaining != gaps:
+            self._save_discovery_gaps(remaining)
+            cycle["gaps"] = remaining
+
+    def _discovery_coverage_report(self, cycle):
+        seconds = {}
+        for source, ids, start, end in cycle["sections"]:
+            for eid in ids:
+                missing = self._discovery_missing_intervals(source, eid, start, end)
+                totals = seconds.setdefault(eid, [0.0, 0.0])
+                totals[0] += end - start
+                totals[1] += sum(hi - lo for lo, hi in missing)
+        return {eid: round(100 * max(0.0, total - missing) / total, 2)
+                for eid, (total, missing) in seconds.items()}
+
+    def _require_agent_history(self, entities, start, end):
+        for row in self._read_discovery_metadata(self.DISCOVERY_GAPS_KEY, []):
+            if row["entity_id"] in entities and row["start"] < end and row["end"] > start:
+                raise DiscoveryRecorderIncomplete(
+                    f"Additional Recorder history required for {row['entity_id']}; "
+                    "run Discovery Rescan after the skipped interval is readable"
+                )
+
 
     @staticmethod
     def _merge_discovery_intervals(intervals):
@@ -2077,6 +2217,9 @@ class HistoryManager(threading.Thread):
         return [(lo, hi) for lo, hi in missing if hi > lo + 1e-6]
 
     def _mark_discovery_coverage(self, source, entities, start, end):
+        # The archive commit already succeeded. Resolve gaps before writing the
+        # optional resume hint so a restart cannot hide an unresolved gap behind it.
+        self._clear_recovered_discovery_gaps(source, entities, start, end)
         coverage = self.discovery_recorder_coverage
         for eid in entities:
             key = (str(source), str(eid))
@@ -2125,6 +2268,19 @@ class HistoryManager(threading.Thread):
         if not entity_ids or end_ts <= start_ts:
             return 0
         discovery = HEAVY_JOBS.owner == "discovery"
+        cycle = getattr(self, "_discovery_recorder_cycle", None) if discovery else None
+        filtered = False
+        if cycle is not None and cycle["exhausted"]:
+            remaining = []
+            for eid in entity_ids:
+                if eid in cycle["exhausted"]:
+                    filtered = True
+                    self._record_discovery_gap(eid, start_ts, end_ts, source, "UNPROBED_HTTP500_BUDGET")
+                else:
+                    remaining.append(eid)
+            entity_ids = remaining
+            if not entity_ids:
+                return 0
         if discovery and http_500_budget is None:
             http_500_budget = [DISCOVERY_HTTP_500_LIMIT]
         try:
@@ -2160,10 +2316,12 @@ class HistoryManager(threading.Thread):
                 # Count consecutive 5xx/429 requests, not failures separated by
                 # successful Recorder reads in a long-running discovery.
                 self._discovery_recorder_failures = 0
+                if cycle is not None:
+                    cycle["consecutive_skips"] = 0
             # The top-level chunk is marked by _import_section. Recursive successful
             # children are also checkpointed: a later failing sibling must not
             # erase their progress when the scan is resumed after restart.
-            if depth > 0 and on_successful_leaf is not None:
+            if (depth > 0 or filtered) and on_successful_leaf is not None:
                 on_successful_leaf(entity_ids, start_ts, end_ts)
             return written
         except InterruptedError:
@@ -2182,11 +2340,31 @@ class HistoryManager(threading.Thread):
                     ) from None
                 raise
             if discovery and status == 500:
-                http_500_budget[0] -= 1
-                if http_500_budget[0] <= 0:
-                    raise DiscoveryRecorderHTTP500(
-                        "Recorder HTTP 500 split budget exhausted; see history_http_error in add-on logs"
-                    ) from None
+                if cycle is not None and len(entity_ids) == 1:
+                    eid = entity_ids[0]
+                    failures = cycle["entity_failures"].get(eid, 0) + 1
+                    cycle["entity_failures"][eid] = failures
+                    cycle["single_failures"] += 1
+                    if cycle["single_failures"] > DISCOVERY_HTTP_500_LIMIT * 2:
+                        self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
+                        raise DiscoveryRecorderHTTP500("Recorder HTTP 500 discovery budget exhausted") from None
+                    if failures >= DISCOVERY_HTTP_500_ENTITY_LIMIT and end_ts - start_ts > 1800:
+                        self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
+                        cycle["exhausted"].add(eid)
+                        self._record_discovery_gap(
+                            eid, start_ts, end_ts, source, "UNRESOLVED_HTTP500_BUDGET"
+                        )
+                        return 0
+                else:
+                    http_500_budget[0] -= 1
+                    if http_500_budget[0] <= 0:
+                        if cycle is not None:
+                            self._discovery_control_reads(
+                                entity_ids[0], start_ts, end_ts, source, minimal, no_attributes
+                            )
+                        raise DiscoveryRecorderHTTP500(
+                            "Recorder HTTP 500 split budget exhausted; see history_http_error in add-on logs"
+                        ) from None
             elif discovery and (status >= 500 or status == 429):
                 failures = int(getattr(self, "_discovery_recorder_failures", 0)) + 1
                 self._discovery_recorder_failures = failures
@@ -2226,6 +2404,16 @@ class HistoryManager(threading.Thread):
             )
 
         if discovery and isinstance(err, HTTPError) and err.code == 500:
+            if cycle is not None and len(entity_ids) == 1 and span <= 1800:
+                eid = entity_ids[0]
+                exhausted = cycle["entity_failures"][eid] >= DISCOVERY_HTTP_500_ENTITY_LIMIT
+                if exhausted or source not in cycle["confirmed"] or cycle["consecutive_skips"] >= 4:
+                    self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
+                cycle["consecutive_skips"] += 1
+                if exhausted:
+                    cycle["exhausted"].add(eid)
+                self._record_discovery_gap(eid, start_ts, end_ts, source, "SKIPPED_HTTP500")
+                return 0
             raise DiscoveryRecorderHTTP500(
                 "Recorder returned HTTP 500 for a minimum slice; see history_http_error in add-on logs"
             ) from None
@@ -2264,7 +2452,10 @@ class HistoryManager(threading.Thread):
         windows = self._time_windows(start_ts, end_ts, max_hours=max_hours)
         batches = [entity_ids[i:i + batch_size] for i in range(0, len(entity_ids), batch_size)]
         window_count = max(1, math.ceil((end_ts-start_ts)/(max(1,int(max_hours))*3600)))
+        cycle = getattr(self, "_discovery_recorder_cycle", None) if resume_discovery else None
         if resume_discovery:
+            if cycle is not None:
+                cycle["sections"].append((source, entity_ids, start_ts, end_ts))
             if not hasattr(self, "discovery_recorder_coverage"):
                 self.discovery_recorder_coverage = self._load_discovery_coverage()
             # Exact interval subtraction, not merely "last successful timestamp":
@@ -2307,6 +2498,7 @@ class HistoryManager(threading.Thread):
                 )
             self._recorder_chunk_report = report
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
+            http500_before = cycle["skipped"] if cycle is not None else 0
             try:
                 fetch_kwargs = {}
                 if resume_discovery:
@@ -2324,7 +2516,8 @@ class HistoryManager(threading.Thread):
                 raise DiscoveryRecorderIncomplete(
                     "A Recorder slice could not be retrieved; no discovery completion marker was written"
                 )
-            if not skipped:
+            has_http500_gap = cycle is not None and cycle["skipped"] != http500_before
+            if not skipped and not has_http500_gap:
                 if on_successful_chunk is not None:
                     on_successful_chunk(batch, ws, we)
                 if resume_discovery:
@@ -2375,9 +2568,30 @@ class HistoryManager(threading.Thread):
         return inserted
 
     def _manual_lightweight_cycle(self, current, controllable, end_ts, threshold_override=None):
+        cycle = {
+            "targets": controllable, "end": end_ts, "sections": [],
+            "gaps": self._read_discovery_metadata(self.DISCOVERY_GAPS_KEY, []),
+            "confirmed": set(), "skipped": 0, "consecutive_skips": 0,
+            "entity_failures": {}, "single_failures": 0, "exhausted": set(),
+        }
+        self._discovery_recorder_cycle = cycle
+        try:
+            self._scan_discovery_history(current, controllable, end_ts, threshold_override=threshold_override)
+        except DiscoveryRecorderIncomplete as exc:
+            self._save_discovery_result(
+                "BLOCKED", reason=str(exc), skipped=cycle["gaps"],
+                coverage_pct=self._discovery_coverage_report(cycle),
+            )
+            raise
+        finally:
+            self._discovery_recorder_cycle = None
+
+    def _scan_discovery_history(self, current, controllable, end_ts, threshold_override):
+        cycle = self._discovery_recorder_cycle
         start_ts = end_ts - float(OPTIONS["history_bootstrap_days"]) * 86400.0
         last = parse_ts(STORE.meta_get("manual_discovery_refresh"))
-        if last:
+        retry_gaps = any(r["end"] > start_ts and r["entity_id"] in controllable for r in cycle["gaps"])
+        if last and not retry_gaps:
             refresh_start = max(end_ts - 2 * 3600.0, float(last) - 300.0)
         else:
             refresh_start = max(start_ts, end_ts - max(6.0, float(OPTIONS.get("manual_discovery_hours", 24))) * 3600.0)
@@ -2393,7 +2607,7 @@ class HistoryManager(threading.Thread):
         # more expensive full-attribute history. Selected-agent Train later refreshes its
         # own full training-quality history as before.
         deep_marker = STORE.meta_get("discovery_deep_history_complete")
-        deep_needed = not deep_marker and refresh_start > start_ts + 1.0
+        deep_needed = (not deep_marker or retry_gaps) and refresh_start > start_ts + 1.0
         recent_progress_lo = 0.10
         if deep_needed and controllable:
             state_props = {"power", "value", "option_index"}
@@ -2451,10 +2665,12 @@ class HistoryManager(threading.Thread):
             )
         if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
             raise InterruptedError("Discovery cancelled before classification")
-        if not deep_marker:
-            STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
-            with self.lock:
-                self.discovery_deep_history_complete = True
+        relevant_gaps = [r for r in cycle["gaps"] if r["end"] > start_ts
+                         and r["start"] < end_ts and r["entity_id"] in controllable]
+        partial = bool(relevant_gaps)
+        coverage_pct = self._discovery_coverage_report(cycle)
+        if partial and not any(coverage_pct.values()):
+            raise DiscoveryRecorderIncomplete("No requested Recorder history was successfully imported")
         # Do not run full-table archive_stats() here. At this exact point the Recorder
         # import has just written the hottest pages in entity_history; COUNT(DISTINCT) and
         # GROUP BY source used to stall Raspberry Pi for long enough to starve Ingress and
@@ -2475,13 +2691,23 @@ class HistoryManager(threading.Thread):
             raise InterruptedError("Discovery cancelled before completion marker")
         with self.lock:
             self.discovery_classified = True
+        self.error = None
         # A completed classification is the durable cold-start boundary even when it
         # legitimately creates zero agents.  This prevents every normal restart from
         # paying Recorder/discovery cost again for an empty or inactive home.
-        STORE.meta_set("initial_discovery_complete", iso_from_ts(end_ts))
+        self._save_discovery_result(
+            "PARTIAL" if partial else "COMPLETE", skipped=relevant_gaps,
+            coverage_pct=coverage_pct,
+        )
+        if not partial:
+            if not deep_marker:
+                STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
+                with self.lock:
+                    self.discovery_deep_history_complete = True
+            STORE.meta_set("initial_discovery_complete", iso_from_ts(end_ts))
+            STORE.meta_set("manual_discovery_refresh", iso_from_ts(end_ts))
         # Populate diagnostics from current state only; this does not import context history.
         self._eligible_rebuild_context()
-        STORE.meta_set("manual_discovery_refresh", iso_from_ts(end_ts))
         STORE.meta_set("training_revision", TRAINING_REVISION)
         self.last_run = now_ts()
         q = len(STORE.qualified_agents())
@@ -2491,7 +2717,7 @@ class HistoryManager(threading.Thread):
         ])
         self.set_status(
             "ready", 1.0,
-            f"Discovery ready · {q} trained / {waiting} waiting for manual selection",
+            f"Discovery {'PARTIAL' if partial else 'ready'} · {q} trained / {waiting} waiting for manual selection",
             stage_eta_seconds=0, work_done=0, work_total=0, work_unit="agents",
             eta_source="idle",
             phase_detail="Choose which discovered devices to train; no agent starts automatically",
@@ -2588,6 +2814,12 @@ class HistoryManager(threading.Thread):
             }
             for eid, opts in specs.items()
         }
+        cycle = getattr(self, "_discovery_recorder_cycle", None)
+        gaps = {}
+        for gap in cycle["gaps"] if cycle is not None else ():
+            gaps.setdefault(gap["entity_id"], []).append((gap["start"], gap["end"]))
+        gaps = {eid: iter(self._merge_discovery_intervals(part)) for eid, part in gaps.items()}
+        next_gap = {eid: next(part, None) for eid, part in gaps.items()}
         rows = 0
         for row in STORE.archive_iter(
             start_ts=start_ts,
@@ -2597,6 +2829,14 @@ class HistoryManager(threading.Thread):
             eid = str(row["entity_id"])
             opts = specs.get(eid)
             if not opts:
+                continue
+            ts = float(row["ts"])
+            gap = next_gap.get(eid)
+            while gap is not None and ts >= gap[1]:
+                for stat in summary[eid].values():
+                    stat["last_value"] = None
+                gap = next_gap[eid] = next(gaps[eid], None)
+            if gap is not None and ts >= gap[0]:
                 continue
             archived = archived_state(row)
             for opt in opts:
@@ -2619,13 +2859,13 @@ class HistoryManager(threading.Thread):
                         continue
                 stat = summary[eid][prop]
                 previous = stat["last_value"]
-                if previous is None:
-                    changed = True
-                else:
-                    try:
-                        changed = abs(float(value) - float(previous)) > 1e-6
-                    except (TypeError, ValueError):
-                        changed = str(value) != str(previous)
+                if previous is None and stat["samples"]:
+                    stat["last_value"] = value
+                    continue
+                try:
+                    changed = previous is None or abs(float(value) - float(previous)) > 1e-6
+                except (TypeError, ValueError):
+                    changed = str(value) != str(previous)
                 if changed:
                     stat["samples"] += 1
                     stat["last_value"] = value
@@ -2648,6 +2888,7 @@ class HistoryManager(threading.Thread):
             "active": 0,
             "registry_filtered": 0,
             "no_transition": 0,
+            "history_incomplete": 0,
             "below_threshold": 0,
             "stale_transition": 0,
         }
@@ -2680,6 +2921,8 @@ class HistoryManager(threading.Thread):
         # suppress auto-creation for that entity so discovery cannot create duplicates.
         existing_entities = {a["target_entity"] for a in existing}
         usage_summary = self._discovery_usage_summary(current, start_ts)
+        cycle = getattr(self, "_discovery_recorder_cycle", None)
+        incomplete = {row["entity_id"] for row in cycle["gaps"] if row["end"] > start_ts} if cycle else set()
         for entity_id, state in current.items():
             opts = target_options_for_state(state)
             if not opts:
@@ -2713,8 +2956,11 @@ class HistoryManager(threading.Thread):
             )
             score, last_ts, opt, _ = candidates[0]
             if score < effective_threshold or last_ts < recent_cutoff:
-                inactive += 1
-                if score <= 0:
+                if entity_id not in incomplete:
+                    inactive += 1
+                if entity_id in incomplete:
+                    reason = "history_incomplete"
+                elif score <= 0:
                     reason = "no_transition"
                 elif score < effective_threshold:
                     reason = "below_threshold"

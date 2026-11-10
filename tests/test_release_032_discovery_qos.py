@@ -93,7 +93,7 @@ class DiscoveryQoSTests(unittest.TestCase):
         self.assertEqual(summary["input_select.house_mode"]["option_index"]["last_ts"], 13.0)
 
     def test_clean_discovery_backfills_full_classifier_window_once(self):
-        source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
+        source = inspect.getsource(HistoryManager._scan_discovery_history)
         self.assertIn('STORE.meta_get("discovery_deep_history_complete")', source)
         self.assertIn('state_targets, start_ts, refresh_start', source)
         self.assertIn('source="ha_history_discovery_coarse"', source)
@@ -125,7 +125,7 @@ class DiscoveryQoSTests(unittest.TestCase):
         self.assertIn("original_cycle(current, controllable, end_ts, *args, **kwargs)", source)
 
     def test_post_recorder_cycle_does_not_refresh_full_archive_stats(self):
-        source = inspect.getsource(HistoryManager._manual_lightweight_cycle)
+        source = inspect.getsource(HistoryManager._scan_discovery_history)
         self.assertNotIn("self.refresh_archive_cache()", source)
         self.assertIn("single-pass local archive scan", source)
         self.assertIn("discovery_deep_history_complete", source)

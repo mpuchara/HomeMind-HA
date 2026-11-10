@@ -198,7 +198,9 @@ def install(runtime):
             # Upgrades that already contain agent configuration are not fresh installs.
             # Persist the boundary once so future restarts do not need to infer it.
             initial_marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
-            if (not initial_marker and all_existing
+            recorder_status = getattr(history_self, "discovery_recorder_report", {}).get("status")
+            partial = recorder_status == "PARTIAL"
+            if (not initial_marker and not partial and all_existing
                     and not store.meta_get("discovery_recorder_coverage_v1")):
                 # Old upgrades are considered classified, but an interrupted
                 # first scan with persisted partial coverage must resume instead.
@@ -233,6 +235,8 @@ def install(runtime):
                 ]
             )
             history_self.last_run = history_module.now_ts()
+            if partial:
+                history_self.discovery_classified = True
             history_self.set_status(
                 "ready",
                 1.0,
@@ -303,7 +307,8 @@ def install(runtime):
                 # 24 h of the 10-day classifier window. Reconcile that mismatch exactly
                 # once after runtime readiness; the discovery cycle persists deep_marker.
                 deep_reconcile_needed = bool(marker) and not bool(deep_marker)
-                discovery_needed = initial_needed or deep_reconcile_needed
+                partial = getattr(history_self, "discovery_recorder_report", {}).get("status") == "PARTIAL"
+                discovery_needed = (initial_needed or deep_reconcile_needed) and not partial
                 if discovery_needed and not core.startup_snapshot().get("ready"):
                     # History starts during runtime construction, just before the public
                     # ready flag flips. Do not turn that tiny ordering gap into a 60 s
@@ -477,11 +482,14 @@ def install(runtime):
                     raise InterruptedError("History discovery stopped during Recorder backoff")
             try:
                 return original_fetch(history_self, *args, **kwargs)
-            except history_module.DiscoveryRecorderHTTP500:
+            except (history_module.DiscoveryRecorderHTTP500, history_module.DiscoveryRecorderUnavailable) as exc:
                 if kwargs.get("depth", 0) == 0:
                     with state_lock:
                         state["recorder_terminal_error"] = {
-                            "category": "history_http_500",
+                            "category": (
+                                "RECORDER_UNAVAILABLE" if isinstance(exc, history_module.DiscoveryRecorderUnavailable)
+                                else "history_http_500"
+                            ),
                             "http_status": 500,
                             "retryable": False,
                             "action": "Inspect history_http_error and the HA Core traceback, then run manual Rescan",

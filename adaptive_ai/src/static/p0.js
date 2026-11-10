@@ -71,6 +71,8 @@
     }
     const b=status.home_bootstrap||{};
     if (['IMPORTING','TRAINING'].includes(b.state)) return {title:'Building Home Intelligence',detail:`${num(b.rows||0)} rows · ${num(b.rows_per_second||0)} rows/s`,p:Number(b.progress||0),eta:b.eta_seconds,work:null};
+    if (!h.discovery_job_active && h.discovery_recorder?.status==='BLOCKED') return {title:'Recorder discovery blocked',detail:h.discovery_recorder.reason,p:1,eta:null,work:null};
+    if (!h.discovery_job_active && h.discovery_recorder?.status==='PARTIAL') return {title:'Discovery completed with gaps',detail:'Some Recorder intervals were skipped. Affected agents may require additional history.',p:1,eta:null,work:null};
     if (status.heavy_job || (h.phase && h.phase!=='ready')) return {title:'Preparing local intelligence',detail:h.phase_detail||h.message||String(status.heavy_job||h.phase),p:Number(h.progress||0),eta:h.stage_eta_seconds??h.eta_seconds,work:h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${h.work_unit||'items'}`:null};
     return {title:'System ready',detail:status.ha_connected?'Agents react to Home Assistant events in realtime.':'Runtime is ready; waiting for Home Assistant.',p:1,eta:null,work:null};
   };

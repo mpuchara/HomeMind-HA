@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.14.240 — Discovery z częściową historią Recorder
+
+- Izolacja błędów HTTP 500, zapis luk i ochrona klasyfikacji oraz treningu przed niepełnymi danymi.
+
 ## 0.14.239 — Ręczna diagnostyka Recorder HTTP 500
 
 - Pięć kontrolowanych odczytów historii z kontenera dodatku, z raportem HTTP, czasu i liczby rekordów.
