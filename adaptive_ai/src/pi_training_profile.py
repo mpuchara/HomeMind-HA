@@ -404,6 +404,29 @@ def summarize_process(samples, elapsed, cpu_count):
     }
 
 
+def completed_training_profile(history, since):
+    """Return the latest job measured in this run, without agent identifiers."""
+    profiles = (history.get("recent_training_profiles") or {}).values()
+    profile = max(profiles, key=lambda row: row.get("finished_at") or 0, default={})
+    finished = profile.get("finished_at") or 0
+    if finished < since:
+        return None
+    process = profile.get("training_process") or {}
+    return {
+        "finished_at": finished,
+        "completed": profile.get("completed"),
+        "state": profile.get("state"),
+        "job_timings": profile.get("training_job_timings") or {},
+        "last_chunk_timings": profile.get("training_phase_timings") or {},
+        "worker": {
+            key: process[key]
+            for key in ("wall_seconds", "cpu_seconds", "read_bytes", "write_bytes",
+                        "peak_rss_mb", "worker_budget")
+            if key in process
+        },
+    }
+
+
 def run(args):
     runtime_pid = args.runtime_pid or find_runtime_pid()
     if runtime_pid is None:
@@ -438,6 +461,8 @@ def run(args):
     max_realtime_disconnect_run = 0
     scanned_worker_pids = set()
     loop_durations_ms = []
+    capture_since = time.time()
+    finished_training = None
 
     while time.monotonic() < deadline:
         loop_started = time.monotonic()
@@ -489,6 +514,9 @@ def run(args):
                     )
                 last_correct_probe = time.monotonic()
             history = status.get("history") or {}
+            latest = completed_training_profile(history, capture_since)
+            if latest:
+                finished_training = latest
             if history.get("training_overall_progress") is not None:
                 progress.append(float(history["training_overall_progress"]))
             worker = history.get("training_process") or {}
@@ -646,6 +674,7 @@ def run(args):
             "last": progress[-1] if progress else None,
             "delta": (progress[-1] - progress[0]) if len(progress) >= 2 else None,
         },
+        "finished_training": finished_training,
         "runtime_latency_metrics": metric_summary,
         "poll_failures": failures[:20],
         "notes": [

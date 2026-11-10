@@ -1,4 +1,5 @@
 """0.14.80 contracts for process-isolated historical training."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -6,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -654,6 +656,9 @@ class SupervisorRollbackContracts(unittest.TestCase):
 
 class ActualWorkerSmoke(unittest.TestCase):
     def test_clean_worker_process_trains_tiny_explicit_schema_job(self):
+        self.run_worker_fixture()
+
+    def run_worker_fixture(self, samples=24):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -687,7 +692,7 @@ class ActualWorkerSmoke(unittest.TestCase):
             })
             base = 1_700_000_000.0
             rows = []
-            for idx in range(24):
+            for idx in range(samples):
                 ts = base + idx * 30
                 rows.append((
                     "binary_sensor.motion", ts - 2,
@@ -746,11 +751,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "schema_cache_item": {},
                 "options": options,
                 "start_ts": base - 5,
-                "end_ts": base + 24 * 30,
+                "end_ts": base + samples * 30,
                 "train_kwargs": {
                     "qualify": False,
                     "include_candidates": True,
-                    "benchmark": False,
+                    "benchmark": samples > 24,
                     "accumulate_benchmark": False,
                     "progress_lo": 0.0,
                     "progress_hi": 1.0,
@@ -768,15 +773,30 @@ class ActualWorkerSmoke(unittest.TestCase):
             env = dict(os.environ)
             env["ADAPTIVE_AI_DATA"] = root
             env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
+            worker_args = [training_process.__file__, "--worker", str(job_path)]
+            command = [sys.executable, *worker_args]
+            if samples > 24:
+                # Policy decay uses the wall clock even for replayed samples.
+                # Hold that clock constant across benchmark runs.
+                command = [
+                    sys.executable, "-c",
+                    "import policy, runpy, sys; stamp = float(sys.argv.pop(1)); "
+                    "policy.now_ts = lambda: stamp; "
+                    "sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')",
+                    str(job["end_ts"]), *worker_args,
+                ]
+                env["PYTHONHASHSEED"] = "0"
+            started = time.perf_counter()
             completed = subprocess.run(
-                [sys.executable, training_process.__file__, "--worker", str(job_path)],
+                command,
                 env=env,
                 cwd=str(Path(training_process.__file__).parent),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                timeout=45,
+                timeout=45 if samples == 24 else 600,
             )
+            elapsed = time.perf_counter() - started
             if completed.returncode:
                 log = Path(job["log_path"])
                 self.fail(
@@ -798,6 +818,22 @@ class ActualWorkerSmoke(unittest.TestCase):
                 int((model.get("schema") or {}).get("version") or 0),
                 12,
             )
+            learned = {
+                key: model[key]
+                for key in ("version", "actions", "horizons", "schema", "heads")
+            }
+            return {
+                "version": job["app_version"],
+                "input_history_rows": len(rows),
+                "worker_wall_seconds": elapsed,
+                "worker_phases": result["training_phase_timings"],
+                "worker_budget": result["training_budget"],
+                "learning_hash": hashlib.sha256(json.dumps(
+                    learned, sort_keys=True, separators=(",", ":")
+                ).encode()).hexdigest(),
+                "benchmark_counts": model.get("_benchmark_counts"),
+                "frozen_holdout_counts": model.get("_frozen_holdout_counts"),
+            }
 
 
 if __name__ == "__main__":

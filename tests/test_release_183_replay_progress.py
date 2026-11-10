@@ -10,6 +10,7 @@ from unittest.mock import patch
 import support
 import history
 from causal_home_statistics import CausalHomeStatistics
+from pi_training_profile import completed_training_profile
 from training_process import _apply_status, _worker_status_writer
 from tools.benchmark_causal_statistics import fixture, legacy_statistics_at
 
@@ -98,6 +99,14 @@ class CausalPrefixTests(unittest.TestCase):
         self.assertEqual(self.index.status()['cursor_bytes'], 0)
         self.assertEqual(self.index.cursor_hits, 0)
 
+    def test_cursor_reuses_size_only_until_new_rows_change_the_model(self):
+        self.compare(self.base + 11)
+        with patch.object(self.index, '_model_bytes', wraps=self.index._model_bytes) as size:
+            self.compare(self.base + 11)
+            size.assert_not_called()
+            self.compare(self.base + 41)
+            size.assert_called_once()
+
     def test_dense_queries_reduce_replayed_work_and_keep_bounded_memory(self):
         counts = {'rows': 0}
         for offset in range(1, 270):
@@ -110,6 +119,21 @@ class CausalPrefixTests(unittest.TestCase):
 
 
 class WorkerProgressTests(unittest.TestCase):
+    def test_profile_captures_only_a_job_finished_during_the_measurement(self):
+        history_status = {"recent_training_profiles": {
+            "private-agent": {
+                "name": "Private name", "finished_at": 150, "completed": True,
+                "training_job_timings": {"recorder_refresh_seconds": 50},
+                "training_process": {"cpu_seconds": 12, "pid": 42},
+            },
+            "older-agent": {"finished_at": 100},
+        }}
+        self.assertIsNone(completed_training_profile(history_status, 151))
+        captured = completed_training_profile(history_status, 149)
+        self.assertEqual(captured["job_timings"], {"recorder_refresh_seconds": 50})
+        self.assertEqual(captured["worker"], {"cpu_seconds": 12})
+        self.assertNotIn("name", captured)
+
     def manager(self, aid='a'):
         engine = SimpleNamespace(lock=threading.RLock(), state_map={}, entity_registry={})
         manager = history.HistoryManager(engine, session_mode=True)

@@ -195,12 +195,16 @@ class CausalHomeStatistics:
         return size({k: v for k, v in vars(model).items() if k != 'lock'})
 
     @staticmethod
-    def _copy_model(model):
-        result = RoomBeliefModel(model.half_life / 86400.0)
-        for name, value in vars(model).items():
-            if name != 'lock':
-                setattr(result, name, copy.deepcopy(value))
-        return result
+    def _expired_statistics(model, timestamp):
+        # Expiry reads movement state and may update graph outcomes. It does
+        # not use the retained presence values, source observations or area index.
+        view = RoomBeliefModel(model.half_life / 86400.0)
+        view.graph = copy.deepcopy(model.graph)
+        view.hypotheses = list(model.hypotheses)
+        view.pending = model.pending
+        view.arrivals.extend(model.arrivals)
+        view.expire(timestamp)
+        return view.graph, copy.deepcopy(model.dwell), copy.deepcopy(model.calibration)
 
     def statistics_at(self, timestamp, *, cursor='default'):
         timestamp = float(timestamp)
@@ -224,7 +228,7 @@ class CausalHomeStatistics:
             self._cursor_revision = revision
         previous = self._cursors.pop(cursor, None)
         if previous is not None and previous[0] == index and previous[1] <= timestamp:
-            _, lo, model, _ = previous
+            _, lo, model, model_bytes = previous
             self.cursor_hits += 1
         else:
             raw = json.loads(zlib.decompress(self.snapshots[index]))
@@ -234,11 +238,14 @@ class CausalHomeStatistics:
             model.area_sources = {area: set(ids) for area, ids in raw['area_sources'].items()}
             model.arrivals.extend((area, stamp) for area, stamp in raw['arrivals'])
             lo = self.times[index]
+            model_bytes = None
             self.cursor_restores += 1
         for row in self._rows(lo, timestamp):
             self._observe(model, row)
             self.query_rows += 1
-        model_bytes = self._model_bytes(model)
+            model_bytes = None
+        if model_bytes is None:
+            model_bytes = self._model_bytes(model)
         remaining = max(0, self.max_bytes - self.bytes)
         if model_bytes <= remaining:
             self._cursors[cursor] = (index, timestamp, model, model_bytes)
@@ -247,9 +254,7 @@ class CausalHomeStatistics:
         # Query-only expiry can teach a missing destination at this timestamp. It must
         # never enter the next prefix, where the legacy replay expires only at actual
         # source events/checkpoint boundaries. Returned dictionaries are private too.
-        view = self._copy_model(model)
-        view.expire(timestamp)
-        return view.graph, view.dwell, view.calibration
+        return self._expired_statistics(model, timestamp)
 
     def status(self):
         return {'contract': self.CONTRACT, 'direct_sources': len(self.entities),

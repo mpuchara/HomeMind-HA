@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.15.0 — Kandydat do testów wydajności treningu
+
+- Replay przyczynowy ogranicza kopiowanie stanu przy wygaśnięciu hipotez i wykorzystuje aktualny pomiar rozmiaru kursora, gdy nie przybyły żadne obserwacje.
+
 ## 0.14.240 — Discovery z częściową historią Recorder
 
 - Izolacja błędów HTTP 500, zapis luk i ochrona klasyfikacji oraz treningu przed niepełnymi danymi.
