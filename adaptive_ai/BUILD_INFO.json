@@ -1,5 +1,5 @@
 {
-  "version": "0.14.234",
+  "version": "0.14.235",
   "release_date": "2026-11-09",
   "base_version": "0.14.230",
   "base_commit": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
@@ -4038,6 +4038,14 @@
     "collector_default_enabled": false,
     "environments": "aarch64 Pi5 test installation on restored clone only; no Pi/HA acceptance claimed",
     "note": "Pi 0.14.233 Recorder backoff reproducible screenshot: classify transient/permanent HA history errors, avoid 120s backoff for local response split/HTTP413, expose sanitized failure detail, suspend futile auto retry on HTTP400/401/403/404 until manual Rescan; retain original 120s transient circuit breaker. Not a proven fix for unknown original HA error."
+  },
+  "recorder_014235": {
+    "scope": "Pi Recorder HTTP 500 sanitized request shape, bounded discovery retry, fail-closed completion and persisted interval resume",
+    "no_premature_markers": true,
+    "recovery_progress_contract": "discovery_recorder_coverage_v1",
+    "ha_core_root_cause": "UNKNOWN until HA Core traceback is inspected",
+    "pi_hardware_acceptance": "NOT RUN",
+    "gate_d": "BLOCKER"
   },
   "recorder_014234": {
     "scope": "Recorder error triage from first Pi5 startup; no policy/training/collector changes",

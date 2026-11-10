@@ -89,8 +89,13 @@ def _initial_discovery_needed(store):
     """True only before the first completed classification on an empty install."""
     if store.meta_get(INITIAL_DISCOVERY_META_KEY, ""):
         return False
-    # Existing agent configuration proves this is an upgrade/restart, not a clean
-    # installation.  Do not surprise an established system with Recorder work.
+    # An interrupted initial discovery may have created some agents before the
+    # final marker. Its persisted Recorder coverage proves this is unfinished,
+    # NOT a legacy upgrade to mark complete. Resume only the uncovered chunks.
+    if store.meta_get("discovery_recorder_coverage_v1"):
+        return True
+    # Legacy existing-agent installs without progress metadata keep their
+    # original quiet-start contract.
     return not bool(store.list_agent_configs())
 
 
@@ -187,7 +192,10 @@ def install(runtime):
             # Upgrades that already contain agent configuration are not fresh installs.
             # Persist the boundary once so future restarts do not need to infer it.
             initial_marker = store.meta_get(INITIAL_DISCOVERY_META_KEY, "")
-            if not initial_marker and all_existing:
+            if (not initial_marker and all_existing
+                    and not store.meta_get("discovery_recorder_coverage_v1")):
+                # Old upgrades are considered classified, but an interrupted
+                # first scan with persisted partial coverage must resume instead.
                 initial_marker = history_module.iso_from_ts(history_module.now_ts())
                 store.meta_set(INITIAL_DISCOVERY_META_KEY, initial_marker)
             with state_lock:
@@ -376,6 +384,24 @@ def install(runtime):
             except Exception as exc:
                 if HEAVY_JOBS.owner == "discovery":
                     failure = recorder_failure_diagnostics(exc)
+                    # Request shape is safe to export: no raw entity IDs, dates,
+                    # URLs, access tokens or returned state attributes.
+                    ids = args[0] if args else kwargs.get("entity_ids", ())
+                    start = args[1] if len(args) > 1 else kwargs.get("start_dt")
+                    end = args[2] if len(args) > 2 else kwargs.get("end_dt")
+                    try:
+                        window_s = max(0, int(
+                            history_module.parse_ts(end) - history_module.parse_ts(start)
+                        ))
+                    except (TypeError, ValueError, OverflowError):
+                        window_s = None
+                    failure["request_shape"] = {
+                        "entity_count": len(ids or ()),
+                        "window_seconds": window_s,
+                        "minimal": bool(kwargs.get("minimal", True)),
+                        "no_attributes": bool(kwargs.get("no_attributes", True)),
+                        "significant": bool(kwargs.get("significant", True)),
+                    }
                     now = time.monotonic()
                     with state_lock:
                         state["recorder_failure_count"] += 1
@@ -515,7 +541,7 @@ def install(runtime):
         "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
-        "recorder_diagnostics": "sanitized_transient_vs_terminal_manual_rescan_v1",
+        "recorder_diagnostics": "sanitized_request_shape_and_bounded_5xx_split_v2",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
         "physical_control": "unchanged",
