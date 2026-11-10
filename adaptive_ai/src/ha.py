@@ -1,4 +1,5 @@
 from contextlib import suppress
+from datetime import datetime, timezone
 from http.client import HTTPException
 from urllib.error import HTTPError
 from urllib.request import Request
@@ -72,6 +73,7 @@ class HAClient:
             return self.request("GET", path, timeout=timeout)
         except HTTPError as exc:
             duration_ms = round((time.monotonic() - started) * 1000)
+            failed_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
             # The Supervisor/HA error body is untrusted and may contain secrets.
             # Keep only known, exact error phrases. Never print the URL or headers.
             excerpt = None
@@ -88,10 +90,22 @@ class HAClient:
             finally:
                 with suppress(OSError):
                     exc.close()
+            # Include only the application-generated REST path. The configured
+            # base URL can contain credentials or private routing information.
+            safe_ids = [eid if ENTITY_ID_RE.fullmatch(eid) else "<invalid>" for eid in entity_ids]
+            api_target = "/api/" + path if "<invalid>" not in safe_ids else None
             detail = {
+                "failed_at_utc": failed_at,
+                "method": "GET",
+                "api_target": api_target,
+                "legacy_significance_api_target": (
+                    api_target.replace("&significant_changes_only=0", "", 1)
+                    if api_target is not None and not significant else None
+                ),
+                "via_supervisor": self.base_url == "http://supervisor/core/api",
                 "endpoint": "/api/history/period/{timestamp}",
                 "status_code": exc.code,
-                "entity_ids": [eid if ENTITY_ID_RE.fullmatch(eid) else "<invalid>" for eid in entity_ids],
+                "entity_ids": safe_ids,
                 "entity_count": len(entity_ids),
                 "start_time": start_dt,
                 "end_time": end_dt,

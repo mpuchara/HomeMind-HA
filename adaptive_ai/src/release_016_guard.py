@@ -558,7 +558,7 @@ def install(runtime):
         "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
-        "recorder_diagnostics": "local_http_error_detail_and_bounded_500_split_v3",
+        "recorder_diagnostics": "exact_local_http_targets_and_legacy_significance_control_v4",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
         "physical_control": "unchanged",

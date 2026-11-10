@@ -1,3 +1,9 @@
+# 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
+
+- Log the encoded History REST target, UTC failure time and the comparison target using the historical Home Assistant significance default.
+- The comparison target is diagnostic data only. HomeMind issues no additional requests from this diagnostic.
+- The cause of the reported HTTP 500 remains unconfirmed.
+
 # 0.14.236 — Pi Recorder HTTP 500 diagnostics (TEST ONLY)
 
 - Isolate HTTP 500 by entity and time without sleeping between child requests.

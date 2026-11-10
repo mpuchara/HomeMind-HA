@@ -1,9 +1,9 @@
 {
-  "version": "0.14.236",
+  "version": "0.14.237",
   "release_date": "2026-11-10",
   "base_version": "0.14.230",
   "base_commit": "d460e0e10f18bcfebcd4565dcfdf54bf8782157b",
-  "release_status": "pi5-manual-validation-candidate-recorder-http500-diagnostics",
+  "release_status": "pi5-manual-validation-candidate-recorder-http500-wire-comparison",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4038,6 +4038,11 @@
     "collector_default_enabled": false,
     "environments": "aarch64 Pi5 test installation on restored clone only; no Pi/HA acceptance claimed",
     "note": "Pi 0.14.233 Recorder backoff reproducible screenshot: classify transient/permanent HA history errors, avoid 120s backoff for local response split/HTTP413, expose sanitized failure detail, suspend futile auto retry on HTTP400/401/403/404 until manual Rescan; retain original 120s transient circuit breaker. Not a proven fix for unknown original HA error."
+  },
+  "recorder_014237": {
+    "scope": "Log the exact REST target and an offline A/B control for the historical significance default",
+    "ha_core_root_cause": "Unconfirmed pending a paired live HTTP comparison and traceback",
+    "pi_hardware_acceptance": "NOT RUN"
   },
   "recorder_014236": {
     "scope": "Bounded Recorder HTTP 500 isolation and local request diagnostics",
