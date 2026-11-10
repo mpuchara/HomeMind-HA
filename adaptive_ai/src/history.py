@@ -2065,13 +2065,15 @@ class HistoryManager(threading.Thread):
 
     def _discovery_control_reads(self, entity, lo, hi, source, minimal, no_attributes):
         cycle = self._discovery_recorder_cycle
-        alternate = next((eid for eid in cycle["targets"] if eid != entity), None)
+        alternatives = [eid for eid in cycle["targets"] if eid != entity]
+        if len(alternatives) > 2:
+            alternatives = [alternatives[0], alternatives[-1]]
         # Check another entity in the failing window and the same entity in a
         # disjoint window. Neither control contributes rows or coverage.
         other_window = min(cycle["end"], lo)
         if cycle["end"] - hi >= 1800:
             other_window = cycle["end"]
-        controls = ([(alternate, lo, min(hi, lo + 1800))] if alternate else []) + [
+        controls = [(eid, lo, min(hi, lo + 1800)) for eid in alternatives] + [
             (entity, other_window - 1800, other_window)
         ]
         results = []
@@ -2156,13 +2158,19 @@ class HistoryManager(threading.Thread):
         return {eid: round(100 * max(0.0, total - missing) / total, 2)
                 for eid, (total, missing) in seconds.items()}
 
+    def _find_discovery_gap(self, entities, start, end):
+        return next((
+            row for row in self._read_discovery_metadata(self.DISCOVERY_GAPS_KEY, [])
+            if row["entity_id"] in entities and row["start"] < end and row["end"] > start
+        ), None)
+
     def _require_agent_history(self, entities, start, end):
-        for row in self._read_discovery_metadata(self.DISCOVERY_GAPS_KEY, []):
-            if row["entity_id"] in entities and row["start"] < end and row["end"] > start:
-                raise DiscoveryRecorderIncomplete(
-                    f"Additional Recorder history required for {row['entity_id']}; "
-                    "run Discovery Rescan after the skipped interval is readable"
-                )
+        gap = self._find_discovery_gap(entities, start, end)
+        if gap is not None:
+            raise DiscoveryRecorderIncomplete(
+                f"Additional Recorder history required for {gap['entity_id']}; "
+                "run Discovery Rescan after the skipped interval is readable"
+            )
 
 
     @staticmethod
@@ -2273,7 +2281,7 @@ class HistoryManager(threading.Thread):
         if cycle is not None and cycle["exhausted"]:
             remaining = []
             for eid in entity_ids:
-                if eid in cycle["exhausted"]:
+                if (source, eid) in cycle["exhausted"]:
                     filtered = True
                     self._record_discovery_gap(eid, start_ts, end_ts, source, "UNPROBED_HTTP500_BUDGET")
                 else:
@@ -2342,15 +2350,16 @@ class HistoryManager(threading.Thread):
             if discovery and status == 500:
                 if cycle is not None and len(entity_ids) == 1:
                     eid = entity_ids[0]
-                    failures = cycle["entity_failures"].get(eid, 0) + 1
-                    cycle["entity_failures"][eid] = failures
+                    key = (source, eid)
+                    failures = cycle["entity_failures"].get(key, 0) + 1
+                    cycle["entity_failures"][key] = failures
                     cycle["single_failures"] += 1
                     if cycle["single_failures"] > DISCOVERY_HTTP_500_LIMIT * 2:
                         self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
                         raise DiscoveryRecorderHTTP500("Recorder HTTP 500 discovery budget exhausted") from None
                     if failures >= DISCOVERY_HTTP_500_ENTITY_LIMIT and end_ts - start_ts > 1800:
                         self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
-                        cycle["exhausted"].add(eid)
+                        cycle["exhausted"].add((source, eid))
                         self._record_discovery_gap(
                             eid, start_ts, end_ts, source, "UNRESOLVED_HTTP500_BUDGET"
                         )
@@ -2406,12 +2415,12 @@ class HistoryManager(threading.Thread):
         if discovery and isinstance(err, HTTPError) and err.code == 500:
             if cycle is not None and len(entity_ids) == 1 and span <= 1800:
                 eid = entity_ids[0]
-                exhausted = cycle["entity_failures"][eid] >= DISCOVERY_HTTP_500_ENTITY_LIMIT
+                exhausted = cycle["entity_failures"][(source, eid)] >= DISCOVERY_HTTP_500_ENTITY_LIMIT
                 if exhausted or source not in cycle["confirmed"] or cycle["consecutive_skips"] >= 4:
                     self._discovery_control_reads(eid, start_ts, end_ts, source, minimal, no_attributes)
                 cycle["consecutive_skips"] += 1
                 if exhausted:
-                    cycle["exhausted"].add(eid)
+                    cycle["exhausted"].add((source, eid))
                 self._record_discovery_gap(eid, start_ts, end_ts, source, "SKIPPED_HTTP500")
                 return 0
             raise DiscoveryRecorderHTTP500(
@@ -3159,6 +3168,7 @@ class HistoryManager(threading.Thread):
         }
         screening_entities = set(context_candidates) | set(screen_target_map)
         if screening_required:
+            self._require_agent_history(screening_entities, start_ts, selection_end)
             screening_row_count = max(
                 1, STORE.archive_count(
                     start_ts=start_ts, end_ts=selection_end,
@@ -3629,6 +3639,7 @@ class HistoryManager(threading.Thread):
         # that immediately hit `if not agents_for_target: continue`. On chatty radar,
         # illuminance and air-quality inputs that can dominate a seven-day Pi replay.
         replay_entities = set(target_map.keys())
+        self._require_agent_history(watched_entities | replay_entities, logical_start_ts, end_ts)
         self.training_phase_timings.update({
             "replay_stream_contract": "target_only_driver_v1",
             "target_entities": len(replay_entities),
@@ -5250,6 +5261,10 @@ class HistoryManager(threading.Thread):
                 for agent in agents:
                     aid = str(agent["id"])
                     policy = policies[agent["id"]]
+                    long_entities = {agent["target_entity"], *policy.schema.entities}
+                    if self._find_discovery_gap(long_entities, long_start, long_end):
+                        self.training_long_memory_status["agents"][aid] = {"reason": "recorder_history_gap"}
+                        continue
                     selected, selection = collect_sparse_dwells(
                         STORE,
                         agent,
