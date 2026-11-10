@@ -1,3 +1,10 @@
+# 0.14.235 — Pi Recorder integrity and recoverable discovery (TEST ONLY)
+
+- Fail closed when any Recorder slice is skipped or discovery is cancelled: neither `initial_discovery_complete` nor `manual_discovery_refresh` may be advanced on incomplete data. Deep completion is persisted only after both older and recent windows finish.
+- Record successful entity/time intervals in a bounded, persisted *performance hint*, separate from the original archive. On restart, request only uncovered portions, including holes between successful ranges, while preserving the original archived rows and agents.
+- Restrict repeated discovery HTTP 5xx/429 attempts per pass; retain the existing 120-second cooldown and single Recorder worker. Surface sanitized request shape (entity count, window size, switches) without leaking entity IDs, date ranges, tokens, URLs or state attributes.
+- HTTP 500 underlying cause is still NOT PROVEN: obtain Home Assistant Core traceback and validate on a Pi clone before treating this as solved. No policy, Candidate, Correct/Undo, Training, Universal, or HA control modifications. Gate D still BLOCKER.
+
 # 0.14.234 — Pi Recorder diagnosis and retry safety (TEST ONLY)
 
 - First Raspberry Pi 5 run of 0.14.233 showed repeated "Recorder background request failed; pausing discovery for 120 s". The screenshot alone does NOT reveal the underlying exception.

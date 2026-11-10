@@ -376,6 +376,24 @@ def install(runtime):
             except Exception as exc:
                 if HEAVY_JOBS.owner == "discovery":
                     failure = recorder_failure_diagnostics(exc)
+                    # Request shape is safe to export: no raw entity IDs, dates,
+                    # URLs, access tokens or returned state attributes.
+                    ids = args[0] if args else kwargs.get("entity_ids", ())
+                    start = args[1] if len(args) > 1 else kwargs.get("start_dt")
+                    end = args[2] if len(args) > 2 else kwargs.get("end_dt")
+                    try:
+                        window_s = max(0, int(
+                            history_module.parse_ts(end) - history_module.parse_ts(start)
+                        ))
+                    except (TypeError, ValueError, OverflowError):
+                        window_s = None
+                    failure["request_shape"] = {
+                        "entity_count": len(ids or ()),
+                        "window_seconds": window_s,
+                        "minimal": bool(kwargs.get("minimal", True)),
+                        "no_attributes": bool(kwargs.get("no_attributes", True)),
+                        "significant": bool(kwargs.get("significant", True)),
+                    }
                     now = time.monotonic()
                     with state_lock:
                         state["recorder_failure_count"] += 1
@@ -515,7 +533,7 @@ def install(runtime):
         "automatic_background_discovery": "fresh_install_once_plus_one_time_deep_reconciliation_then_explicit_rescan",
         "background_archive_cpu": "20pct_default_duty_cycle_when_explicit",
         "recorder_timeout": "120s_circuit_breaker_no_recursive_burst",
-        "recorder_diagnostics": "sanitized_transient_vs_terminal_manual_rescan_v1",
+        "recorder_diagnostics": "sanitized_request_shape_and_bounded_5xx_split_v2",
         "automation_config_reads": "serialized_and_last_scan_persisted",
         "entrypoint_import": "no_runtime_or_database_imports",
         "physical_control": "unchanged",

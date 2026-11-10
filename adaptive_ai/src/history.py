@@ -40,6 +40,11 @@ from long_memory import (
 # independently of the archive reader's fetch size or the response's entity count.
 HISTORY_IMPORT_BATCH_ROWS = 128
 
+
+class DiscoveryRecorderIncomplete(RuntimeError):
+    """A discovery scan may not classify or record completion with missing Recorder slices."""
+
+
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
     """Fold one target row into the exact legacy open-dwell continuation state."""
     state = archived_state(row)
@@ -242,6 +247,8 @@ class HistoryManager(threading.Thread):
         self.training_recorder_coverage_hits = 0
         self.training_recorder_coverage_misses = 0
         self.recorder_skipped_slices = 0
+        # Lazily restored only for a real discovery pass, never for hot startup.
+        self._discovery_recorder_failures = 0
         self.training_preparation_profile = {}
         self.job_cancel_event = None
         self.agent_jobs_lock = threading.RLock()
@@ -2002,6 +2009,91 @@ class HistoryManager(threading.Thread):
             RUNTIME_DEBUG.end(trace, status=status, rows=written, batches=batches,
                               max_batch_rows=max_batch_rows, error_type=error_type)
 
+
+    # Successful Recorder coverage is an optimization, not the discovery completion
+    # marker. It is written *after* the archive rows, per entity and exact interval.
+    # A crash may duplicate a fetch, but can never certify an uncommitted fragment.
+    DISCOVERY_COVERAGE_META_KEY = "discovery_recorder_coverage_v1"
+    DISCOVERY_COVERAGE_MAX_ROWS = 4096
+
+    @staticmethod
+    def _merge_discovery_intervals(intervals):
+        merged = []
+        for lo, hi in sorted(intervals):
+            lo, hi = float(lo), float(hi)
+            if not math.isfinite(lo) or not math.isfinite(hi) or hi <= lo:
+                continue
+            if merged and lo <= merged[-1][1] + 1e-6:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        return merged
+
+    def _load_discovery_coverage(self):
+        try:
+            raw = STORE.meta_get(self.DISCOVERY_COVERAGE_META_KEY)
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(data, dict) or data.get("contract") != self.DISCOVERY_COVERAGE_META_KEY:
+                return {}
+            rows = data.get("rows")
+            if not isinstance(rows, list) or len(rows) > self.DISCOVERY_COVERAGE_MAX_ROWS:
+                return {}
+            ranges = {}
+            for row in rows:
+                key = (str(row["source"]), str(row["entity_id"]))
+                if not all(key):
+                    continue
+                ranges.setdefault(key, []).append((float(row["start"]), float(row["end"])))
+            return {key: self._merge_discovery_intervals(part) for key, part in ranges.items()}
+        except (TypeError, ValueError, KeyError, AttributeError):
+            return {}
+
+    def _discovery_missing_intervals(self, source, entity_id, start, end):
+        cursor = float(start)
+        missing = []
+        for lo, hi in (getattr(self, "discovery_recorder_coverage", {}) or {}).get(
+            (str(source), str(entity_id)), ()
+        ):
+            if hi <= cursor:
+                continue
+            if lo >= end:
+                break
+            if lo > cursor + 1e-6:
+                missing.append((cursor, min(lo, float(end))))
+            cursor = max(cursor, min(float(end), hi))
+            if cursor >= end - 1e-6:
+                break
+        if cursor < end - 1e-6:
+            missing.append((cursor, float(end)))
+        return [(lo, hi) for lo, hi in missing if hi > lo + 1e-6]
+
+    def _mark_discovery_coverage(self, source, entities, start, end):
+        coverage = self.discovery_recorder_coverage
+        for eid in entities:
+            key = (str(source), str(eid))
+            coverage[key] = self._merge_discovery_intervals(
+                list(coverage.get(key, ())) + [(float(start), float(end))]
+            )
+        rows = [
+            {"source": source_key, "entity_id": eid, "start": lo, "end": hi}
+            for (source_key, eid), ranges in coverage.items()
+            for lo, hi in ranges
+        ]
+        # Dropping oldest *cache* ranges only increases subsequent HTTP work.
+        # Never drop archive rows, discovery markers or user models.
+        rows.sort(key=lambda r: (-r["end"], r["source"], r["entity_id"]))
+        rows = rows[:self.DISCOVERY_COVERAGE_MAX_ROWS]
+        try:
+            STORE.meta_set(
+                self.DISCOVERY_COVERAGE_META_KEY,
+                json.dumps({"contract": self.DISCOVERY_COVERAGE_META_KEY,
+                            "rows": rows}, separators=(",", ":"), sort_keys=True),
+            )
+        except Exception:
+            # Loss of a progress hint means safe re-fetch after restart.
+            return False
+        return True
+
     def _fetch_history_resilient(self, entity_ids, start_ts, end_ts, *, minimal, no_attributes, source, depth=0):
         """Fetch Recorder history without allowing one large query to kill bootstrap.
 
@@ -2038,8 +2130,19 @@ class HistoryManager(threading.Thread):
             raise
         except HTTPError as exc:
             # Authentication / malformed-request errors will not improve by splitting.
-            if getattr(exc, "code", 500) in (400, 401, 403, 404):
+            status = getattr(exc, "code", 500)
+            if status in (400, 401, 403, 404):
                 raise
+            if HEAVY_JOBS.owner == "discovery" and (status >= 500 or status == 429):
+                failures = int(getattr(self, "_discovery_recorder_failures", 0)) + 1
+                self._discovery_recorder_failures = failures
+                # With the 120s circuit breaker, recursive 5xx splitting must not
+                # become an hours-long retry storm for a broken HA Recorder.
+                if failures >= 3:
+                    raise DiscoveryRecorderIncomplete(
+                        f"Recorder returned HTTP {status} repeatedly; "
+                        "discovery remains incomplete and will retry later"
+                    ) from None
             err = exc
         except (URLError, TimeoutError, OSError) as exc:
             err = exc
@@ -2069,12 +2172,18 @@ class HistoryManager(threading.Thread):
                                                  source=source, depth=depth + 1)
             )
 
-        # Do not abort the whole import for one pathological half-hour slice.
-        label = ",".join(entity_ids[:2]) + ("…" if len(entity_ids) > 2 else "")
-        msg = f"Skipped one Recorder slice after repeated timeouts: {label} ({type(err).__name__}: {err})"
+        # Explicit selected-agent training retains its historical skip policy;
+        # discovery, below, treats even one such skip as incomplete (fail closed).
+        # Never log URLs, tokens or entity identifiers from an HTTPError.
+        status = getattr(err, "code", None)
+        msg = (f"Recorder slice incomplete: {len(entity_ids)} entity/entities, "
+               f"{int(span)} seconds, {type(err).__name__}"
+               + (f", HTTP {status}" if isinstance(status, int) else ""))
         print(f"[history] {msg}", flush=True)
         STORE.event(None, "warning", "history_slice_skipped", msg, {
-            "entities": entity_ids, "start": iso_from_ts(start_ts), "end": iso_from_ts(end_ts)
+            "entity_count": len(entity_ids), "window_seconds": int(span),
+            "http_status": status if isinstance(status, int) else None,
+            "source": str(source),
         })
         self.recorder_skipped_slices = int(getattr(self, "recorder_skipped_slices", 0) or 0) + 1
         return 0
@@ -2090,16 +2199,33 @@ class HistoryManager(threading.Thread):
 
     def _import_section(self, entity_ids, start_ts, end_ts, *, batch_size, minimal, no_attributes, source,
                         progress_lo, progress_hi, label, max_hours=24, parallel_requests=None, inter_chunk_pause_ms=0,
-                        on_chunk=None, on_successful_chunk=None):
+                        on_chunk=None, on_successful_chunk=None,
+                        require_complete=False, resume_discovery=False):
         if not entity_ids or end_ts <= start_ts:
             return 0
         windows = self._time_windows(start_ts, end_ts, max_hours=max_hours)
         batches = [entity_ids[i:i + batch_size] for i in range(0, len(entity_ids), batch_size)]
         window_count = max(1, math.ceil((end_ts-start_ts)/(max(1,int(max_hours))*3600)))
-        tasks = ((ws, we, batch, wi, bi)
-                 for wi, (ws, we) in enumerate(windows, start=1)
-                 for bi, batch in enumerate(batches, start=1))
-        total = max(1, window_count * len(batches))
+        if resume_discovery:
+            if not hasattr(self, "discovery_recorder_coverage"):
+                self.discovery_recorder_coverage = self._load_discovery_coverage()
+            # Exact interval subtraction, not merely "last successful timestamp":
+            # a hole between two successful chunks must survive every restart.
+            tasks = []
+            for wi, (ws, we) in enumerate(windows, start=1):
+                for bi, batch in enumerate(batches, start=1):
+                    missing_groups = {}
+                    for eid in batch:
+                        for lo, hi in self._discovery_missing_intervals(source, eid, ws, we):
+                            missing_groups.setdefault((lo, hi), []).append(eid)
+                    for (lo, hi), missing_ids in sorted(missing_groups.items(), reverse=True):
+                        tasks.append((lo, hi, missing_ids, wi, bi))
+            total = max(1, len(tasks))
+        else:
+            tasks = ((ws, we, batch, wi, bi)
+                     for wi, (ws, we) in enumerate(windows, start=1)
+                     for bi, batch in enumerate(batches, start=1))
+            total = max(1, window_count * len(batches))
         inserted = 0
         done = 0
         workers = 1
@@ -2129,9 +2255,16 @@ class HistoryManager(threading.Thread):
                 )
             finally:
                 self._recorder_chunk_report = None
-            if (on_successful_chunk is not None
-                    and int(getattr(self, "recorder_skipped_slices", 0) or 0) == skipped_before):
-                on_successful_chunk(batch, ws, we)
+            skipped = int(getattr(self, "recorder_skipped_slices", 0) or 0) != skipped_before
+            if skipped and require_complete:
+                raise DiscoveryRecorderIncomplete(
+                    "A Recorder slice could not be retrieved; no discovery completion marker was written"
+                )
+            if not skipped:
+                if on_successful_chunk is not None:
+                    on_successful_chunk(batch, ws, we)
+                if resume_discovery:
+                    self._mark_discovery_coverage(source, batch, ws, we)
             return count, wi, bi, batch
 
         iterator = map(fetch, tasks)
@@ -2169,6 +2302,12 @@ class HistoryManager(threading.Thread):
         finally:
             if pool is not None:
                 pool.shutdown(wait=False, cancel_futures=True)
+        if require_complete and (
+            self.stop_event.is_set()
+            or (self.job_cancel_event is not None and self.job_cancel_event.is_set())
+            or done != (len(tasks) if resume_discovery else total)
+        ):
+            raise InterruptedError("Discovery Recorder scan stopped before all chunks completed")
         return inserted
 
     def _manual_lightweight_cycle(self, current, controllable, end_ts, threshold_override=None):
@@ -2214,6 +2353,7 @@ class HistoryManager(threading.Thread):
                     source="ha_history_discovery_coarse", progress_lo=0.10, progress_hi=0.30,
                     label="Deep target activity discovery", max_hours=24, parallel_requests=1,
                     inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                    require_complete=True, resume_discovery=True,
                 )
             if attribute_only_targets:
                 self.set_status(
@@ -2226,10 +2366,10 @@ class HistoryManager(threading.Thread):
                     source="ha_history_full", progress_lo=0.30, progress_hi=0.42,
                     label="Deep attribute target discovery", max_hours=24, parallel_requests=1,
                     inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                    require_complete=True, resume_discovery=True,
                 )
-            STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
-            with self.lock:
-                self.discovery_deep_history_complete = True
+            # Do not certify the deep window while the adjacent recent portion
+            # is still missing; a restart advances refresh_start with the clock.
             recent_progress_lo = 0.42
 
         self.set_status(
@@ -2243,7 +2383,14 @@ class HistoryManager(threading.Thread):
                 source="ha_history_full", progress_lo=recent_progress_lo, progress_hi=0.75,
                 label="Recent target discovery", max_hours=3, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("history_background_pause_ms", 500)),
+                require_complete=True, resume_discovery=True,
             )
+        if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
+            raise InterruptedError("Discovery cancelled before classification")
+        if not deep_marker:
+            STORE.meta_set("discovery_deep_history_complete", iso_from_ts(end_ts))
+            with self.lock:
+                self.discovery_deep_history_complete = True
         # Do not run full-table archive_stats() here. At this exact point the Recorder
         # import has just written the hottest pages in entity_history; COUNT(DISTINCT) and
         # GROUP BY source used to stall Raspberry Pi for long enough to starve Ingress and
@@ -2260,6 +2407,8 @@ class HistoryManager(threading.Thread):
             current, start_ts, threshold_override=threshold_override
         )
         self.auto_created += created
+        if self.stop_event.is_set() or (self.job_cancel_event and self.job_cancel_event.is_set()):
+            raise InterruptedError("Discovery cancelled before completion marker")
         with self.lock:
             self.discovery_classified = True
         # A completed classification is the durable cold-start boundary even when it
@@ -2321,6 +2470,7 @@ class HistoryManager(threading.Thread):
 
         if HEAVY_JOBS.acquire('discovery'):
             try:
+                self._discovery_recorder_failures = 0
                 self._manual_lightweight_cycle(
                     current, controllable, end_ts,
                     threshold_override=threshold_override,
