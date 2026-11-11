@@ -12,6 +12,7 @@ import traceback
 from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, parse_ts)
 from storage import STORE
 from storage_budget import StoragePressure, require_storage_available, run_storage_write, _payload_bytes
+from sqlite_background import is_sqlite_corruption
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
@@ -1060,7 +1061,9 @@ class HistoryManager(threading.Thread):
                     sort_keys=True,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            if is_sqlite_corruption(exc):
+                raise
             # Coverage persistence may only affect performance. Never fail explicit Train
             # after Recorder data has already been imported successfully.
             return False
@@ -1265,6 +1268,10 @@ class HistoryManager(threading.Thread):
         except StoragePressure:
             raise
         except Exception as exc:
+            # A failed Recorder request can leave a usable local archive. A
+            # corrupt local database cannot be treated as partial Recorder coverage.
+            if is_sqlite_corruption(exc):
+                raise
             # A Recorder backfill failure must not destroy resumability. Train from the
             # locally available archive and leave a diagnostic event.
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)

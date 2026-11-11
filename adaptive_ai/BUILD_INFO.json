@@ -1,9 +1,9 @@
 {
-  "version": "0.15.0",
-  "release_date": "2026-11-10",
-  "base_version": "0.14.240",
-  "base_commit": "c6e61d3db2cbd6ae6c57cb2eaa3b839ca9d78836",
-  "release_status": "pi5-manual-validation-candidate-training-performance",
+  "version": "0.15.1",
+  "release_date": "2026-11-11",
+  "base_version": "0.15.0",
+  "base_commit": "9f3049b0a7da84a638c33d9ed5de8a28a0d6d49a",
+  "release_status": "pi5-manual-validation-candidate-training-sqlite-guard",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",

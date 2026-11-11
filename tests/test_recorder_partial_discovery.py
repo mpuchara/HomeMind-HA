@@ -1,6 +1,7 @@
 """Recorder discovery regression tests with injected REST responses and real local storage."""
 from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 import threading
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
-from support import state
+from support import agent, state
 from test_release_235_recorder_discovery import manager
 import history
 from storage import Store
@@ -127,3 +128,28 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.obj._training_recorder_import.assert_not_called()
         self.obj._require_agent_history({GOOD}, START, END)
         self.obj._require_agent_history({BAD}, START + 3600, END)
+
+    def test_local_archive_corruption_stops_rebuild_before_learning_reset(self):
+        config = self.store.create_agent(agent(target_entity=GOOD))
+        agent_id = config["id"]
+        self.store.save_model(agent_id, {"marker": "existing model"})
+        self.obj._training_bounds = lambda: (START, END)
+        self.obj.training_schema_seed = lambda *args: None
+        self.obj._eligible_rebuild_context = lambda: []
+        self.obj._training_recorder_import = Mock(
+            side_effect=sqlite3.DatabaseError("database disk image is malformed")
+        )
+        with patch.object(self.store, "clear_learning", wraps=self.store.clear_learning) as clear:
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "malformed"):
+                self.obj._run_agent_indexing(agent_id, rebuild=True)
+            clear.assert_not_called()
+        self.assertEqual(self.store.get_model(agent_id)["marker"], "existing model")
+
+    def test_corrupt_recorder_coverage_write_propagates(self):
+        self.obj.training_recorder_coverage = {(SOURCE, GOOD): (START, END)}
+        error = sqlite3.DatabaseError("database disk image is malformed")
+        error.sqlite_errorcode = sqlite3.SQLITE_CORRUPT
+        with patch.object(self.store, "meta_set", side_effect=error):
+            with self.assertRaises(sqlite3.DatabaseError) as raised:
+                self.obj._persist_training_recorder_coverage()
+        self.assertIs(raised.exception, error)
