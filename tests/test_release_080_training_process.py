@@ -658,7 +658,17 @@ class ActualWorkerSmoke(unittest.TestCase):
     def test_clean_worker_process_trains_tiny_explicit_schema_job(self):
         self.run_worker_fixture()
 
-    def run_worker_fixture(self, samples=24):
+    def test_worker_with_corrupt_archive_indexes_keeps_the_same_learned_model(self):
+        reference = self.run_worker_fixture(samples=120)
+        recovered = self.run_worker_fixture(samples=120, corrupt_archive_indexes=True)
+        self.assertEqual(reference["learning_hash"], recovered["learning_hash"])
+        self.assertEqual(reference["frozen_holdout_counts"], recovered["frozen_holdout_counts"])
+        self.assertEqual(
+            reference["worker_phases"]["replay_driver_rows_processed"],
+            recovered["worker_phases"]["replay_driver_rows_processed"],
+        )
+
+    def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -768,6 +778,20 @@ class ActualWorkerSmoke(unittest.TestCase):
             job["checksum"] = descriptor_checksum(job)
             job_path = Path(root) / "job.json"
             job_path.write_text(json.dumps(job), encoding="utf-8")
+
+            if corrupt_archive_indexes:
+                # Modify only disposable index pages after closing SQLite readers.
+                with sqlite3.connect(db) as connection:
+                    page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+                    pages = [row[0] for row in connection.execute(
+                        "SELECT rootpage FROM sqlite_master "
+                        "WHERE type='index' AND tbl_name='entity_history' AND rootpage>0"
+                    )]
+                connection.close()
+                with db.open("r+b") as stream:
+                    for page in pages:
+                        stream.seek((page - 1) * page_size)
+                        stream.write(b"\xff")
 
             import training_process
             env = dict(os.environ)

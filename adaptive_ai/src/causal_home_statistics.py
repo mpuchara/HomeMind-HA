@@ -9,6 +9,7 @@ import copy
 import hashlib
 import json
 import sqlite3
+from archive_reads import archive_query
 import sys
 import zlib
 from collections import OrderedDict
@@ -50,7 +51,7 @@ class CausalHomeStatistics:
                                json.loads(checkpoint[0]) if checkpoint else None)
         # Existing ON in the initial snapshot is not a fresh arrival.
         for eid in self.entities:
-            row = connection.execute(
+            row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
                 (eid, self.start, self.start),
@@ -111,7 +112,7 @@ class CausalHomeStatistics:
         digest = hashlib.sha256()
         digest.update(repr(checkpoint[0] if checkpoint else None).encode())
         for eid in self.entities:
-            row = connection.execute(
+            row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
                 (eid, self.start, self.start)).fetchone()
@@ -139,7 +140,7 @@ class CausalHomeStatistics:
         marks = ','.join('?' for _ in self.entities)
         # The source set contains only sparse direct-presence channels, not raw radar
         # samples. Receive ordering also admits late older events at their real time.
-        cursor = self.conn.execute(
+        cursor = archive_query(self.conn,
             f'SELECT *,MAX(ts,COALESCE(received_ts,ts)) AS causal_at FROM entity_history '
             f'WHERE entity_id IN ({marks}) AND ts>? AND ts<=? AND COALESCE(received_ts,ts)<=? '
             'UNION ALL '

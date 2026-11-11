@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import sqlite3
+from archive_reads import archive_query
 import threading
 import time
 from array import array
@@ -347,7 +348,7 @@ class RAMReplayIndex:
         return out
 
     def _load_query(self, connection, timeline, sql, params, remaining_bytes):
-        cursor = connection.execute(sql, params)
+        cursor = archive_query(connection, sql, params)
         self.sql_queries += 1
         while True:
             batch = cursor.fetchmany(self.FETCH_ROWS)
@@ -1159,7 +1160,7 @@ class SQLiteTemporalTracker:
             if cached is not None:
                 self._metrics["ram_query_hits"] = int(self._metrics.get("ram_query_hits") or 0) + 1
                 return cached
-        rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
+        rows = [dict(row) for row in archive_query(self.conn, sql, params).fetchall()]
         self._metrics["sql_queries"] += 1
         self._metrics["rows_loaded"] += len(rows)
         if self.query_cache is not None:

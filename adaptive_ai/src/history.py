@@ -840,6 +840,7 @@ class HistoryManager(threading.Thread):
                 )
             except Exception as exc:
                 failure_text = f"{type(exc).__name__}: {exc}"
+                print("[training] Agent indexing failed:\n" + traceback.format_exc(limit=12), flush=True)
                 STORE.event(
                     agent_id, "warning" if isinstance(exc, StoragePressure) else "error",
                     "agent_storage_paused" if isinstance(exc, StoragePressure) else "agent_index_failed", str(exc),

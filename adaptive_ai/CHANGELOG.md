@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.15.4 — Odczyt archiwum przy uszkodzonym indeksie
+
+- Po SQLITE_CORRUPT odczyt historii ponawia to samo zapytanie ze skanowaniem tabeli. Wznowienie strumienia zachowuje kolejność rekordów i sprawdza rewizję bazy. Log dodatku zawiera ślad błędu workera i zadania treningowego.
+
 ## 0.15.3 — Trening z zapisanego archiwum po błędzie importu
 
 - Błąd uszkodzenia SQLite przy zapisie historii lub metadanych pokrycia pozwala użyć zapisanego archiwum, gdy dane celu dają się odczytać. Rebuild zachowuje istniejący model w tym scenariuszu i wskazuje Resume.
