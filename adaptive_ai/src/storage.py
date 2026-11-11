@@ -1373,8 +1373,8 @@ class Store:
                       FROM entity_history
                      WHERE entity_id IN ({placeholders})
                        AND ts>=? AND ts<?""",
-                [*ids, start_ts, end_ts],
-            ).fetchone()
+                [*ids, start_ts, end_ts], snapshot=True,
+            ).fetchall()[0]
         return (int(row["n"] or 0), int(row["revision"] or 0))
 
     def archive_upsert(self, entity_id, ts, state, attributes=None, user_id=None, source="live"):
@@ -1471,7 +1471,7 @@ class Store:
             where.append("entity_id IN (%s)" % ",".join("?" for _ in ids)); vals.extend(ids)
         sql = "SELECT COUNT(*) FROM entity_history" + ((" WHERE " + " AND ".join(where)) if where else "")
         with self.conn() as c:
-            return int(archive_query(c, sql, vals).fetchone()[0] or 0)
+            return int(archive_query(c, sql, vals, snapshot=True).fetchall()[0][0] or 0)
 
     def archive_iter(self, start_ts=None, end_ts=None, entity_ids=None, chunk_size=2000):
         """Stream history rows without materializing the archive.
@@ -1520,7 +1520,7 @@ class Store:
             )
             page_vals.append(size)
             with self.conn() as c:
-                batch = archive_query(c, page_sql, page_vals).fetchall()
+                batch = archive_query(c, page_sql, page_vals, snapshot=True).fetchall()
             if not batch:
                 break
             for row in batch:

@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from types import SimpleNamespace
@@ -668,7 +669,17 @@ class ActualWorkerSmoke(unittest.TestCase):
             recovered["worker_phases"]["replay_driver_rows_processed"],
         )
 
-    def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False):
+    def test_corrupt_indexes_and_concurrent_writes_complete_training_in_shadow(self):
+        recovered = self.run_worker_fixture(
+            samples=120, corrupt_archive_indexes=True, qualify=True,
+            concurrent_writes=True,
+        )
+        self.assertEqual(recovered["agent_mode"], "shadow")
+        self.assertEqual(recovered["agent_progress"], 1.0)
+        self.assertGreater(recovered["concurrent_writes"], 0)
+
+    def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False, *,
+                           qualify=False, concurrent_writes=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -763,7 +774,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "start_ts": base - 5,
                 "end_ts": base + samples * 30,
                 "train_kwargs": {
-                    "qualify": False,
+                    "qualify": qualify,
                     "include_candidates": True,
                     "benchmark": samples > 24,
                     "accumulate_benchmark": False,
@@ -811,15 +822,43 @@ class ActualWorkerSmoke(unittest.TestCase):
                 ]
                 env["PYTHONHASHSEED"] = "0"
             started = time.perf_counter()
-            completed = subprocess.run(
-                command,
-                env=env,
-                cwd=str(Path(training_process.__file__).parent),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=45 if samples == 24 else 600,
-            )
+            writer_stop = threading.Event()
+            writes = []
+            writer_errors = []
+
+            def write_metadata():
+                try:
+                    with sqlite3.connect(db, timeout=10) as connection:
+                        while not writer_stop.wait(.01):
+                            connection.execute(
+                                "INSERT OR REPLACE INTO app_meta(key,value) VALUES('concurrent_probe',?)",
+                                (str(len(writes)),),
+                            )
+                            connection.commit()
+                            writes.append(1)
+                    connection.close()
+                except Exception as exc:
+                    writer_errors.append(exc)
+
+            writer = threading.Thread(target=write_metadata) if concurrent_writes else None
+            if writer:
+                writer.start()
+            try:
+                completed = subprocess.run(
+                    command,
+                    env=env,
+                    cwd=str(Path(training_process.__file__).parent),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=45 if samples == 24 else 600,
+                )
+            finally:
+                writer_stop.set()
+                if writer:
+                    writer.join(15)
+                    self.assertFalse(writer.is_alive())
+            self.assertEqual(writer_errors, [])
             elapsed = time.perf_counter() - started
             if completed.returncode:
                 log = Path(job["log_path"])
@@ -846,7 +885,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 key: model[key]
                 for key in ("version", "actions", "horizons", "schema", "heads")
             }
+            trained_agent = store.get_agent_config(agent["id"])
             return {
+                "agent_mode": trained_agent["mode"],
+                "agent_progress": trained_agent["training_progress"],
+                "concurrent_writes": len(writes),
                 "version": job["app_version"],
                 "input_history_rows": len(rows),
                 "worker_wall_seconds": elapsed,

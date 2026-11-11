@@ -119,6 +119,41 @@ class ArchiveReadCorruptionTests(unittest.TestCase):
         with self.assertRaises(sqlite3.DatabaseError):
             cursor.fetchmany(100)
 
+    def test_snapshot_allows_fallback_while_another_connection_records_new_rows(self):
+        conn = sqlite3.connect(self.path, factory=FailingConnection)
+        self.addCleanup(conn.close)
+        conn.execute("PRAGMA journal_mode=WAL").fetchone()
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+
+        def change_archive():
+            writer.execute("DELETE FROM entity_history WHERE id=1")
+            writer.execute("INSERT INTO entity_history VALUES(1001,'sensor.test',500)")
+            writer.commit()
+
+        conn.before_error = change_archive
+        cursor = archive_query(conn, SQL, snapshot=True)
+        self.addCleanup(cursor.close)
+        actual = []
+        while batch := cursor.fetchmany(100):
+            actual.extend(batch)
+        self.assertEqual(actual, self.expected)
+        self.assertTrue(cursor.retried)
+        self.assertFalse(conn.in_transaction)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM entity_history WHERE id=1001").fetchone()[0], 1)
+
+    def test_early_close_releases_its_snapshot_and_preserves_an_existing_transaction(self):
+        conn = sqlite3.connect(self.path)
+        self.addCleanup(conn.close)
+        cursor = archive_query(conn, SQL, snapshot=True)
+        cursor.fetchmany(10)
+        self.assertTrue(conn.in_transaction)
+        cursor.close()
+        self.assertFalse(conn.in_transaction)
+        conn.execute("BEGIN")
+        archive_query(conn, SQL, snapshot=True).fetchall()
+        self.assertTrue(conn.in_transaction)
+
     def test_healthy_query_and_unrelated_sql_error_keep_their_behavior(self):
         conn = sqlite3.connect(self.path)
         self.addCleanup(conn.close)

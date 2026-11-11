@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.15.5 — Spójny odczyt treningu przy bieżących zapisach
+
+- Budowa indeksu RAM i kontekstu replay korzysta z krótkich snapshotów odczytu. Obejście uszkodzonego indeksu zachowuje snapshot pomimo zapisów innych procesów. Test workera obejmuje ukończenie treningu w trybie Shadow.
+
 ## 0.15.4 — Odczyt archiwum przy uszkodzonym indeksie
 
 - Po SQLITE_CORRUPT odczyt historii ponawia to samo zapytanie ze skanowaniem tabeli. Wznowienie strumienia zachowuje kolejność rekordów i sprawdza rewizję bazy. Log dodatku zawiera ślad błędu workera i zadania treningowego.

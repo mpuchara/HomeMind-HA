@@ -5,6 +5,7 @@ current live graph are never used as occupancy labels or past trajectory statist
 Compressed internal snapshots bound memory; queries replay only the remaining prefix.
 """
 import bisect
+from contextlib import closing
 import copy
 import hashlib
 import json
@@ -54,9 +55,10 @@ class CausalHomeStatistics:
             row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
-                (eid, self.start, self.start),
-            ).fetchone()
+                (eid, self.start, self.start), snapshot=True,
+            ).fetchall()
             if row:
+                row = row[0]
                 self._fingerprint_row(source_digest, dict(row))
                 self._observe(model, dict(row), learn=False)
             TRAINING_BUDGET.checkpoint('home_statistics_seed')
@@ -115,8 +117,9 @@ class CausalHomeStatistics:
             row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
-                (eid, self.start, self.start)).fetchone()
+                (eid, self.start, self.start), snapshot=True).fetchall()
             if row:
+                row = row[0]
                 self._fingerprint_row(digest, dict(row))
             TRAINING_BUDGET.checkpoint('home_statistics_validate_seed')
         for row in self._rows(self.start, self.end):
@@ -140,22 +143,22 @@ class CausalHomeStatistics:
         marks = ','.join('?' for _ in self.entities)
         # The source set contains only sparse direct-presence channels, not raw radar
         # samples. Receive ordering also admits late older events at their real time.
-        cursor = archive_query(self.conn,
+        with closing(archive_query(self.conn,
             f'SELECT *,MAX(ts,COALESCE(received_ts,ts)) AS causal_at FROM entity_history '
             f'WHERE entity_id IN ({marks}) AND ts>? AND ts<=? AND COALESCE(received_ts,ts)<=? '
             'UNION ALL '
             f'SELECT *,MAX(ts,COALESCE(received_ts,ts)) AS causal_at FROM entity_history '
             f'WHERE entity_id IN ({marks}) AND ts<=? AND received_ts>? AND received_ts<=? '
             'ORDER BY causal_at,ts,id',
-            (*self.entities, lo, hi, hi, *self.entities, lo, lo, hi),
-        )
-        while True:
-            rows = cursor.fetchmany(256)
-            if not rows:
-                break
-            for row in rows:
-                yield dict(row)
-            TRAINING_BUDGET.checkpoint('home_statistics_stream')
+            (*self.entities, lo, hi, hi, *self.entities, lo, lo, hi), snapshot=True,
+        )) as cursor:
+            while True:
+                rows = cursor.fetchmany(256)
+                if not rows:
+                    break
+                for row in rows:
+                    yield dict(row)
+                TRAINING_BUDGET.checkpoint('home_statistics_stream')
 
     def _observe(self, model, row, learn=True):
         eid = row['entity_id']

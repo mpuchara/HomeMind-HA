@@ -13,18 +13,30 @@ _fallback_reported = False
 
 
 class ArchiveReadCursor:
-    def __init__(self, connection, sql, parameters):
+    def __init__(self, connection, sql, parameters, *, snapshot=False):
         self.connection = connection
         self.sql = sql
         self.parameters = tuple(parameters)
         self.delivered = 0
         self.retried = False
         self.cursor = None
-        self.revision = self._revision()
+        self.revision = None
+        self.owns_snapshot = snapshot and not connection.in_transaction
         try:
+            if self.owns_snapshot:
+                connection.execute("BEGIN")
+                connection.execute("SELECT rootpage FROM sqlite_master LIMIT 1").fetchone()
+            self.revision = self._revision()
             self.cursor = connection.execute(sql, self.parameters)
         except sqlite3.DatabaseError as exc:
-            self._retry(exc)
+            if self.revision is None:
+                self.close()
+                raise
+            try:
+                self._retry(exc)
+            except BaseException:
+                self.close()
+                raise
 
     def _revision(self):
         return (
@@ -64,11 +76,17 @@ class ArchiveReadCursor:
 
     def _fetch(self, method, *args):
         try:
-            result = getattr(self.cursor, method)(*args)
-        except sqlite3.DatabaseError as exc:
-            self._retry(exc)
-            result = getattr(self.cursor, method)(*args)
+            try:
+                result = getattr(self.cursor, method)(*args)
+            except sqlite3.DatabaseError as exc:
+                self._retry(exc)
+                result = getattr(self.cursor, method)(*args)
+        except BaseException:
+            self.close()
+            raise
         self.delivered += (int(result is not None) if method == "fetchone" else len(result))
+        if self.owns_snapshot and (method == "fetchall" or not result):
+            self.close()
         return result
 
     def fetchone(self):
@@ -92,9 +110,12 @@ class ArchiveReadCursor:
     def close(self):
         if self.cursor is not None:
             self.cursor.close()
+        if self.owns_snapshot:
+            self.connection.rollback()
+            self.owns_snapshot = False
 
 
-def archive_query(connection, sql, parameters=()):
+def archive_query(connection, sql, parameters=(), *, snapshot=False):
     if not sql.lstrip().upper().startswith("SELECT") or not _TABLE.search(sql):
         return connection.execute(sql, parameters)
-    return ArchiveReadCursor(connection, sql, parameters)
+    return ArchiveReadCursor(connection, sql, parameters, snapshot=snapshot)
