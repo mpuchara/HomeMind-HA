@@ -241,7 +241,8 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
             if gap.get('entity_id') in entities:
                 report['gaps'].append(dict(entity_id=gap['entity_id'], start_ts=float(gap.get('start_ts', gap.get('start'))),
                     end_ts=float(gap.get('end_ts', gap.get('end'))), source="ha_recorder",
-                    failure_reason="HISTORY_GAP_HTTP500", recovery_attempts=0))
+                    failure_reason=('HISTORY_GAP_HTTP500' if not gap.get('failure_reason') or 'HTTP500' in gap.get('failure_reason','') else 'HISTORY_UNKNOWN'),
+                    recovery_attempts=0))
         report['recovered_records'] = dst.execute("SELECT COUNT(*) FROM entity_history").fetchone()[0]
         report['attempts'] = budget.attempts
         report['recovery_wall_seconds'] = round(time.monotonic()-budget.started,6)

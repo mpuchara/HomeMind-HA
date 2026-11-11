@@ -1280,7 +1280,7 @@ class HistoryManager(threading.Thread):
                     )
             self.refresh_archive_cache()
         except (StoragePressure, TrainingRecorderUnavailable, TrainingImportWriteCorruption,
-                InterruptedError):
+                InterruptedError, OSError):
             raise
         except Exception as exc:
             # A failed Recorder request can leave a usable local archive. A
@@ -2387,6 +2387,7 @@ class HistoryManager(threading.Thread):
                 return 0
         if discovery and http_500_budget is None:
             http_500_budget = [DISCOVERY_HTTP_500_LIMIT]
+        recorder_response_received = False
         try:
             history_options = {}
             if skip_initial_state:
@@ -2409,6 +2410,7 @@ class HistoryManager(threading.Thread):
                 # auto-discovery in v0.3.3. Whole-home context remains significant-only.
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
+            recorder_response_received = True
             written = self._archive_history_payload(data, source)
             if explicit:
                 self._training_recorder_failures = 0
@@ -2486,6 +2488,10 @@ class HistoryManager(threading.Thread):
                     ) from None
             err = exc
         except (URLError, TimeoutError, OSError) as exc:
+            if recorder_response_received:
+                # Import/staging disk failures are not unavailable HTTP history.
+                # Never quarantine ENOSPC/EIO as an ordinary Recorder gap.
+                raise
             err = exc
 
         span = end_ts - start_ts
