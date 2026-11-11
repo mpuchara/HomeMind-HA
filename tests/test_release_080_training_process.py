@@ -1,4 +1,5 @@
 """0.14.80 contracts for process-isolated historical training."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -6,6 +7,8 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -654,6 +657,29 @@ class SupervisorRollbackContracts(unittest.TestCase):
 
 class ActualWorkerSmoke(unittest.TestCase):
     def test_clean_worker_process_trains_tiny_explicit_schema_job(self):
+        self.run_worker_fixture()
+
+    def test_worker_with_corrupt_archive_indexes_keeps_the_same_learned_model(self):
+        reference = self.run_worker_fixture(samples=120)
+        recovered = self.run_worker_fixture(samples=120, corrupt_archive_indexes=True)
+        self.assertEqual(reference["learning_hash"], recovered["learning_hash"])
+        self.assertEqual(reference["frozen_holdout_counts"], recovered["frozen_holdout_counts"])
+        self.assertEqual(
+            reference["worker_phases"]["replay_driver_rows_processed"],
+            recovered["worker_phases"]["replay_driver_rows_processed"],
+        )
+
+    def test_corrupt_indexes_and_concurrent_writes_complete_training_in_shadow(self):
+        recovered = self.run_worker_fixture(
+            samples=120, corrupt_archive_indexes=True, qualify=True,
+            concurrent_writes=True,
+        )
+        self.assertEqual(recovered["agent_mode"], "shadow")
+        self.assertEqual(recovered["agent_progress"], 1.0)
+        self.assertGreater(recovered["concurrent_writes"], 0)
+
+    def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False, *,
+                           qualify=False, concurrent_writes=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -687,7 +713,7 @@ class ActualWorkerSmoke(unittest.TestCase):
             })
             base = 1_700_000_000.0
             rows = []
-            for idx in range(24):
+            for idx in range(samples):
                 ts = base + idx * 30
                 rows.append((
                     "binary_sensor.motion", ts - 2,
@@ -746,11 +772,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "schema_cache_item": {},
                 "options": options,
                 "start_ts": base - 5,
-                "end_ts": base + 24 * 30,
+                "end_ts": base + samples * 30,
                 "train_kwargs": {
-                    "qualify": False,
+                    "qualify": qualify,
                     "include_candidates": True,
-                    "benchmark": False,
+                    "benchmark": samples > 24,
                     "accumulate_benchmark": False,
                     "progress_lo": 0.0,
                     "progress_hi": 1.0,
@@ -764,19 +790,76 @@ class ActualWorkerSmoke(unittest.TestCase):
             job_path = Path(root) / "job.json"
             job_path.write_text(json.dumps(job), encoding="utf-8")
 
+            if corrupt_archive_indexes:
+                # Modify only disposable index pages after closing SQLite readers.
+                with sqlite3.connect(db) as connection:
+                    page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+                    pages = [row[0] for row in connection.execute(
+                        "SELECT rootpage FROM sqlite_master "
+                        "WHERE type='index' AND tbl_name='entity_history' AND rootpage>0"
+                    )]
+                connection.close()
+                with db.open("r+b") as stream:
+                    for page in pages:
+                        stream.seek((page - 1) * page_size)
+                        stream.write(b"\xff")
+
             import training_process
             env = dict(os.environ)
             env["ADAPTIVE_AI_DATA"] = root
             env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
-            completed = subprocess.run(
-                [sys.executable, training_process.__file__, "--worker", str(job_path)],
-                env=env,
-                cwd=str(Path(training_process.__file__).parent),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=45,
-            )
+            worker_args = [training_process.__file__, "--worker", str(job_path)]
+            command = [sys.executable, *worker_args]
+            if samples > 24:
+                # Policy decay uses the wall clock even for replayed samples.
+                # Hold that clock constant across benchmark runs.
+                command = [
+                    sys.executable, "-c",
+                    "import policy, runpy, sys; stamp = float(sys.argv.pop(1)); "
+                    "policy.now_ts = lambda: stamp; "
+                    "sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')",
+                    str(job["end_ts"]), *worker_args,
+                ]
+                env["PYTHONHASHSEED"] = "0"
+            started = time.perf_counter()
+            writer_stop = threading.Event()
+            writes = []
+            writer_errors = []
+
+            def write_metadata():
+                try:
+                    with sqlite3.connect(db, timeout=10) as connection:
+                        while not writer_stop.wait(.01):
+                            connection.execute(
+                                "INSERT OR REPLACE INTO app_meta(key,value) VALUES('concurrent_probe',?)",
+                                (str(len(writes)),),
+                            )
+                            connection.commit()
+                            writes.append(1)
+                    connection.close()
+                except Exception as exc:
+                    writer_errors.append(exc)
+
+            writer = threading.Thread(target=write_metadata) if concurrent_writes else None
+            if writer:
+                writer.start()
+            try:
+                completed = subprocess.run(
+                    command,
+                    env=env,
+                    cwd=str(Path(training_process.__file__).parent),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=45 if samples == 24 else 600,
+                )
+            finally:
+                writer_stop.set()
+                if writer:
+                    writer.join(15)
+                    self.assertFalse(writer.is_alive())
+            self.assertEqual(writer_errors, [])
+            elapsed = time.perf_counter() - started
             if completed.returncode:
                 log = Path(job["log_path"])
                 self.fail(
@@ -798,6 +881,26 @@ class ActualWorkerSmoke(unittest.TestCase):
                 int((model.get("schema") or {}).get("version") or 0),
                 12,
             )
+            learned = {
+                key: model[key]
+                for key in ("version", "actions", "horizons", "schema", "heads")
+            }
+            trained_agent = store.get_agent_config(agent["id"])
+            return {
+                "agent_mode": trained_agent["mode"],
+                "agent_progress": trained_agent["training_progress"],
+                "concurrent_writes": len(writes),
+                "version": job["app_version"],
+                "input_history_rows": len(rows),
+                "worker_wall_seconds": elapsed,
+                "worker_phases": result["training_phase_timings"],
+                "worker_budget": result["training_budget"],
+                "learning_hash": hashlib.sha256(json.dumps(
+                    learned, sort_keys=True, separators=(",", ":")
+                ).encode()).hexdigest(),
+                "benchmark_counts": model.get("_benchmark_counts"),
+                "frozen_holdout_counts": model.get("_frozen_holdout_counts"),
+            }
 
 
 if __name__ == "__main__":

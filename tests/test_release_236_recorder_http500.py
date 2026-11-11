@@ -128,6 +128,35 @@ class RecorderHTTP500Tests(unittest.TestCase):
         self.assertEqual(len(requested), 1)
         self.assertIn("skip_initial_state", requested[0])
 
+    def test_training_avoids_start_state_sql_and_keeps_split_boundary(self):
+        history.HEAVY_JOBS.owner = "agent_training"
+        self.obj.training_job_agent_id = "agent"
+
+        def rows(ids, lo, hi, query):
+            self.assertIn("skip_initial_state", query)
+            return [[{
+                "entity_id": ids[0], "state": "on",
+                "last_changed": datetime.fromtimestamp(ts, timezone.utc).isoformat(),
+            } for ts in (500, 1900, 2000) if lo < ts < hi]]
+
+        self.simulate(lambda ids, lo, hi: hi - lo > 2000, rows)
+        self.assertEqual(self.run_fetch(["light.a"], span=3600), 3)
+        self.assertEqual(len(self.requests), 3)
+        self.assertTrue(all("skip_initial_state" in q for _, _, _, q in self.requests))
+        self.assertEqual(self.requests[-1][1], 1899.999999)
+        self.assertEqual([row["ts"] for row in self.store.archive_iter()], [500, 1900, 2000])
+        self.assertEqual(self.obj._training_recorder_failures, 0)
+
+    def test_training_bounds_consecutive_500s_before_more_splits(self):
+        history.HEAVY_JOBS.owner = "agent_training"
+        self.obj.training_job_agent_id = "agent"
+        self.simulate(lambda *args: True)
+        with patch.object(history, "TRAINING_HTTP_500_LIMIT", 3):
+            with self.assertRaisesRegex(history.TrainingRecorderUnavailable, "3 consecutive HTTP 500"):
+                self.run_fetch(["light.a"], span=21600)
+        self.assertEqual(len(self.requests), 3)
+        self.assertFalse(self.covered)
+
     def test_full_attribute_history_still_requests_non_significant_changes(self):
         requested = []
 

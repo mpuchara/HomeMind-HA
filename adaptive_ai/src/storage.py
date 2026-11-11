@@ -13,6 +13,7 @@ import time
 import uuid
 from settings import (DATA_DIR, DB_PATH, OPTIONS, clamp, iso_now, now_ts)
 from storage_budget import BudgetConnection, StorageBudget, StoragePressure
+from archive_reads import archive_query
 from sqlite_background import is_sqlite_busy
 
 CONFIDENCE_REPORT_CACHES = frozenset({
@@ -1366,14 +1367,14 @@ class Store:
             return (0, 0)
         placeholders = ",".join("?" for _ in ids)
         with self.conn() as c:
-            row = c.execute(
+            row = archive_query(c,
                 f"""SELECT COUNT(*) AS n,
                            COALESCE(MAX(mutation_revision),0) AS revision
                       FROM entity_history
                      WHERE entity_id IN ({placeholders})
                        AND ts>=? AND ts<?""",
-                [*ids, start_ts, end_ts],
-            ).fetchone()
+                [*ids, start_ts, end_ts], snapshot=True,
+            ).fetchall()[0]
         return (int(row["n"] or 0), int(row["revision"] or 0))
 
     def archive_upsert(self, entity_id, ts, state, attributes=None, user_id=None, source="live"):
@@ -1470,7 +1471,7 @@ class Store:
             where.append("entity_id IN (%s)" % ",".join("?" for _ in ids)); vals.extend(ids)
         sql = "SELECT COUNT(*) FROM entity_history" + ((" WHERE " + " AND ".join(where)) if where else "")
         with self.conn() as c:
-            return int(c.execute(sql, vals).fetchone()[0] or 0)
+            return int(archive_query(c, sql, vals, snapshot=True).fetchall()[0][0] or 0)
 
     def archive_iter(self, start_ts=None, end_ts=None, entity_ids=None, chunk_size=2000):
         """Stream history rows without materializing the archive.
@@ -1493,7 +1494,7 @@ class Store:
         if not bool(getattr(self, "checkpointed_archive_reads", False)):
             sql = "SELECT * FROM entity_history" + predicate + " ORDER BY ts,id"
             with self.conn() as c:
-                cursor = c.execute(sql, vals)
+                cursor = archive_query(c, sql, vals)
                 while True:
                     batch = cursor.fetchmany(size)
                     if not batch:
@@ -1519,7 +1520,7 @@ class Store:
             )
             page_vals.append(size)
             with self.conn() as c:
-                batch = c.execute(page_sql, page_vals).fetchall()
+                batch = archive_query(c, page_sql, page_vals, snapshot=True).fetchall()
             if not batch:
                 break
             for row in batch:
@@ -1561,7 +1562,7 @@ class Store:
             ORDER BY ts,id
         """
         with self.conn() as c:
-            cursor = c.execute(sql, vals)
+            cursor = archive_query(c, sql, vals)
             while True:
                 batch = cursor.fetchmany(max(100, int(chunk_size)))
                 if not batch:
@@ -1578,14 +1579,14 @@ class Store:
     def archive_bounds(self):
         """Exact indexed bounds for training, independent of diagnostic totals."""
         with self.conn() as c:
-            row = c.execute('SELECT (SELECT MIN(ts) FROM entity_history), '
+            row = archive_query(c, 'SELECT (SELECT MIN(ts) FROM entity_history), '
                             '(SELECT MAX(ts) FROM entity_history)').fetchone()
         return dict(min_ts=row[0], max_ts=row[1])
 
     def archive_stats(self):
         with self.conn() as c:
-            r = c.execute("SELECT COUNT(*) n, MIN(ts) min_ts, MAX(ts) max_ts, COUNT(DISTINCT entity_id) entities FROM entity_history").fetchone()
-            by_source = {x[0]: x[1] for x in c.execute("SELECT source,COUNT(*) FROM entity_history GROUP BY source").fetchall()}
+            r = archive_query(c, "SELECT COUNT(*) n, MIN(ts) min_ts, MAX(ts) max_ts, COUNT(DISTINCT entity_id) entities FROM entity_history").fetchone()
+            by_source = {x[0]: x[1] for x in archive_query(c, "SELECT source,COUNT(*) FROM entity_history GROUP BY source").fetchall()}
         d = dict(r)
         d["days"] = ((d["max_ts"] - d["min_ts"]) / 86400.0) if d.get("min_ts") and d.get("max_ts") else 0.0
         d["by_source"] = by_source

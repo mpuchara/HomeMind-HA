@@ -1,6 +1,7 @@
 from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
+from contextlib import closing
 from datetime import datetime, timezone
 import gc
 import json
@@ -12,6 +13,7 @@ import traceback
 from settings import (OPTIONS, TRAINING_REVISION, clamp, iso_from_ts, now_ts, parse_ts)
 from storage import STORE
 from storage_budget import StoragePressure, require_storage_available, run_storage_write, _payload_bytes
+from sqlite_background import is_sqlite_corruption
 from ha import HA, AUTOMATION_KNOWLEDGE
 from context import (archived_state, balanced_presence_driver_score, controllable_context_exclusions, default_action_interval, electrical_context_exclusions, entity_capability_tags, historical_reward, is_context_candidate_entity, is_esphome_sensor_entity, is_fast_reactive_agent, numeric_activity_driver_score, occupancy_state_bool, target_options_for_state, target_value, transition_edges)
 from telemetry import HEAVY_JOBS, RUNTIME_DEBUG, rss_mb
@@ -42,6 +44,7 @@ from long_memory import (
 HISTORY_IMPORT_BATCH_ROWS = 128
 DISCOVERY_HTTP_500_LIMIT = 32
 DISCOVERY_HTTP_500_ENTITY_LIMIT = 16
+TRAINING_HTTP_500_LIMIT = 32
 
 
 class DiscoveryRecorderIncomplete(RuntimeError):
@@ -54,6 +57,14 @@ class DiscoveryRecorderUnavailable(DiscoveryRecorderIncomplete):
 
 class DiscoveryRecorderHTTP500(DiscoveryRecorderIncomplete):
     """HTTP 500 persisted to the minimum slice or exhausted the split budget."""
+
+
+class TrainingRecorderUnavailable(RuntimeError):
+    """The training import exhausted its consecutive Recorder failure budget."""
+
+
+class TrainingImportWriteCorruption(RuntimeError):
+    """A local SQLite write failed while importing Recorder history."""
 
 
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
@@ -829,6 +840,7 @@ class HistoryManager(threading.Thread):
                 )
             except Exception as exc:
                 failure_text = f"{type(exc).__name__}: {exc}"
+                print("[training] Agent indexing failed:\n" + traceback.format_exc(limit=12), flush=True)
                 STORE.event(
                     agent_id, "warning" if isinstance(exc, StoragePressure) else "error",
                     "agent_storage_paused" if isinstance(exc, StoragePressure) else "agent_index_failed", str(exc),
@@ -1060,7 +1072,11 @@ class HistoryManager(threading.Thread):
                     sort_keys=True,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            if is_sqlite_corruption(exc):
+                raise TrainingImportWriteCorruption(
+                    "SQLite corruption while saving Recorder coverage"
+                ) from exc
             # Coverage persistence may only affect performance. Never fail explicit Train
             # after Recorder data has already been imported successfully.
             return False
@@ -1236,6 +1252,7 @@ class HistoryManager(threading.Thread):
             ))
             done += weight
         try:
+            self._training_recorder_failures = 0
             self._training_recorder_import(
                 [target], start_ts, end_ts,
                 batch_size=1, minimal=False, no_attributes=False,
@@ -1262,9 +1279,14 @@ class HistoryManager(threading.Thread):
                         progress_lo=ranges[2][0], progress_hi=ranges[2][1],
                     )
             self.refresh_archive_cache()
-        except StoragePressure:
+        except (StoragePressure, TrainingRecorderUnavailable, TrainingImportWriteCorruption,
+                InterruptedError):
             raise
         except Exception as exc:
+            # A failed Recorder request can leave a usable local archive. A
+            # corrupt local database cannot be treated as partial Recorder coverage.
+            if is_sqlite_corruption(exc):
+                raise
             # A Recorder backfill failure must not destroy resumability. Train from the
             # locally available archive and leave a diagnostic event.
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
@@ -1297,9 +1319,30 @@ class HistoryManager(threading.Thread):
             work_done=0, work_total=0, stage_eta_seconds=0,
             eta_source="measuring Recorder import", phase_detail="Preparing Recorder history for the selected agent",
         )
-        self._refresh_agent_history(
-            agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
-        )
+        try:
+            self._refresh_agent_history(
+                agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
+            )
+        except TrainingImportWriteCorruption as exc:
+            # The read path can still work when the import touches a damaged index
+            # or other page only needed by writes. Keep a working model on Rebuild.
+            print(f"[history] {exc}", flush=True)
+            if rebuild and STORE.get_model(agent_id) is not None:
+                raise TrainingImportWriteCorruption(
+                    f"{exc}; use Resume to keep the existing model"
+                ) from exc
+            target = agent["target_entity"]
+            with closing(STORE.archive_iter(start_ts, target_end, [target], chunk_size=100)) as rows:
+                if next(rows, None) is None or next(rows, None) is None:
+                    raise TrainingImportWriteCorruption(
+                        f"{exc}; insufficient readable local target history"
+                    ) from exc
+            self.training_job_timings["recorder_import_fallback"] = "local_archive"
+            STORE.event(
+                agent_id, "warning", "agent_training_local_archive",
+                f"{exc}; replay will use the committed local archive",
+                {"trace": traceback.format_exc(limit=8)},
+            )
         self.set_status(
             progress=0.10 + 0.90 * float(getattr(self, "training_job_start_progress", 0) or 0),
             message=f"Training {agent['name']}: history prepared; starting replay",
@@ -1940,13 +1983,20 @@ class HistoryManager(threading.Thread):
                     eta_source='waiting for storage recovery', stage_eta_seconds=None,
                 )
             write_batch = (lambda: STORE.archive_packed_batch(rows)) if staged else (lambda: STORE.archive_batch(rows))
-            if explicit and profile.get('capacity_wait_seconds', 0) > 0:
-                written += run_storage_write(STORE, write_batch,
-                    self.stop_event, self.job_cancel_event,
-                    capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
-            else:
-                written += run_storage_write(STORE, write_batch,
-                    self.stop_event, self.job_cancel_event)
+            try:
+                if explicit and profile.get('capacity_wait_seconds', 0) > 0:
+                    written += run_storage_write(STORE, write_batch,
+                        self.stop_event, self.job_cancel_event,
+                        capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
+                else:
+                    written += run_storage_write(STORE, write_batch,
+                        self.stop_event, self.job_cancel_event)
+            except sqlite3.DatabaseError as exc:
+                if explicit and is_sqlite_corruption(exc):
+                    raise TrainingImportWriteCorruption(
+                        "SQLite corruption while writing Recorder rows to entity_history"
+                    ) from exc
+                raise
             batches += 1
             max_batch_rows = max(max_batch_rows, count)
             rows.clear()
@@ -2276,6 +2326,7 @@ class HistoryManager(threading.Thread):
         if not entity_ids or end_ts <= start_ts:
             return 0
         discovery = HEAVY_JOBS.owner == "discovery"
+        skip_initial_state = discovery or explicit or skip_initial_state
         cycle = getattr(self, "_discovery_recorder_cycle", None) if discovery else None
         filtered = False
         if cycle is not None and cycle["exhausted"]:
@@ -2293,15 +2344,9 @@ class HistoryManager(threading.Thread):
             http_500_budget = [DISCOVERY_HTTP_500_LIMIT]
         try:
             history_options = {}
-            if discovery:
-                # Discovery classifies *recorded transitions*, not the synthetic
-                # state carried over from before each scan window.  HA's default
-                # include-start-state path performs an additional historical SQL
-                # lookback even for a one-entity / 30-minute request.  Avoid that
-                # query for every discovery slice (not only split right halves).
-                # Keep the one-microsecond overlap for exact boundary events;
-                # the archive de-duplicates identical (entity_id, ts) rows.
-                skip_initial_state = True
+            if skip_initial_state:
+                # Import recorded changes without the additional Recorder SQL
+                # lookup for a synthetic start state. Keep exact boundary events.
                 start = datetime.fromtimestamp(start_ts, timezone.utc)
                 start -= start.resolution
                 history_options["skip_initial_state"] = True
@@ -2320,6 +2365,8 @@ class HistoryManager(threading.Thread):
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
             written = self._archive_history_payload(data, source)
+            if explicit:
+                self._training_recorder_failures = 0
             if HEAVY_JOBS.owner == "discovery":
                 # Count consecutive 5xx/429 requests, not failures separated by
                 # successful Recorder reads in a long-running discovery.
@@ -2339,6 +2386,13 @@ class HistoryManager(threading.Thread):
         except HTTPError as exc:
             # Authentication / malformed-request errors will not improve by splitting.
             status = getattr(exc, "code", 500)
+            if explicit and status == 500:
+                failures = getattr(self, "_training_recorder_failures", 0) + 1
+                self._training_recorder_failures = failures
+                if failures >= TRAINING_HTTP_500_LIMIT:
+                    raise TrainingRecorderUnavailable(
+                        f"Recorder returned {failures} consecutive HTTP 500 errors during training preparation"
+                    ) from None
             if status in (400, 401, 403, 404):
                 if HEAVY_JOBS.owner == "discovery":
                     # HTTPError.__str__ can include a full URL/query. The guard
@@ -2409,7 +2463,7 @@ class HistoryManager(threading.Thread):
                 self._fetch_history_resilient(entity_ids, start_ts, mid_ts,
                                               skip_initial_state=skip_initial_state, **split_options)
                 + self._fetch_history_resilient(entity_ids, mid_ts, end_ts,
-                                                skip_initial_state=discovery, **split_options)
+                                                skip_initial_state=skip_initial_state, **split_options)
             )
 
         if discovery and isinstance(err, HTTPError) and err.code == 500:

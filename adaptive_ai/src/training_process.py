@@ -1126,6 +1126,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         if return_code != 0 or not isinstance(result, dict) or not result.get("ok"):
             detail = (result or {}).get("error") if isinstance(result, dict) else None
             error_type = (result or {}).get("error_type") if isinstance(result, dict) else None
+            if isinstance(result, dict) and result.get("trace"):
+                print("[training] Isolated worker failed:\n" + result["trace"], flush=True)
+                history.training_process_status["failure_trace"] = result["trace"]
             if error_type == "StaleTrainingJob":
                 raise StaleTrainingJob(
                     detail or "isolated worker rejected stale training job",

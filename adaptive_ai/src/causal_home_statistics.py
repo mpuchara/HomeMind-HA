@@ -5,10 +5,12 @@ current live graph are never used as occupancy labels or past trajectory statist
 Compressed internal snapshots bound memory; queries replay only the remaining prefix.
 """
 import bisect
+from contextlib import closing
 import copy
 import hashlib
 import json
 import sqlite3
+from archive_reads import archive_query
 import sys
 import zlib
 from collections import OrderedDict
@@ -50,12 +52,13 @@ class CausalHomeStatistics:
                                json.loads(checkpoint[0]) if checkpoint else None)
         # Existing ON in the initial snapshot is not a fresh arrival.
         for eid in self.entities:
-            row = connection.execute(
+            row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
-                (eid, self.start, self.start),
-            ).fetchone()
+                (eid, self.start, self.start), snapshot=True,
+            ).fetchall()
             if row:
+                row = row[0]
                 self._fingerprint_row(source_digest, dict(row))
                 self._observe(model, dict(row), learn=False)
             TRAINING_BUDGET.checkpoint('home_statistics_seed')
@@ -111,11 +114,12 @@ class CausalHomeStatistics:
         digest = hashlib.sha256()
         digest.update(repr(checkpoint[0] if checkpoint else None).encode())
         for eid in self.entities:
-            row = connection.execute(
+            row = archive_query(connection,
                 'SELECT * FROM entity_history WHERE entity_id=? AND ts<=? '
                 'AND COALESCE(received_ts,ts)<=? ORDER BY ts DESC,id DESC LIMIT 1',
-                (eid, self.start, self.start)).fetchone()
+                (eid, self.start, self.start), snapshot=True).fetchall()
             if row:
+                row = row[0]
                 self._fingerprint_row(digest, dict(row))
             TRAINING_BUDGET.checkpoint('home_statistics_validate_seed')
         for row in self._rows(self.start, self.end):
@@ -139,22 +143,22 @@ class CausalHomeStatistics:
         marks = ','.join('?' for _ in self.entities)
         # The source set contains only sparse direct-presence channels, not raw radar
         # samples. Receive ordering also admits late older events at their real time.
-        cursor = self.conn.execute(
+        with closing(archive_query(self.conn,
             f'SELECT *,MAX(ts,COALESCE(received_ts,ts)) AS causal_at FROM entity_history '
             f'WHERE entity_id IN ({marks}) AND ts>? AND ts<=? AND COALESCE(received_ts,ts)<=? '
             'UNION ALL '
             f'SELECT *,MAX(ts,COALESCE(received_ts,ts)) AS causal_at FROM entity_history '
             f'WHERE entity_id IN ({marks}) AND ts<=? AND received_ts>? AND received_ts<=? '
             'ORDER BY causal_at,ts,id',
-            (*self.entities, lo, hi, hi, *self.entities, lo, lo, hi),
-        )
-        while True:
-            rows = cursor.fetchmany(256)
-            if not rows:
-                break
-            for row in rows:
-                yield dict(row)
-            TRAINING_BUDGET.checkpoint('home_statistics_stream')
+            (*self.entities, lo, hi, hi, *self.entities, lo, lo, hi), snapshot=True,
+        )) as cursor:
+            while True:
+                rows = cursor.fetchmany(256)
+                if not rows:
+                    break
+                for row in rows:
+                    yield dict(row)
+                TRAINING_BUDGET.checkpoint('home_statistics_stream')
 
     def _observe(self, model, row, learn=True):
         eid = row['entity_id']
@@ -195,12 +199,16 @@ class CausalHomeStatistics:
         return size({k: v for k, v in vars(model).items() if k != 'lock'})
 
     @staticmethod
-    def _copy_model(model):
-        result = RoomBeliefModel(model.half_life / 86400.0)
-        for name, value in vars(model).items():
-            if name != 'lock':
-                setattr(result, name, copy.deepcopy(value))
-        return result
+    def _expired_statistics(model, timestamp):
+        # Expiry reads movement state and may update graph outcomes. It does
+        # not use the retained presence values, source observations or area index.
+        view = RoomBeliefModel(model.half_life / 86400.0)
+        view.graph = copy.deepcopy(model.graph)
+        view.hypotheses = list(model.hypotheses)
+        view.pending = model.pending
+        view.arrivals.extend(model.arrivals)
+        view.expire(timestamp)
+        return view.graph, copy.deepcopy(model.dwell), copy.deepcopy(model.calibration)
 
     def statistics_at(self, timestamp, *, cursor='default'):
         timestamp = float(timestamp)
@@ -224,7 +232,7 @@ class CausalHomeStatistics:
             self._cursor_revision = revision
         previous = self._cursors.pop(cursor, None)
         if previous is not None and previous[0] == index and previous[1] <= timestamp:
-            _, lo, model, _ = previous
+            _, lo, model, model_bytes = previous
             self.cursor_hits += 1
         else:
             raw = json.loads(zlib.decompress(self.snapshots[index]))
@@ -234,11 +242,14 @@ class CausalHomeStatistics:
             model.area_sources = {area: set(ids) for area, ids in raw['area_sources'].items()}
             model.arrivals.extend((area, stamp) for area, stamp in raw['arrivals'])
             lo = self.times[index]
+            model_bytes = None
             self.cursor_restores += 1
         for row in self._rows(lo, timestamp):
             self._observe(model, row)
             self.query_rows += 1
-        model_bytes = self._model_bytes(model)
+            model_bytes = None
+        if model_bytes is None:
+            model_bytes = self._model_bytes(model)
         remaining = max(0, self.max_bytes - self.bytes)
         if model_bytes <= remaining:
             self._cursors[cursor] = (index, timestamp, model, model_bytes)
@@ -247,9 +258,7 @@ class CausalHomeStatistics:
         # Query-only expiry can teach a missing destination at this timestamp. It must
         # never enter the next prefix, where the legacy replay expires only at actual
         # source events/checkpoint boundaries. Returned dictionaries are private too.
-        view = self._copy_model(model)
-        view.expire(timestamp)
-        return view.graph, view.dwell, view.calibration
+        return self._expired_statistics(model, timestamp)
 
     def status(self):
         return {'contract': self.CONTRACT, 'direct_sources': len(self.entities),

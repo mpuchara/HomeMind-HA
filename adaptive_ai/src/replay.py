@@ -5,6 +5,8 @@ import hashlib
 import json
 import math
 import sqlite3
+from contextlib import closing
+from archive_reads import archive_query
 import threading
 import time
 from array import array
@@ -347,22 +349,22 @@ class RAMReplayIndex:
         return out
 
     def _load_query(self, connection, timeline, sql, params, remaining_bytes):
-        cursor = connection.execute(sql, params)
-        self.sql_queries += 1
-        while True:
-            batch = cursor.fetchmany(self.FETCH_ROWS)
-            if not batch:
-                break
-            for row in batch:
-                timeline.append(row)
-                self.rows_loaded += 1
-            # Finalization creates reordered primitive arrays temporarily. Reserve about
-            # 2x the retained payload so building one pathological entity cannot push the
-            # worker through its RAM ceiling before we can fall back to SQLite.
-            if timeline.memory_bytes() * 2 > max(1, int(remaining_bytes)):
-                return False
-            TRAINING_BUDGET.checkpoint("ram_replay_index_rows")
-        return True
+        with closing(archive_query(connection, sql, params, snapshot=True)) as cursor:
+            self.sql_queries += 1
+            while True:
+                batch = cursor.fetchmany(self.FETCH_ROWS)
+                if not batch:
+                    break
+                for row in batch:
+                    timeline.append(row)
+                    self.rows_loaded += 1
+                # Finalization creates reordered primitive arrays temporarily. Reserve about
+                # 2x the retained payload so building one pathological entity cannot push the
+                # worker through its RAM ceiling before we can fall back to SQLite.
+                if timeline.memory_bytes() * 2 > max(1, int(remaining_bytes)):
+                    return False
+                TRAINING_BUDGET.checkpoint("ram_replay_index_rows")
+            return True
 
     def _load_entity(self, connection, eid, remaining_bytes):
         timeline = _RAMEntityTimeline(eid)
@@ -1159,7 +1161,7 @@ class SQLiteTemporalTracker:
             if cached is not None:
                 self._metrics["ram_query_hits"] = int(self._metrics.get("ram_query_hits") or 0) + 1
                 return cached
-        rows = [dict(row) for row in self.conn.execute(sql, params).fetchall()]
+        rows = [dict(row) for row in archive_query(self.conn, sql, params, snapshot=True).fetchall()]
         self._metrics["sql_queries"] += 1
         self._metrics["rows_loaded"] += len(rows)
         if self.query_cache is not None:

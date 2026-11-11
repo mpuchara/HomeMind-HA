@@ -1,5 +1,29 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.15.5 — Spójny odczyt treningu przy bieżących zapisach
+
+- Budowa indeksu RAM i kontekstu replay korzysta z krótkich snapshotów odczytu. Obejście uszkodzonego indeksu zachowuje snapshot pomimo zapisów innych procesów. Test workera obejmuje ukończenie treningu w trybie Shadow.
+
+## 0.15.4 — Odczyt archiwum przy uszkodzonym indeksie
+
+- Po SQLITE_CORRUPT odczyt historii ponawia to samo zapytanie ze skanowaniem tabeli. Wznowienie strumienia zachowuje kolejność rekordów i sprawdza rewizję bazy. Log dodatku zawiera ślad błędu workera i zadania treningowego.
+
+## 0.15.3 — Trening z zapisanego archiwum po błędzie importu
+
+- Błąd uszkodzenia SQLite przy zapisie historii lub metadanych pokrycia pozwala użyć zapisanego archiwum, gdy dane celu dają się odczytać. Rebuild zachowuje istniejący model w tym scenariuszu i wskazuje Resume.
+
+## 0.15.2 — Zapytania Recorder podczas treningu
+
+- Trening korzysta z tego samego odczytu bez stanu początkowego co discovery, również po podziale zapytań. Po 32 kolejnych HTTP 500 przygotowanie kończy się przed resetem uczenia.
+
+## 0.15.1 — Ochrona modelu podczas przygotowania treningu
+
+- Błąd uszkodzenia lokalnej bazy SQLite podczas importu historii przerywa przebudowę agenta przed resetem modelu, benchmarku i kursora.
+
+## 0.15.0 — Kandydat do testów wydajności treningu
+
+- Replay przyczynowy ogranicza kopiowanie stanu przy wygaśnięciu hipotez i wykorzystuje aktualny pomiar rozmiaru kursora, gdy nie przybyły żadne obserwacje.
+
 ## 0.14.240 — Discovery z częściową historią Recorder
 
 - Izolacja błędów HTTP 500, zapis luk i ochrona klasyfikacji oraz treningu przed niepełnymi danymi.

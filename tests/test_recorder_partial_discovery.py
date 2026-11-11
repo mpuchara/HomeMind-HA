@@ -1,6 +1,7 @@
 """Recorder discovery regression tests with injected REST responses and real local storage."""
 from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 import threading
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
-from support import state
+from support import agent, state
 from test_release_235_recorder_discovery import manager
 import history
 from storage import Store
@@ -127,3 +128,64 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.obj._training_recorder_import.assert_not_called()
         self.obj._require_agent_history({GOOD}, START, END)
         self.obj._require_agent_history({BAD}, START + 3600, END)
+
+    def test_fatal_preparation_errors_stop_rebuild_before_learning_reset(self):
+        config = self.store.create_agent(agent(target_entity=GOOD))
+        agent_id = config["id"]
+        self.store.save_model(agent_id, {"marker": "existing model"})
+        self.obj._training_bounds = lambda: (START, END)
+        self.obj.training_schema_seed = lambda *args: None
+        self.obj._eligible_rebuild_context = lambda: []
+        for error in (sqlite3.DatabaseError("database disk image is malformed"),
+                      history.TrainingRecorderUnavailable("Recorder failure budget exhausted"),
+                      history.TrainingImportWriteCorruption("SQLite corruption writing Recorder rows"),
+                      InterruptedError("History import cancelled")):
+            with self.subTest(error=error):
+                self.obj._training_recorder_import = Mock(side_effect=error)
+                with patch.object(self.store, "clear_learning", wraps=self.store.clear_learning) as clear:
+                    with self.assertRaises(type(error)):
+                        self.obj._run_agent_indexing(agent_id, rebuild=True)
+                    clear.assert_not_called()
+        self.assertEqual(self.store.get_model(agent_id)["marker"], "existing model")
+
+    def test_corrupt_recorder_coverage_write_propagates(self):
+        self.obj.training_recorder_coverage = {(SOURCE, GOOD): (START, END)}
+        error = sqlite3.DatabaseError("database disk image is malformed")
+        error.sqlite_errorcode = sqlite3.SQLITE_CORRUPT
+        with patch.object(self.store, "meta_set", side_effect=error):
+            with self.assertRaisesRegex(history.TrainingImportWriteCorruption, "saving Recorder coverage") as raised:
+                self.obj._persist_training_recorder_coverage()
+        self.assertIs(raised.exception.__cause__, error)
+
+    def test_import_write_corruption_continues_to_replay_from_committed_archive(self):
+        config = self.store.create_agent(agent(target_entity=GOOD))
+        self.obj.training_job_agent_id = config["id"]
+        self.obj.session_mode = True
+        self.obj.engine.wake_event = threading.Event()
+        self.obj.temporal_replay_stats = {}
+        self.obj._training_bounds = lambda: (START, END)
+        self.obj.training_schema_seed = lambda *args: None
+        self.obj._run_training_chunk = Mock()
+        self.obj.training_recorder_coverage = {}
+        self.obj.training_recorder_coverage_hits = self.obj.training_recorder_coverage_misses = 0
+        history.HEAVY_JOBS.owner = "agent_training"
+        error = sqlite3.DatabaseError("database disk image is malformed")
+        error.sqlite_errorcode = sqlite3.SQLITE_CORRUPT
+
+        with patch.object(self.store, "archive_packed_batch", side_effect=error):
+            with self.assertRaisesRegex(history.TrainingImportWriteCorruption, "insufficient readable"):
+                self.obj._run_agent_indexing(config["id"])
+        self.obj._run_training_chunk.assert_not_called()
+        self.assertIsNone(self.store.get_agent_config(config["id"])["training_cursor_ts"])
+
+        self.store.archive_batch([
+            (GOOD, ts, value, {}, None, SOURCE) for ts, value in self.recordings[GOOD]
+        ])
+        with patch.object(self.store, "archive_packed_batch", side_effect=error) as failed_write:
+            self.obj._run_agent_indexing(config["id"])
+        failed_write.assert_called_once()
+        self.obj._run_training_chunk.assert_called_once()
+        self.assertEqual(self.obj._run_training_chunk.call_args.args, (START, END))
+        self.assertEqual(self.obj.training_job_timings["recorder_import_fallback"], "local_archive")
+        self.assertFalse(self.obj.training_recorder_coverage)
+        self.assertEqual(self.store.get_agent_config(config["id"])["training_cursor_ts"], END)
