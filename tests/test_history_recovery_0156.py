@@ -156,7 +156,11 @@ class RealRecoveryTests(unittest.TestCase):
         self.recover()
         with closing(sqlite3.connect(self.destination)) as conn:
             self.assertEqual(conn.execute('SELECT * FROM rl_feedback').fetchall(), original_correct)
-            self.assertEqual(conn.execute('SELECT * FROM correct_fixture').fetchall(), [(1,'{"label":"user-correct","received_time":1234}')])
+            # Unknown extension tables retain schema; real Correct dependencies
+            # above retain exact rows. The original extension is never modified.
+            self.assertEqual(conn.execute('SELECT * FROM correct_fixture').fetchall(), [])
+        with self.store.conn() as conn:
+            self.assertEqual(conn.execute('SELECT payload FROM correct_fixture').fetchone()[0],'{"label":"user-correct","received_time":1234}')
 
     def _trained_generation(self):
         agent = self.store.create_agent(support.agent(target_entity=self.entities[0]))

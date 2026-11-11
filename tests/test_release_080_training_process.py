@@ -682,7 +682,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                            qualify=False, concurrent_writes=False,
                            corruption_recovery=False, corrupt_table_page=False,
                            two_agents=False, http_gap=False, kill_and_restart=False,
-                           expect_unavailable=False):
+                           expect_unavailable=False, large_noise_rows=0):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -729,6 +729,30 @@ class ActualWorkerSmoke(unittest.TestCase):
                     {}, None, "test",
                 ))
             store.archive_batch(rows)
+            source_table_rows = {}
+            other_model_before = None
+            if large_noise_rows:
+                other = store.create_agent(dict(name='Unrelated history owner',target_entity='switch.unrelated',
+                    target_property='power',min_value=0,max_value=1,deadband=.5,exploration_step=1,
+                    confidence_threshold=.78,action_interval=30,input_entities=['sensor.noise_0']))
+                store.save_model(other['id'],dict(marker='untouched-other-agent'))
+                other_model_before = store.get_model(other['id'])
+                # Streaming fixture construction is outside measured worker time.
+                with store.conn() as conn:
+                    conn.executemany('INSERT INTO entity_history(entity_id,ts,state,attributes_json,source) VALUES(?,?,?,?,?)',
+                        ((f'sensor.noise_{i%98}',base-10_000_000+i,'1','{}','synthetic') for i in range(int(large_noise_rows))))
+                    conn.executemany('INSERT INTO historical_experiences(agent_id,target_history_id,created_at,action_index,action_value,reward,dwell_seconds,features_json) VALUES(?,?,?,?,?,?,?,?)',
+                        ((other['id'],10_000_000+i,'fixture',0,0.,1.,30.,'{}') for i in range(100000)))
+                    conn.executemany('INSERT INTO feature_observation_events VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                        ((f'noise:{i}',12,f'sensor.noise_{i%98}',base-1_000_000+i,base-1_000_000+i,'1','{}',None,None,'synthetic',1.,0.) for i in range(100000)))
+                    conn.executemany('INSERT INTO events(agent_id,created_at,level,kind,message,data_json) VALUES(?,?,?,?,?,?)',
+                        ((other['id'],'fixture','info','unrelated','noise','{}') for _ in range(50000)))
+                    conn.executemany('INSERT INTO rl_feedback(agent_id,created_at,action_index,action_value,reward,reason,features_json,user_id,source) VALUES(?,?,?,?,?,?,?,?,?)',
+                        ((other['id'],'fixture',0,0.,-1.,'Correct','{}','resident','manual_feedback') for _ in range(1000)))
+                    names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+                    source_table_rows = {name:conn.execute('SELECT COUNT(*) FROM "'+name+'"').fetchone()[0] for name in names}
+                store.add_feedback(agent['id'],0,0.,-1.,'Correct',{0:1.},user_id='resident',source='manual_feedback')
+                source_table_rows['rl_feedback'] += 1
 
             state_map = {
                 "binary_sensor.motion": {
@@ -785,9 +809,9 @@ class ActualWorkerSmoke(unittest.TestCase):
                     "progress_hi": 1.0,
                     "progress_label": "Worker smoke",
                 },
-                "status_path": str(Path(root) / "status.json"),
-                "result_path": str(Path(root) / "result.json"),
-                "log_path": str(Path(root) / "worker.log"),
+                "status_path": str((Path(root)/'jobs' if large_noise_rows else Path(root)) / "status.json"),
+                "result_path": str((Path(root)/'jobs' if large_noise_rows else Path(root)) / "result.json"),
+                "log_path": str((Path(root)/'jobs' if large_noise_rows else Path(root)) / "worker.log"),
             }
             job["checksum"] = descriptor_checksum(job)
             job_path = Path(root) / "job.json"
@@ -883,6 +907,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 ]
                 env["PYTHONHASHSEED"] = "0"
             started = time.perf_counter()
+            try:
+                import resource
+                child_usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
+            except ImportError:
+                child_usage_before = None
             if kill_and_restart:
                 # Keep an actual usable previous model, not just a UI status.
                 store.save_model(agent['id'],healthy_model)
@@ -917,16 +946,28 @@ class ActualWorkerSmoke(unittest.TestCase):
             writer_stop = threading.Event()
             writes = []
             writer_errors = []
+            realtime_rows, ui_latency, writer_latency = [], [], []
 
             def write_metadata():
                 try:
-                    with sqlite3.connect(db, timeout=10) as connection:
+                    with sqlite3.connect(db, timeout=10) as connection, sqlite3.connect(db,timeout=1) as ui:
                         while not writer_stop.wait(.01):
+                            began=time.perf_counter()
                             connection.execute(
                                 "INSERT OR REPLACE INTO app_meta(key,value) VALUES('concurrent_probe',?)",
                                 (str(len(writes)),),
                             )
+                            if corruption_recovery:
+                                stamp=job['end_ts']+1+len(realtime_rows)
+                                connection.execute("INSERT INTO entity_history(entity_id,ts,received_ts,state,attributes_json,source) VALUES('sensor.realtime_probe',?,?,?,'{}','live')",
+                                                   (stamp,stamp,str(len(realtime_rows))))
                             connection.commit()
+                            writer_latency.append(time.perf_counter()-began)
+                            if corruption_recovery:
+                                realtime_rows.append(stamp)
+                                began=time.perf_counter()
+                                ui.execute('SELECT training_cursor_ts,mode FROM agents WHERE id=?',(agent['id'],)).fetchone()
+                                ui_latency.append(time.perf_counter()-began)
                             writes.append(1)
                     connection.close()
                 except Exception as exc:
@@ -951,6 +992,9 @@ class ActualWorkerSmoke(unittest.TestCase):
                     writer.join(15)
                     self.assertFalse(writer.is_alive())
             self.assertEqual(writer_errors, [])
+            if realtime_rows:
+                with store.conn() as conn:
+                    self.assertEqual(conn.execute("SELECT COUNT(*) FROM entity_history WHERE entity_id='sensor.realtime_probe'").fetchone()[0],len(realtime_rows))
             elapsed = time.perf_counter() - started
             if expect_unavailable:
                 self.assertNotEqual(completed.returncode,0,completed.stdout)
@@ -990,6 +1034,14 @@ class ActualWorkerSmoke(unittest.TestCase):
                 for key in ("version", "actions", "horizons", "schema", "heads")
             }
             trained_agent = store.get_agent_config(agent["id"])
+            child_metrics = dict(cpu_seconds=None,peak_rss_mb=None)
+            if child_usage_before is not None:
+                usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+                child_metrics = dict(cpu_seconds=usage.ru_utime+usage.ru_stime-child_usage_before.ru_utime-child_usage_before.ru_stime,
+                                     peak_rss_mb=usage.ru_maxrss/1024.)
+            if other_model_before is not None:
+                self.assertEqual(store.get_model(other['id']),other_model_before)
+                self.assertEqual(len(store.list_feedback(agent['id'])),1)
             return {
                 "agent_mode": trained_agent["mode"],
                 "agent_progress": trained_agent["training_progress"],
@@ -1005,6 +1057,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "benchmark_counts": model.get("_benchmark_counts"),
                 "frozen_holdout_counts": model.get("_frozen_holdout_counts"),
                 "history_recovery": result.get('history_recovery'),
+                "worker_resource_metrics": child_metrics,
+                "source_table_rows": source_table_rows,
+                "realtime_simulation": dict(ha_rows_written=len(realtime_rows),ui_reads=len(ui_latency),
+                    ui_read_max_seconds=max(ui_latency,default=0.),writer_max_seconds=max(writer_latency,default=0.),
+                    loss=0 if not writer_errors else None,environment='host SQLite ingress/read simulation; not physical Pi'),
             }
 
 

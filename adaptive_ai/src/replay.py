@@ -1043,7 +1043,7 @@ class SQLiteTemporalTracker:
         self.conn.row_factory = sqlite3.Row
         self._archive_received_index = bool(self.conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='index' "
-            "AND name='idx_entity_history_received_ts'").fetchone())
+            "AND name='idx_entity_history_received_ts' AND tbl_name='entity_history'").fetchone())
         context_options = dict(getattr(context, "options", {}) or {})
         # Keep the realtime/parent tracker at the historical 2 MB cache. Only an
         # isolated worker receives the larger effective value from its resource profile.

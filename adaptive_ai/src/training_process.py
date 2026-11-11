@@ -616,6 +616,13 @@ def _job_dir():
     return path
 
 
+def _generation_path(job):
+    # SQLite data has its own quota; it must not consume the 128 MiB JSON/log
+    # transport directory budget while a valid large generation is prepared.
+    result=Path(job['result_path']).resolve()
+    return result.parent/'history_generations'/result.with_suffix('.generation.db').name
+
+
 def _prune_job_files(keep=12):
     try:
         files = sorted(
@@ -783,6 +790,8 @@ def _apply_status(history, payload):
     kwargs = {key: payload[key] for key in allowed if key in payload}
     if kwargs:
         history.set_status(**kwargs)
+    if isinstance(payload.get('preparation'),dict):
+        history.training_process_status['preparation'] = dict(payload['preparation'])
     # Worker status is an observation, not authority to change the parent job's
     # clock, progress mapping or model. Keep fractional throughput and live profiling
     # while allowing the parent to calculate its complete-pass ETA exactly once.
@@ -1446,9 +1455,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             log_writer.join(1)
         history.active_training_process = None
         if job.get('training_generation') and process.poll() is not None:
-            generation = Path(job['result_path']).with_suffix('.generation.db').resolve()
+            generation = _generation_path(job)
             # Only this job's disposable generation is removed, never source DB/WAL.
-            if generation.parent == Path(job['result_path']).resolve().parent:
+            if generation.parent.parent == Path(job['result_path']).resolve().parent:
                 for suffix in ('','-wal','-shm','-journal'):
                     try:
                         Path(str(generation)+suffix).unlink(missing_ok=True)
@@ -1516,7 +1525,7 @@ def _worker_configure_budget():
     return TRAINING_BUDGET
 
 
-def _worker_boot_status(job, message, *, stage, progress=None):
+def _worker_boot_status(job, message, *, stage, progress=None, **details):
     """Write a tiny heartbeat before HistoryManager exists.
 
     This deliberately avoids importing or serializing the runtime status graph so a
@@ -1536,15 +1545,20 @@ def _worker_boot_status(job, message, *, stage, progress=None):
         "updated_at": now_ts(),
         "bootstrap_stage": str(stage),
     }
+    if job.get('_preparation_complete'):
+        payload['progress']=min(.99,.1+.9*float(payload['progress']))
+    payload.update(details)
     _atomic_json(job["status_path"], payload)
 
 
-def _worker_status_writer(history, status_path):
+def _worker_status_writer(history, status_path, *, preparation_fraction=0.):
     original = history.set_status
 
     def set_status(*args, **kwargs):
         result = original(*args, **kwargs)
         payload = history.status()
+        if preparation_fraction:
+            payload['progress']=min(.99,preparation_fraction+(1-preparation_fraction)*float(payload.get('progress') or 0.))
         payload["worker_pid"] = os.getpid()
         payload["updated_at"] = now_ts()
         _atomic_json(status_path, payload)
@@ -1617,12 +1631,15 @@ def worker_main(job_path):
     if job.get('training_generation'):
         _worker_configure_budget().begin(thread_name='adaptive-ai-index-process')
         from history_recovery import prepare_generation, RecoveryUnavailable
-        generation_path = str(Path(job['result_path']).with_suffix('.generation.db'))
+        generation_path = str(_generation_path(job))
         _worker_boot_status(job, 'Preparing consistent training generation', stage='history_recovery')
         agent = STORE.get_agent_config(str(job['agent_id']))
         entities = training_history_scope(job, STORE)
         def recovery_progress(**fields):
-            _worker_boot_status(job, fields.get('message', 'Recovering history'), stage='history_recovery')
+            _worker_boot_status(job, fields.get('message', 'Recovering history'), stage='history_recovery',
+                                progress=fields.get('progress'),phase_detail=fields.get('phase_detail'),
+                                work_done=fields.get('work_done',0),work_total=0,
+                                work_unit='selected records',preparation=fields.get('preparation'))
         parent = int(job.get('parent_pid') or 0)
         try:
             generation_report = prepare_generation(
@@ -1630,6 +1647,7 @@ def worker_main(job_path):
                 float(job.get('sequence_start_ts', job['start_ts'])),
                 float(job.get('sequence_target_end_ts', job['end_ts'])), options=OPTIONS,
                 agent_id=str(job['agent_id']),
+                rebuild=bool(job.get('generation_rebuild')),
                 cancelled=lambda: bool(parent and not _same_process_alive(parent, job.get('parent_start_token'))),
                 progress=recovery_progress,
                 http_gaps=json.loads(STORE.meta_get('training_history_gaps_v1', '[]'))
@@ -1650,6 +1668,7 @@ def worker_main(job_path):
         STORE._load_meta_cache()
         if job.get('generation_rebuild'):
             STORE.clear_learning(str(job['agent_id']))
+        job['_preparation_complete']=True
     STORE.checkpointed_archive_reads = True
     engine = TrainingWorkerEngine(job, STORE)
     # Use the exact parent automation snapshot, including enabled controllers and
@@ -1696,7 +1715,10 @@ def worker_main(job_path):
         seed = job["schema_cache_item"].get("model")
         if isinstance(seed, dict) and not seed.get("heads"):
             history._remember_training_schema(STORE.get_agent_config(aid), seed)
-    _worker_status_writer(history, job["status_path"])
+    if generation_report is not None:
+        _worker_status_writer(history, job["status_path"],preparation_fraction=.1)
+    else:
+        _worker_status_writer(history, job["status_path"])
 
     expected_agent = str(job["agent_fingerprint"])
 
