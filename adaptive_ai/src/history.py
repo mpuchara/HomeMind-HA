@@ -1,6 +1,7 @@
 from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
+from contextlib import closing
 from datetime import datetime, timezone
 import gc
 import json
@@ -60,6 +61,10 @@ class DiscoveryRecorderHTTP500(DiscoveryRecorderIncomplete):
 
 class TrainingRecorderUnavailable(RuntimeError):
     """The training import exhausted its consecutive Recorder failure budget."""
+
+
+class TrainingImportWriteCorruption(RuntimeError):
+    """A local SQLite write failed while importing Recorder history."""
 
 
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
@@ -1068,7 +1073,9 @@ class HistoryManager(threading.Thread):
             )
         except Exception as exc:
             if is_sqlite_corruption(exc):
-                raise
+                raise TrainingImportWriteCorruption(
+                    "SQLite corruption while saving Recorder coverage"
+                ) from exc
             # Coverage persistence may only affect performance. Never fail explicit Train
             # after Recorder data has already been imported successfully.
             return False
@@ -1271,7 +1278,8 @@ class HistoryManager(threading.Thread):
                         progress_lo=ranges[2][0], progress_hi=ranges[2][1],
                     )
             self.refresh_archive_cache()
-        except (StoragePressure, TrainingRecorderUnavailable, InterruptedError):
+        except (StoragePressure, TrainingRecorderUnavailable, TrainingImportWriteCorruption,
+                InterruptedError):
             raise
         except Exception as exc:
             # A failed Recorder request can leave a usable local archive. A
@@ -1310,9 +1318,30 @@ class HistoryManager(threading.Thread):
             work_done=0, work_total=0, stage_eta_seconds=0,
             eta_source="measuring Recorder import", phase_detail="Preparing Recorder history for the selected agent",
         )
-        self._refresh_agent_history(
-            agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
-        )
+        try:
+            self._refresh_agent_history(
+                agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
+            )
+        except TrainingImportWriteCorruption as exc:
+            # The read path can still work when the import touches a damaged index
+            # or other page only needed by writes. Keep a working model on Rebuild.
+            print(f"[history] {exc}", flush=True)
+            if rebuild and STORE.get_model(agent_id) is not None:
+                raise TrainingImportWriteCorruption(
+                    f"{exc}; use Resume to keep the existing model"
+                ) from exc
+            target = agent["target_entity"]
+            with closing(STORE.archive_iter(start_ts, target_end, [target], chunk_size=100)) as rows:
+                if next(rows, None) is None or next(rows, None) is None:
+                    raise TrainingImportWriteCorruption(
+                        f"{exc}; insufficient readable local target history"
+                    ) from exc
+            self.training_job_timings["recorder_import_fallback"] = "local_archive"
+            STORE.event(
+                agent_id, "warning", "agent_training_local_archive",
+                f"{exc}; replay will use the committed local archive",
+                {"trace": traceback.format_exc(limit=8)},
+            )
         self.set_status(
             progress=0.10 + 0.90 * float(getattr(self, "training_job_start_progress", 0) or 0),
             message=f"Training {agent['name']}: history prepared; starting replay",
@@ -1953,13 +1982,20 @@ class HistoryManager(threading.Thread):
                     eta_source='waiting for storage recovery', stage_eta_seconds=None,
                 )
             write_batch = (lambda: STORE.archive_packed_batch(rows)) if staged else (lambda: STORE.archive_batch(rows))
-            if explicit and profile.get('capacity_wait_seconds', 0) > 0:
-                written += run_storage_write(STORE, write_batch,
-                    self.stop_event, self.job_cancel_event,
-                    capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
-            else:
-                written += run_storage_write(STORE, write_batch,
-                    self.stop_event, self.job_cancel_event)
+            try:
+                if explicit and profile.get('capacity_wait_seconds', 0) > 0:
+                    written += run_storage_write(STORE, write_batch,
+                        self.stop_event, self.job_cancel_event,
+                        capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
+                else:
+                    written += run_storage_write(STORE, write_batch,
+                        self.stop_event, self.job_cancel_event)
+            except sqlite3.DatabaseError as exc:
+                if explicit and is_sqlite_corruption(exc):
+                    raise TrainingImportWriteCorruption(
+                        "SQLite corruption while writing Recorder rows to entity_history"
+                    ) from exc
+                raise
             batches += 1
             max_batch_rows = max(max_batch_rows, count)
             rows.clear()

@@ -1,5 +1,9 @@
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
+## 0.15.3 — Trening z zapisanego archiwum po błędzie importu
+
+- Błąd uszkodzenia SQLite przy zapisie historii lub metadanych pokrycia pozwala użyć zapisanego archiwum, gdy dane celu dają się odczytać. Rebuild zachowuje istniejący model w tym scenariuszu i wskazuje Resume.
+
 ## 0.15.2 — Zapytania Recorder podczas treningu
 
 - Trening korzysta z tego samego odczytu bez stanu początkowego co discovery, również po podziale zapytań. Po 32 kolejnych HTTP 500 przygotowanie kończy się przed resetem uczenia.
