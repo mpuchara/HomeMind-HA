@@ -1810,12 +1810,19 @@ class ObservationSQLiteTemporalTracker(replay_module.SQLiteTemporalTracker):
         super().__init__(*args, **kwargs)
         try:
             row = self.conn.execute(
-                "SELECT 1 FROM sqlite_master "
-                "WHERE type='table' AND name='feature_observation_events' LIMIT 1"
+                "SELECT type FROM sqlite_master "
+                "WHERE type IN ('table','view') AND name='feature_observation_events' LIMIT 1"
             ).fetchone()
             self._feature_journal_available = bool(row)
+            self._feature_journal_view = bool(row and row[0]=='view')
         except sqlite3.Error:
             self._feature_journal_available = False
+
+    def _fetch_rows(self, sql, params):
+        if getattr(self, '_feature_journal_view', False):
+            sql = sql.replace('feature_observation_events INDEXED BY idx_feature_obs_entity_received_time',
+                              'feature_observation_events')
+        return super()._fetch_rows(sql, params)
 
     @staticmethod
     def _row_order(row):
