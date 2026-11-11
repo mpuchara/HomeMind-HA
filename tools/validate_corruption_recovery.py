@@ -20,15 +20,15 @@ def main():
         ('kill_and_restart', dict(corrupt_table_page=True,two_agents=True,kill_and_restart=True)),
     ):
         started = time.monotonic()
-        results[name] = fixture.run_worker_fixture(samples=480,corruption_recovery=True,qualify=True,**kwargs)
+        results[name] = fixture.run_worker_fixture(samples=480,corruption_recovery=True,qualify=True,inherit_storage_budget=True,**kwargs)
         results[name]['validation_wall_seconds'] = time.monotonic()-started
         assert results[name]['agent_mode'] == 'shadow', results[name]
         assert results[name]['agent_progress'] == 1.0, results[name]
         print(name, results[name]['learning_hash'],flush=True)
     assert results['healthy']['learning_hash']==results['index']['learning_hash']
     assert results['table_two_agents']['history_recovery']['gaps']
-    results['insufficient'] = fixture.run_worker_fixture(samples=2,corruption_recovery=True,qualify=True,expect_unavailable=True)
-    path = ROOT/'docs/benchmarks/corruption-recovery-0157.json'
+    results['insufficient'] = fixture.run_worker_fixture(samples=2,corruption_recovery=True,qualify=True,expect_unavailable=True,inherit_storage_budget=True)
+    path = ROOT/'docs/benchmarks/corruption-recovery-0158.json'
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(results,indent=2),encoding='utf-8')
     print(path)

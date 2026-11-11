@@ -150,6 +150,30 @@ class StorageBudget:
         return {'ADAPTIVE_AI_STORAGE_WORKER': '1',
                 'ADAPTIVE_AI_STORAGE_BUDGET': json.dumps(data, separators=(',', ':'))}
 
+    def generation_budget(self, path, maximum_bytes):
+        """Retarget trusted frozen policy to an owned generation, not env input.
+
+        The inherited environment remains bound to the original database. Parsing
+        it again for a different filename is correctly rejected. Copy only the
+        already-validated policy; metrics, locks and file ownership stay separate.
+        """
+        if self.mode=='auto' and self.auto_pool_bytes is None:
+            self.sample()
+        child=object.__new__(StorageBudget)
+        child.__dict__=dict(self.__dict__)
+        child.path=Path(path)
+        child.db_limit=min(self.db_limit,max(4096,int(maximum_bytes)))
+        child.lock=threading.Lock()
+        child.local=threading.local()
+        child.recovery_event=None
+        child.training_process=True
+        child._last_sample_at=float('-inf')
+        child._unchecked_payload_bytes=0
+        child.stats=dict(level='normal',reason=None,blocked_writes=0,
+            db_bytes=0,database_used_bytes=0,wal_bytes=0,free_bytes=None,
+            sample_error=None,page_observations=0,readonly_page_observations_skipped=0)
+        return child
+
     @contextmanager
     def maintenance(self, *, update_tables=()):
         previous = getattr(self.local, 'maintenance', False)
@@ -221,6 +245,23 @@ class StorageBudget:
         )
         error.reason = reason
         return error
+
+    def check_operation(self, operation, *, refresh=True):
+        """Admission by affected file, without weakening source write protection.
+
+        Reads cannot grow the DB. Isolated writes have their own page/directory
+        cap, but share the free-space reserve. A WAL pause is returned so the
+        supervisor can release all source readers and defer the same descriptor.
+        """
+        if operation not in ('source_read', 'generation_write', 'checkpoint'):
+            raise ValueError('Unknown storage operation')
+        due=refresh or time.monotonic()-self._last_sample_at>=SAMPLE_INTERVAL_SECONDS
+        data=self.sample() if due else self.snapshot()
+        if (data.get('sample_error') or (data.get('free_bytes') or 0)<self.reserve):
+            raise self.pressure(data.get('reason') or 'disk_reserve')
+        if operation=='checkpoint':
+            return data['level']
+        return data['level'] if data.get('reason')=='wal_budget' else 'normal'
 
     def check(self, parameters=(), *, refresh=True):
         payload_bytes = _payload_bytes(parameters)

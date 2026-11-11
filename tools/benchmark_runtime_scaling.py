@@ -25,7 +25,7 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
         candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None,
-        event_timeout=30., matched_updates=0, matched_writes=1, correct_every=25, candidate_limit=None):
+        event_timeout=30., matched_updates=0, matched_writes=1, correct_every=25, candidate_limit=None, history_preparation=False):
     if not 30. <= event_timeout <= 120.:
         raise ValueError('event observation timeout must be 30..120 seconds')
     if not 0 <= matched_updates <= 256 or not 0 <= matched_writes <= max(1, matched_updates):
@@ -34,7 +34,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         raise ValueError('matched workload requires training, agents and at most 100 steps')
     if correct_every < 1 or (candidate_limit is not None and not 0 <= candidate_limit <= count):
         raise ValueError('invalid Correct cadence or Candidate count')
-    with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
+    with tempfile.TemporaryDirectory(prefix='hm-scaling-',ignore_cleanup_errors=(os.name=='nt')) as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
         logical_time = [1793275200.]
@@ -153,6 +153,50 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             engine.agent_candidates.invalidate_candidate_shadow_cache()
         # An isolated real policy fit plus normal durable model writes overlaps
         # Root inference. This is not a HistoryManager 14-day import benchmark.
+        ui_http_ms, ingress_write_ms = [], []
+        preparation_stats=dict(runs=0,errors=[],elapsed_seconds=[],wal_peak_bytes=0,snapshot_max_seconds=0.)
+        if history_preparation:
+            if not training or not trained:
+                raise ValueError('History preparation requires concurrent policy training')
+            # Same archived target/context records in both compared implementations.
+            selected,sensors=trained[0]
+            rows=[]
+            for tick in range(10000):
+                for entity in (selected['target_entity'],sensors[0]):
+                    rows.append((entity,1700000000.+tick,'on' if tick%2 else 'off',{},None,'ha_history_full'))
+            store.archive_batch(rows)
+            checkpoint=store._wal_checkpoint_worker
+            checkpoint.POLL_SECONDS=.05
+            checkpoint.THRESHOLD_PAGES=1
+            checkpoint.MAX_IDLE_SECONDS=1.
+            from http.server import ThreadingHTTPServer
+            from urllib.request import urlopen
+            shipped.set_startup('ready',7,'Host WAL fixture ready',ready=True)
+            ui_server=ThreadingHTTPServer(('127.0.0.1',0),shipped.Handler)
+            ui_server.daemon_threads=True
+            ui_server_thread=threading.Thread(target=ui_server.serve_forever,daemon=True)
+            ui_server_thread.start()
+            def close_ui():
+                ui_server.shutdown()
+                ui_server.server_close()
+                ui_server_thread.join(5)
+            stack.callback(close_ui)
+            ui_url='http://127.0.0.1:'+str(ui_server.server_port)+'/api/agents'
+            prep_root=Path(data)/'history_generations'
+            prep_root.mkdir()
+            def prepare_history():
+                from history_recovery import prepare_generation
+                began=time.perf_counter()
+                destination=prep_root/('probe-'+str(preparation_stats['runs'])+'.db')
+                with patch('storage_files.worker_storage_budget',return_value=store.storage_budget):
+                    report=prepare_generation(store.path,destination,[selected['target_entity'],sensors[0]],
+                        1700000000.,1700010000.,agent_id=selected['id'])
+                preparation_stats['runs']+=1
+                preparation_stats['elapsed_seconds'].append(time.perf_counter()-began)
+                lifecycle=report.get('snapshot_lifecycle') or {}
+                preparation_stats['snapshot_max_seconds']=max(preparation_stats['snapshot_max_seconds'],lifecycle.get('max_explicit_transaction_seconds',0.))
+                destination.unlink()
+                checkpoint.request_recovery()
         background_stop = threading.Event()
         background_stats = dict(updates=0, model_writes=0, correct_reads=0, correct_writes=0,
                                 correct_gaps=0, errors=[])
@@ -174,6 +218,8 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     frame[eid] = support.state(eid, 'on' if value else 'off', device_class='motion')
                 vectors.append(learning.features(frame, None, at_ts=time.time())[0])
             def update(tick, write):
+                if history_preparation and tick%32==0:
+                    prepare_history()
                 TRAINING_BUDGET.checkpoint('scaling_policy_fit')
                 learning.update(min(learning.horizons), tick%2, vectors[tick%2], 1., sample_ts=time.time())
                 background_stats['updates'] += 1
@@ -306,6 +352,17 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     time.sleep(.01)
                 if batches is not None:
                     batch['inference_observed_ns'] = time.perf_counter_ns() - matched_offset_ns
+                if history_preparation and step%10==0:
+                    probe_start=time.perf_counter()
+                    store.archive_batch([('sensor.ingress_probe',time.time(),str(step),{},None,'live')])
+                    ingress_write_ms.append((time.perf_counter()-probe_start)*1000)
+                    probe_start=time.perf_counter()
+                    with urlopen(ui_url,timeout=5) as response:
+                        assert response.status==200
+                        json.loads(response.read())
+                    ui_http_ms.append((time.perf_counter()-probe_start)*1000)
+                    wal_path=Path(store.path+'-wal')
+                    preparation_stats['wal_peak_bytes']=max(preparation_stats['wal_peak_bytes'],wal_path.stat().st_size if wal_path.exists() else 0)
                 if correct and trained and step % correct_every == 0:
                     stamp = time.time()
                     manager = engine.agent_candidates
@@ -378,6 +435,13 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             raise AssertionError(('matched background counts differ from plan', background_stats))
         if training and not background_stats['updates']:
             raise AssertionError('No concurrent policy training executed')
+        ingress_loss=0
+        if history_preparation:
+            with store.conn() as connection:
+                recorded=connection.execute("SELECT COUNT(*) FROM entity_history WHERE entity_id='sensor.ingress_probe'").fetchone()[0]
+            ingress_loss=len(ingress_write_ms)-recorded
+            if ingress_loss:
+                raise AssertionError(('WAL fixture lost recorded ingress',ingress_loss))
         metrics = TELEMETRY.snapshot()
         try:
             import resource
@@ -399,7 +463,10 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             production_thread_settings=not legacy_thread_settings,
             concurrent_policy_training=training, correct_reads_enabled=correct,
             collector_enabled=collector,collector=(historical.diagnostics() if historical is not None else None),
-            background_work=background_stats, candidate_count=len(candidate_ids),
+            background_work=background_stats, history_preparation=preparation_stats, candidate_count=len(candidate_ids),
+            ui_http=dict(endpoint='/api/agents',environment='loopback shipped Handler; not Supervisor ingress',
+                         samples=len(ui_http_ms),max_ms=max(ui_http_ms,default=0.),**quantiles(ui_http_ms)),
+            ingress_archive_write=dict(samples=len(ingress_write_ms),loss=ingress_loss,max_ms=max(ingress_write_ms,default=0.),**quantiles(ingress_write_ms)),
             matched_workload=(dict(updates_per_step=matched_updates, model_writes_per_step=matched_writes,
                                    queue_capacity=1, correct_every=correct_every, batches=matched_timeline)
                               if matched_updates else None),
@@ -464,6 +531,7 @@ if __name__ == '__main__':
     p.add_argument('--legacy-storage-startup', action='store_true', help='Reproduce old fixture omission')
     p.add_argument('--legacy-lineage', action='store_true', help='Reproduce unregistered fixture agents')
     p.add_argument('--candidates', action='store_true')
+    p.add_argument('--history-preparation', action='store_true', help='Real history generation during policy training, on the same WAL source')
     p.add_argument('--training', action='store_true', help='Concurrent isolated real policy fit/model writes')
     p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
     p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
@@ -486,5 +554,5 @@ if __name__ == '__main__':
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
                   a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count,a.event_timeout,
-                  a.matched_updates,a.matched_writes,a.correct_every,a.candidate_limit))
+                  a.matched_updates,a.matched_writes,a.correct_every,a.candidate_limit,a.history_preparation))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

@@ -122,6 +122,8 @@ def install_context_events(service):
     original_sync = service.sync_agent
     original_observe = service.observe_shadow
     event_tls = threading.local()
+    event_state_lock=threading.RLock()
+    event_state_revision=[0]
 
     def decode_event_state(row):
         if not row:
@@ -136,31 +138,44 @@ def install_context_events(service):
     @contextmanager
     def event_state_scope(agent_id, entity_ids):
         previous = getattr(event_tls, 'frame', None)
+        previous_revision=getattr(event_tls,'frame_revision',None)
         aid = str(agent_id)
         if previous is not None and previous[0] == aid:
             yield
             return
         ids = list(dict.fromkeys(str(eid) for eid in entity_ids))[:128]
-        frame = {}
-        if ids:
-            marks = ','.join('?' for _ in ids)
-            with service.store.conn() as c:
-                rows = c.execute(
-                    f'SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id IN ({marks})',
-                    (aid, *ids),
-                ).fetchall()
-            frame = {eid: _event_state_defaults() for eid in ids}
-            frame.update({str(row['entity_id']): decode_event_state(row) for row in rows})
-        event_tls.frame = (aid, frame)
+        with event_state_lock:
+            frame = {}
+            if ids:
+                marks = ','.join('?' for _ in ids)
+                with service.store.conn() as c:
+                    rows = c.execute(
+                        f'SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id IN ({marks})',
+                        (aid, *ids),
+                    ).fetchall()
+                frame = {eid: _event_state_defaults() for eid in ids}
+                frame.update({str(row['entity_id']): decode_event_state(row) for row in rows})
+            event_tls.frame = (aid, frame)
+            event_tls.frame_revision=event_state_revision[0]
         try:
             yield
         finally:
             event_tls.frame = previous
+            event_tls.frame_revision=previous_revision
 
     def read_event_state(agent_id, entity_id):
         frame = getattr(event_tls, 'frame', None)
         if frame is not None and frame[0] == str(agent_id) and str(entity_id) in frame[1]:
-            return dict(frame[1][str(entity_id)])
+            with event_state_lock:
+                if getattr(event_tls,'frame_revision',None)!=event_state_revision[0]:
+                    ids=list(frame[1])
+                    marks=','.join('?' for _ in ids)
+                    with service.store.conn() as c:
+                        rows=c.execute(f'SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id IN ({marks})',(str(agent_id),*ids)).fetchall()
+                    frame[1].update({eid:_event_state_defaults() for eid in ids})
+                    frame[1].update({str(row['entity_id']):decode_event_state(row) for row in rows})
+                    event_tls.frame_revision=event_state_revision[0]
+                return dict(frame[1][str(entity_id)])
         with service.store.conn() as c:
             row = c.execute(
                 "SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id=?",
@@ -172,6 +187,10 @@ def install_context_events(service):
         return decoded
 
     def save_event_state(agent_id, entity_id, row):
+        with event_state_lock:
+            return _save_event_state(agent_id,entity_id,row)
+
+    def _save_event_state(agent_id, entity_id, row):
         now = time.time()
         with service.store.lock, service.store.conn() as c:
             c.execute(
@@ -192,6 +211,8 @@ def install_context_events(service):
                 ),
             )
 
+        event_state_revision[0]+=1
+        event_tls.frame_revision=event_state_revision[0]
         frame = getattr(event_tls, 'frame', None)
         if frame is not None and frame[0] == str(agent_id) and (str(entity_id) in frame[1] or len(frame[1]) < 128):
             frame[1][str(entity_id)] = dict(row)
@@ -302,7 +323,16 @@ def install_context_events(service):
 
     service.store.event = event_with_numeric_contract
 
-    def ensure_started_event(agent, tournament, entity_id):
+    started_event_lock=event_state_lock
+
+    def ensure_started_event(agent,tournament,entity_id):
+        # A started event belongs to (agent, challenger, evaluation), not a
+        # training process. Keep distinct challengers, serialize only this rare
+        # state transition to avoid duplicate starts from concurrent observers.
+        with started_event_lock:
+            return _ensure_started_event(agent,tournament,entity_id)
+
+    def _ensure_started_event(agent, tournament, entity_id):
         aid = str(agent["id"])
         actions = [float(x) for x in action_values(agent)]
         if not actions:
@@ -311,7 +341,7 @@ def install_context_events(service):
         started = _finite(model.get("evaluation_started_ts"))
         if started is None:
             return
-        row = read_event_state(aid, entity_id)
+        row=read_event_state(aid,entity_id)
         if row.get("evaluation_started_ts") == started:
             return
         cfg = tournament_config()

@@ -626,7 +626,7 @@ def _generation_path(job):
 def _prune_job_files(keep=12):
     try:
         files = sorted(
-            (p for p in _job_dir().glob("*") if p.is_file() and not p.is_symlink() and not p.name.startswith('.')),
+            (p for p in _job_dir().glob("*") if p.is_file() and not p.is_symlink() and not p.name.startswith(('.','resume-'))),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -986,6 +986,99 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     else:
         job = _build_job(history, start_ts, end_ts, kwargs)
     job_path = Path(job.pop("job_path"))
+    return _supervise_generation(history, start_ts, end_ts, job, job_path)
+
+
+def _resume_path(agent_id):
+    return _job_dir() / ('resume-'+hashlib.sha256(str(agent_id).encode()).hexdigest()[:24]+'.json')
+
+
+def pending_training_agents(store):
+    for path in _job_dir().glob('resume-*.json'):
+        item=_read_json(path,{}) or {}
+        if item.get('source')==str(Path(store.path).resolve()) and item.get('state') in ('running','waiting_wal'):
+            yield str(item['job']['agent_id'])
+
+
+def resume_deferred_training(history, agent_id):
+    from storage import STORE
+    item=_read_json(_resume_path(agent_id),{}) or {}
+    if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal'):
+        return False
+    job=item['job']
+    if item.get('state')=='running':
+        item['attempts']=int(item.get('attempts',0))+1
+    if job.get('app_version')!=APP_VERSION or job.get('agent_fingerprint')!=agent_config_fingerprint(STORE.get_agent_config(agent_id)):
+        _resume_path(agent_id).unlink(missing_ok=True)
+        raise StaleTrainingJob('Deferred training descriptor no longer matches agent/version',preserve_lifecycle=True)
+    job['parent_pid']=os.getpid()
+    job['parent_start_token']=_process_start_token(os.getpid())
+    _supervise_generation(history,job['start_ts'],job['end_ts'],job,Path(item['job_path']),item)
+    return True
+
+
+def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
+    from storage import STORE
+    from storage_budget import run_storage_write, require_storage_available
+    if not job.get('training_generation'):
+        return _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path)
+    marker=_resume_path(job['agent_id'])
+    state=dict(saved or {},source=str(Path(STORE.path).resolve()),job=job,job_path=str(job_path))
+    attempts=int(state.get('attempts',0))
+    stop=getattr(history,'stop_event',threading.Event())
+    cancel=getattr(history,'job_cancel_event',None)
+    while True:
+        if attempts>=5:
+            state.update(state='exhausted',attempts=attempts)
+            _atomic_json(marker,state)
+            exc=StoragePressure('WAL deferral retry limit exhausted; previous model retained; explicit retry required')
+            exc.reason='wal_retry_exhausted'
+            raise exc
+        state.update(state='running',attempts=attempts)
+        _atomic_json(marker,state)
+        try:
+            result=_run_isolated_training_attempt(history,start_ts,end_ts,job,job_path)
+            marker.unlink(missing_ok=True)
+            return result
+        except StoragePressure as exc:
+            if getattr(exc,'reason',None)!='wal_budget':
+                marker.unlink(missing_ok=True)
+                raise
+            attempts+=1
+            state.update(state='waiting_wal',attempts=attempts)
+            _atomic_json(marker,state)
+            worker=getattr(STORE,'_wal_checkpoint_worker',None)
+            if worker is not None:
+                worker.request_recovery()
+            def on_wait(data):
+                history.training_process_status={**getattr(history,'training_process_status',{}),
+                    'state':'waiting_wal','storage_retry_attempt':attempts,'storage_retry_limit':5,
+                    'message':'Waiting for WAL maintenance; committed preparation retained',
+                    'wal_bytes':data.get('wal_bytes')}
+            on_wait(STORE.storage_budget.snapshot())
+            # No child, source reader or Store lock is alive while waiting.
+            if stop.wait(min(8.,2.**attempts)) or (cancel is not None and cancel.is_set()):
+                marker.unlink(missing_ok=True)
+                raise InterruptedError('Deferred training cancelled')
+            try:
+                run_storage_write(STORE,lambda:require_storage_available(STORE),stop,cancel,
+                                  timeout=90.,on_wait=on_wait)
+            except StoragePressure as wait_error:
+                wait_error.reason='wal_wait_timeout'
+                state.update(state='exhausted')
+                _atomic_json(marker,state)
+                raise
+        except InterruptedError:
+            marker.unlink(missing_ok=True)
+            raise
+        except Exception:
+            marker.unlink(missing_ok=True)
+            raise
+
+
+def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
+    from storage import STORE
+    sequence_chunks=job.get('sequence_chunks')
     parallel_slots = max(
         1, int(getattr(history, "training_parallel_slot_count", 1) or 1)
     )
@@ -1037,6 +1130,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                     'Preparing an isolated consistent history generation',
                     dict(agent_id=agent_id,training_phase='history_recovery',query_start_ts=start_ts,query_end_ts=end_ts))
 
+    Path(job['result_path']).unlink(missing_ok=True)
     process = subprocess.Popen(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],
         cwd=str(Path(__file__).resolve().parent),
@@ -1284,8 +1378,10 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
 
         if result.get('generation_path'):
             from history_recovery import publish_generation
-            publish_generation(STORE, result['generation_path'], agent_id,
-                               job['agent_fingerprint'], agent_config_fingerprint)
+            from storage_budget import run_storage_write
+            run_storage_write(STORE,lambda:publish_generation(STORE,result['generation_path'],agent_id,
+                job['agent_fingerprint'],agent_config_fingerprint),
+                getattr(history,'stop_event',threading.Event()),getattr(history,'job_cancel_event',None))
             neural_service = getattr(history.engine,'tiny_mlp_shadow',None)
             if neural_service is not None and callable(getattr(neural_service,'invalidate',None)):
                 neural_service.invalidate(agent_id)
@@ -1656,14 +1752,14 @@ def worker_main(job_path):
         except Exception as exc:
             _atomic_json(job['result_path'], dict(format=RESULT_FORMAT, version=RESULT_VERSION,
                 job_id=job['job_id'], ok=False, error=f'{type(exc).__name__}: {exc}',
-                error_type=type(exc).__name__, trace=traceback.format_exc(limit=8)))
+                error_type=type(exc).__name__, storage_pressure_reason=getattr(exc,'reason',None), trace=traceback.format_exc(limit=8)))
             return 2
         # This is a fresh child: all subsequent Store, context, RAM index, temporal
         # and long-memory readers/writers share the SAME clean generation path.
         STORE.path = generation_path
         STORE.recovery_generation = True
-        from storage_budget import StorageBudget
-        STORE.storage_budget = StorageBudget(generation_path, OPTIONS)
+        generation_limit=max(16,min(2048,int(OPTIONS.get('max_recovery_disk_mb',512))))*1048576
+        STORE.storage_budget = STORE.storage_budget.generation_budget(generation_path,generation_limit)
         STORE._meta_cache.clear()
         STORE._load_meta_cache()
         if job.get('generation_rebuild'):

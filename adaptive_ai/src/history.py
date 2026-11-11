@@ -1296,6 +1296,10 @@ class HistoryManager(threading.Thread):
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
+        if OPTIONS.get('training_process_isolation',True):
+            from training_process import resume_deferred_training
+            if resume_deferred_training(self,agent_id):
+                return
         archive_start, archive_end = self._training_bounds()
         persisted_start = agent.get("training_window_start_ts")
         # Upgrade-safe clamp: an interrupted 10+ day job resumes inside the new rolling

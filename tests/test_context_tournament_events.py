@@ -9,7 +9,7 @@ from context_tournament_events import EVENT_MESSAGES, install_context_events
 class FakeStore:
     def __init__(self, agent):
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(':memory:')
+        self.db = sqlite3.connect(':memory:',check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.agent = dict(agent)
         self.events = []
@@ -203,6 +203,29 @@ class ContextTournamentEventTests(unittest.TestCase):
             len([e for e in self.service.store.events if e['kind'] == 'context_challenger_started']),
             count,
         )
+
+    def test_concurrent_start_for_same_evaluation_emits_once(self):
+        barrier=threading.Barrier(2)
+        errors=[]
+        def synchronize():
+            try:
+                barrier.wait(timeout=5)
+                self.service.sync_agent(self.service.agent)
+            except Exception as exc:
+                errors.append(exc)
+        threads=[threading.Thread(target=synchronize) for _ in range(2)]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join(5)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors,[])
+        self.assertEqual(len([e for e in self.service.store.events if e['kind']=='context_challenger_started']),1)
+
+    def test_distinct_challengers_at_same_time_keep_both_start_events(self):
+        self.service.models['sensor.old_challenger']['evaluation_started_ts']=900.
+        self.service.next_sync['challenger_features']=['sensor.new','sensor.old_challenger']
+        self.service.sync_agent(self.service.agent)
+        events=[e for e in self.service.store.events if e['kind']=='context_challenger_started']
+        self.assertEqual({e['data']['entity_id'] for e in events},{'sensor.new','sensor.old_challenger'})
 
     def test_completed_window_emits_prequential_evaluation_numbers(self):
         self.service.sync_agent(self.service.agent)

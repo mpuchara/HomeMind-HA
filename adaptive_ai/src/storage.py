@@ -747,6 +747,9 @@ class Store:
                             OR training_cursor_ts IS NULL)""",
                           (bounds[0], bounds[1], bounds[1], iso_now()))
 
+            from training_snapshot import install
+            install(c)
+
     def _load_meta_cache(self):
         with self.conn() as c:
             rows = c.execute("SELECT key,value FROM app_meta").fetchall()
