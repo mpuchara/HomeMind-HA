@@ -1,0 +1,3548 @@
+{
+  "healthy": {
+    "agent_mode": "shadow",
+    "agent_progress": 1.0,
+    "concurrent_writes": 0,
+    "version": "0.15.8",
+    "input_history_rows": 960,
+    "worker_wall_seconds": 4.9083825999405235,
+    "worker_phases": {
+      "benchmark_persist_seconds": 0.005694,
+      "causal_home_statistics": {
+        "compressed_bytes": 26150,
+        "contract": "causal_home_statistics_v1",
+        "cursor_bytes": 26705,
+        "cursor_entries": 2,
+        "cursor_hits": 1101,
+        "cursor_restores": 338,
+        "direct_sources": 1,
+        "max_bytes": 8388608,
+        "query_calls": 1439,
+        "query_rows": 2411,
+        "snapshots": 49,
+        "source_rows": 480
+      },
+      "causal_home_statistics_build_seconds": 0.045896,
+      "causal_home_statistics_reused": false,
+      "causal_home_statistics_validation_seconds": 1e-06,
+      "context_assessment_seconds": 0.0,
+      "context_entities_reconstructed_by_trackers": 1,
+      "context_screening_scope": "persisted_schema",
+      "continuation_cached_rows": 360,
+      "contract": "single_agent_training_phase_timing_v1",
+      "end_ts": 1700014400.0,
+      "experience_dedup_cache_hits": 0,
+      "experience_dedup_cached_ids": 0,
+      "experience_dedup_db_loads": 1,
+      "experience_dedup_load_seconds": 0.001017,
+      "feature_snapshot_build_seconds": 0.536819,
+      "feature_snapshot_builds": 1199,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 1199,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_session_builds_total": 1199,
+      "feature_snapshot_session_hits_total": 0,
+      "feature_snapshot_session_reused": false,
+      "feature_snapshot_unique_timestamps": 256,
+      "finalization_seconds": 0.2186,
+      "full_archive_count_skipped": true,
+      "heldout_fold_seconds": 3e-06,
+      "legacy_outer_stream_entity_count": 2,
+      "neural_finalize_requested": true,
+      "neural_train_samples_buffered": 769,
+      "policy_serialize_persist_seconds": 0.02015,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_load_seconds": 1e-06,
+      "provenance_loaded_rows": 0,
+      "qualification_seconds": 0.011461,
+      "ram_index_construction_seconds": 0.0313,
+      "ram_replay_actual_bytes": 57645,
+      "ram_replay_entities": 2,
+      "ram_replay_estimated_bytes": 60205,
+      "ram_replay_fallback": false,
+      "ram_replay_fallback_entities": 0,
+      "ram_replay_index_reused": false,
+      "ram_replay_lookup_seconds": 0.045987,
+      "ram_replay_lookups": 4317,
+      "ram_replay_rows": 960,
+      "replay_driver_rows_planned": 480,
+      "replay_driver_rows_processed": 480,
+      "replay_seconds": 3.8707,
+      "replay_stream_contract": "target_only_driver_v1",
+      "rewarded_dwells": 479,
+      "screening_rows": 0,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_lookups": 0,
+      "sqlite_fallback_seconds": 0.0,
+      "start_ts": 1699999995.0,
+      "target_entities": 1,
+      "tiny_mlp_finalization_deferred": false,
+      "tiny_mlp_finalization_seconds": 0.119575,
+      "total_seconds": 4.2147,
+      "tracker_init_seconds": 0.048609,
+      "transition_edge_cursor_rewinds": 0,
+      "transition_edge_entities": 1,
+      "transition_edge_estimated_bytes": 76800,
+      "transition_edge_fallback_entities": 0,
+      "transition_edge_index_construction_seconds": 0.0052,
+      "transition_edge_index_fallbacks": 0,
+      "transition_edge_index_hits": 959,
+      "transition_edge_index_lookups": 959,
+      "transition_edge_index_reused": false,
+      "transition_edge_rows_applied": 480,
+      "transition_edge_scan_rows_avoided_estimate": 230879,
+      "transition_edge_source_rows": 480
+    },
+    "worker_budget": {
+      "effective_training_duty_cycle": 0.7069,
+      "effective_training_wall_duty_cycle": 0.7069,
+      "interactive_cooldown_seconds": 0.1,
+      "interactive_epoch_escalations": 0,
+      "interactive_max_burst_seconds": 1.25,
+      "interactive_preemptions": 0,
+      "interactive_priority_epochs": 0,
+      "interactive_requests_suppressed": 0,
+      "interactive_sleep_seconds": 0.0,
+      "interactive_yield_quantum_ms": 35.0,
+      "last_checkpoint": "finalization_complete",
+      "max_continuous_work_ms": 35.0,
+      "max_observed_slice_ms": 221.3,
+      "max_throttle_sleep_seconds": 0.05,
+      "realtime_cooldown_seconds": 0.2,
+      "realtime_max_burst_seconds": 0.45,
+      "slice_checkpoints": 95,
+      "slice_overruns": 78,
+      "throttle_active_seconds": 3.134,
+      "throttle_batches": 95,
+      "throttle_sleep_seconds": 1.3,
+      "training_cpu_duty_cycle": 0.7,
+      "training_wall_duty_cycle_target": 0.7
+    },
+    "learning_hash": "87aced10cddfc9bc3d5e54fd6ccdd973df02fc4f66d666dd4c825e04c208cef7",
+    "benchmark_counts": {
+      "samples": 94,
+      "correct": 94,
+      "per_action": {
+        "1": {
+          "samples": 47,
+          "correct": 47
+        },
+        "0": {
+          "samples": 47,
+          "correct": 47
+        }
+      },
+      "automation_rules": 0,
+      "origin_counts": {
+        "anonymous_external": 94
+      }
+    },
+    "frozen_holdout_counts": {
+      "samples": 94,
+      "correct": 94,
+      "per_action": {
+        "1": {
+          "samples": 47,
+          "correct": 47
+        },
+        "0": {
+          "samples": 47,
+          "correct": 47
+        }
+      }
+    },
+    "history_recovery": {
+      "agent_id": "bc2cac32",
+      "archive_status": "HISTORY_OK",
+      "attempts": 0,
+      "availability": "HISTORY_OK",
+      "contract": "training-history-generation-v4",
+      "copy_tables": {
+        "agents": {
+          "bytes_copied": 467,
+          "copy_strategy": "all_controller_configuration",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "app_meta": {
+          "bytes_copied": 0,
+          "copy_strategy": "shared_training_context_keys",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "entity_history": {
+          "bytes_copied": 111840,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 960,
+          "source_rows_scanned": 960
+        },
+        "entity_history_revision": {
+          "bytes_copied": 32,
+          "copy_strategy": "single_archive_revision",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "events": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "feature_observation_events": {
+          "bytes_copied": 0,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "historical_experiences": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "model_backups": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_feedback": {
+          "bytes_copied": 0,
+          "copy_strategy": "correct_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_rebuild",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        }
+      },
+      "correct_agent_ids": [
+        "bc2cac32"
+      ],
+      "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+      "gaps": [],
+      "lock_wait_seconds": 0.0,
+      "model_fingerprint": null,
+      "preparation_cpu_seconds": 0.109375,
+      "quality": {
+        "benchmark_samples": 94,
+        "experiences": 479,
+        "segments": 1,
+        "skipped_records": null,
+        "status": "SUFFICIENT"
+      },
+      "recovered_records": 960,
+      "recovery_active_cpu_seconds": 0.0,
+      "recovery_wall_seconds": 0.2339999999385327,
+      "resumed": false,
+      "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+      "skipped_records": null,
+      "snapshot_lifecycle": {
+        "boundary": {
+          "end_ts": 1700014400.0,
+          "schema": {
+            "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+            "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+            "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+            "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+            "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+            "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+            "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+            "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+            "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+            "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+            "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+            "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+            "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+            "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+            "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+            "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+            "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+            "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+            "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+            "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+            "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+            "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+            "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+            "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+            "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0"
+          },
+          "tables": {
+            "entity_history": {
+              "epoch": 0,
+              "upper": 960
+            },
+            "feature_observation_events": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "historical_experiences": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_feedback": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_models": {
+              "epoch": 0,
+              "upper": 0
+            }
+          },
+          "token": "abfee14e6fcd4396afa19e14a53fc53c"
+        },
+        "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+        "max_explicit_transaction_seconds": 0.0009666001424193382,
+        "max_source_execute_seconds": 0.0,
+        "owned_generation_connections": 1,
+        "owned_source_connections": 1,
+        "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+        "source_readers_between_batches": 0,
+        "wal_peak_bytes": 0
+      },
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-bh5kd0rb\\adaptive_ai.db",
+      "source_signature": [
+        [
+          290816,
+          1794433479419698900
+        ],
+        null
+      ],
+      "sqlite_wait_estimated": true,
+      "sqlite_wait_seconds": 0.00012500002048909664,
+      "status": "TRAINED",
+      "throttle_seconds": 0.0
+    },
+    "worker_resource_metrics": {
+      "cpu_seconds": null,
+      "peak_rss_mb": null
+    },
+    "source_table_rows": {},
+    "realtime_simulation": {
+      "ha_rows_written": 0,
+      "ui_reads": 0,
+      "ui_read_max_seconds": 0.0,
+      "writer_max_seconds": 0.0,
+      "loss": 0,
+      "environment": "host SQLite ingress/read simulation; not physical Pi"
+    },
+    "validation_wall_seconds": 5.077999999979511
+  },
+  "index": {
+    "agent_mode": "shadow",
+    "agent_progress": 1.0,
+    "concurrent_writes": 0,
+    "version": "0.15.8",
+    "input_history_rows": 960,
+    "worker_wall_seconds": 4.936736000003293,
+    "worker_phases": {
+      "benchmark_persist_seconds": 0.005015,
+      "causal_home_statistics": {
+        "compressed_bytes": 26150,
+        "contract": "causal_home_statistics_v1",
+        "cursor_bytes": 26705,
+        "cursor_entries": 2,
+        "cursor_hits": 1101,
+        "cursor_restores": 338,
+        "direct_sources": 1,
+        "max_bytes": 8388608,
+        "query_calls": 1439,
+        "query_rows": 2411,
+        "snapshots": 49,
+        "source_rows": 480
+      },
+      "causal_home_statistics_build_seconds": 0.04295,
+      "causal_home_statistics_reused": false,
+      "causal_home_statistics_validation_seconds": 1e-06,
+      "context_assessment_seconds": 0.0,
+      "context_entities_reconstructed_by_trackers": 1,
+      "context_screening_scope": "persisted_schema",
+      "continuation_cached_rows": 360,
+      "contract": "single_agent_training_phase_timing_v1",
+      "end_ts": 1700014400.0,
+      "experience_dedup_cache_hits": 0,
+      "experience_dedup_cached_ids": 0,
+      "experience_dedup_db_loads": 1,
+      "experience_dedup_load_seconds": 0.000888,
+      "feature_snapshot_build_seconds": 0.535128,
+      "feature_snapshot_builds": 1199,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 1199,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_session_builds_total": 1199,
+      "feature_snapshot_session_hits_total": 0,
+      "feature_snapshot_session_reused": false,
+      "feature_snapshot_unique_timestamps": 256,
+      "finalization_seconds": 0.2047,
+      "full_archive_count_skipped": true,
+      "heldout_fold_seconds": 2e-06,
+      "legacy_outer_stream_entity_count": 2,
+      "neural_finalize_requested": true,
+      "neural_train_samples_buffered": 769,
+      "policy_serialize_persist_seconds": 0.017494,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_load_seconds": 1e-06,
+      "provenance_loaded_rows": 0,
+      "qualification_seconds": 0.012158,
+      "ram_index_construction_seconds": 0.0284,
+      "ram_replay_actual_bytes": 57645,
+      "ram_replay_entities": 2,
+      "ram_replay_estimated_bytes": 60205,
+      "ram_replay_fallback": false,
+      "ram_replay_fallback_entities": 0,
+      "ram_replay_index_reused": false,
+      "ram_replay_lookup_seconds": 0.047027,
+      "ram_replay_lookups": 4317,
+      "ram_replay_rows": 960,
+      "replay_driver_rows_planned": 480,
+      "replay_driver_rows_processed": 480,
+      "replay_seconds": 3.9994,
+      "replay_stream_contract": "target_only_driver_v1",
+      "rewarded_dwells": 479,
+      "screening_rows": 0,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_lookups": 0,
+      "sqlite_fallback_seconds": 0.0,
+      "start_ts": 1699999995.0,
+      "target_entities": 1,
+      "tiny_mlp_finalization_deferred": false,
+      "tiny_mlp_finalization_seconds": 0.104649,
+      "total_seconds": 4.3157,
+      "tracker_init_seconds": 0.045505,
+      "transition_edge_cursor_rewinds": 0,
+      "transition_edge_entities": 1,
+      "transition_edge_estimated_bytes": 76800,
+      "transition_edge_fallback_entities": 0,
+      "transition_edge_index_construction_seconds": 0.0054,
+      "transition_edge_index_fallbacks": 0,
+      "transition_edge_index_hits": 959,
+      "transition_edge_index_lookups": 959,
+      "transition_edge_index_reused": false,
+      "transition_edge_rows_applied": 480,
+      "transition_edge_scan_rows_avoided_estimate": 230879,
+      "transition_edge_source_rows": 480
+    },
+    "worker_budget": {
+      "effective_training_duty_cycle": 0.7054,
+      "effective_training_wall_duty_cycle": 0.7054,
+      "interactive_cooldown_seconds": 0.1,
+      "interactive_epoch_escalations": 0,
+      "interactive_max_burst_seconds": 1.25,
+      "interactive_preemptions": 0,
+      "interactive_priority_epochs": 0,
+      "interactive_requests_suppressed": 0,
+      "interactive_sleep_seconds": 0.0,
+      "interactive_yield_quantum_ms": 35.0,
+      "last_checkpoint": "finalization_complete",
+      "max_continuous_work_ms": 35.0,
+      "max_observed_slice_ms": 201.5,
+      "max_throttle_sleep_seconds": 0.05,
+      "realtime_cooldown_seconds": 0.2,
+      "realtime_max_burst_seconds": 0.45,
+      "slice_checkpoints": 97,
+      "slice_overruns": 80,
+      "throttle_active_seconds": 3.16,
+      "throttle_batches": 97,
+      "throttle_sleep_seconds": 1.32,
+      "training_cpu_duty_cycle": 0.7,
+      "training_wall_duty_cycle_target": 0.7
+    },
+    "learning_hash": "87aced10cddfc9bc3d5e54fd6ccdd973df02fc4f66d666dd4c825e04c208cef7",
+    "benchmark_counts": {
+      "samples": 94,
+      "correct": 94,
+      "per_action": {
+        "1": {
+          "samples": 47,
+          "correct": 47
+        },
+        "0": {
+          "samples": 47,
+          "correct": 47
+        }
+      },
+      "automation_rules": 0,
+      "origin_counts": {
+        "anonymous_external": 94
+      }
+    },
+    "frozen_holdout_counts": {
+      "samples": 94,
+      "correct": 94,
+      "per_action": {
+        "1": {
+          "samples": 47,
+          "correct": 47
+        },
+        "0": {
+          "samples": 47,
+          "correct": 47
+        }
+      }
+    },
+    "history_recovery": {
+      "agent_id": "c2425952",
+      "archive_status": "ARCHIVE_CORRUPTED",
+      "attempts": 8,
+      "availability": "HISTORY_OK",
+      "contract": "training-history-generation-v4",
+      "copy_tables": {
+        "agents": {
+          "bytes_copied": 467,
+          "copy_strategy": "all_controller_configuration",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "app_meta": {
+          "bytes_copied": 0,
+          "copy_strategy": "shared_training_context_keys",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "entity_history": {
+          "bytes_copied": 73440,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 960,
+          "source_rows_scanned": 960
+        },
+        "entity_history_revision": {
+          "bytes_copied": 32,
+          "copy_strategy": "single_archive_revision",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "events": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "feature_observation_events": {
+          "bytes_copied": 0,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "historical_experiences": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "model_backups": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_feedback": {
+          "bytes_copied": 0,
+          "copy_strategy": "correct_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_rebuild",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        }
+      },
+      "correct_agent_ids": [
+        "c2425952"
+      ],
+      "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+      "gaps": [],
+      "lock_wait_seconds": 0.0,
+      "model_fingerprint": null,
+      "preparation_cpu_seconds": 0.109375,
+      "quality": {
+        "benchmark_samples": 94,
+        "experiences": 479,
+        "segments": 1,
+        "skipped_records": null,
+        "status": "SUFFICIENT"
+      },
+      "quarantine_cache_hit": false,
+      "recovered_records": 960,
+      "recovery_active_cpu_seconds": 0.0,
+      "recovery_strategy": "bounded_pk_ranges_sql_filtered_no_readable_entity_index",
+      "recovery_wall_seconds": 0.2029999999795109,
+      "resumed": false,
+      "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+      "skipped_records": null,
+      "snapshot_lifecycle": {
+        "boundary": {
+          "end_ts": 1700014400.0,
+          "schema": {
+            "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+            "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+            "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+            "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+            "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+            "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+            "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+            "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+            "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+            "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+            "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+            "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+            "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+            "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+            "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+            "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+            "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+            "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+            "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+            "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+            "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+            "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+            "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+            "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+            "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0"
+          },
+          "tables": {
+            "entity_history": {
+              "epoch": 0,
+              "upper": 960
+            },
+            "feature_observation_events": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "historical_experiences": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_feedback": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_models": {
+              "epoch": 0,
+              "upper": 0
+            }
+          },
+          "token": "66efe6a6b9a44f238c8e795375ac8b06"
+        },
+        "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+        "max_explicit_transaction_seconds": 0.0009178998880088329,
+        "max_source_execute_seconds": 0.0,
+        "owned_generation_connections": 1,
+        "owned_source_connections": 1,
+        "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+        "source_readers_between_batches": 0,
+        "wal_peak_bytes": 0
+      },
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-hq20d5g7\\adaptive_ai.db",
+      "source_signature": [
+        [
+          290816,
+          1794433484483734300
+        ],
+        null
+      ],
+      "sqlite_errorcode": 11,
+      "sqlite_errorname": "SQLITE_CORRUPT",
+      "sqlite_wait_estimated": true,
+      "sqlite_wait_seconds": 0.0003750000614672899,
+      "status": "TRAINED",
+      "throttle_seconds": 0.0
+    },
+    "worker_resource_metrics": {
+      "cpu_seconds": null,
+      "peak_rss_mb": null
+    },
+    "source_table_rows": {},
+    "realtime_simulation": {
+      "ha_rows_written": 0,
+      "ui_reads": 0,
+      "ui_read_max_seconds": 0.0,
+      "writer_max_seconds": 0.0,
+      "loss": 0,
+      "environment": "host SQLite ingress/read simulation; not physical Pi"
+    },
+    "validation_wall_seconds": 5.078999999910593
+  },
+  "table_two_agents": {
+    "agent_mode": "shadow",
+    "agent_progress": 1.0,
+    "concurrent_writes": 284,
+    "version": "0.15.8",
+    "input_history_rows": 960,
+    "worker_wall_seconds": 4.758166400017217,
+    "worker_phases": {
+      "benchmark_persist_seconds": 0.006681,
+      "causal_home_statistics": {
+        "compressed_bytes": 6365,
+        "contract": "causal_home_statistics_v1",
+        "cursor_bytes": 26991,
+        "cursor_entries": 2,
+        "cursor_hits": 260,
+        "cursor_restores": 81,
+        "direct_sources": 1,
+        "max_bytes": 8388608,
+        "query_calls": 341,
+        "query_rows": 493,
+        "snapshots": 13,
+        "source_rows": 114
+      },
+      "causal_home_statistics_build_seconds": 0.006414,
+      "causal_home_statistics_reused": false,
+      "causal_home_statistics_validation_seconds": 0.0,
+      "context_assessment_seconds": 0.0,
+      "context_entities_reconstructed_by_trackers": 1,
+      "context_screening_scope": "persisted_schema",
+      "continuation_cached_rows": 114,
+      "contract": "single_agent_training_phase_timing_v1",
+      "end_ts": 1700014400.0,
+      "experience_dedup_cache_hits": 0,
+      "experience_dedup_cached_ids": 328,
+      "experience_dedup_db_loads": 1,
+      "experience_dedup_load_seconds": 0.001253,
+      "feature_snapshot_build_seconds": 0.107921,
+      "feature_snapshot_builds": 284,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 284,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_session_builds_total": 284,
+      "feature_snapshot_session_hits_total": 0,
+      "feature_snapshot_session_reused": false,
+      "feature_snapshot_unique_timestamps": 256,
+      "finalization_seconds": 0.1356,
+      "full_archive_count_skipped": true,
+      "heldout_fold_seconds": 2e-06,
+      "legacy_outer_stream_entity_count": 2,
+      "neural_finalize_requested": true,
+      "neural_train_samples_buffered": 109,
+      "policy_serialize_persist_seconds": 0.018102,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_load_seconds": 1e-06,
+      "provenance_loaded_rows": 0,
+      "qualification_seconds": 0.028859,
+      "ram_index_construction_seconds": 0.0173,
+      "ram_replay_actual_bytes": 13725,
+      "ram_replay_entities": 2,
+      "ram_replay_estimated_bytes": 16285,
+      "ram_replay_fallback": false,
+      "ram_replay_fallback_entities": 0,
+      "ram_replay_index_reused": false,
+      "ram_replay_lookup_seconds": 0.010385,
+      "ram_replay_lookups": 1023,
+      "ram_replay_rows": 228,
+      "replay_driver_rows_planned": 114,
+      "replay_driver_rows_processed": 114,
+      "replay_seconds": 0.8758,
+      "replay_stream_contract": "target_only_driver_v1",
+      "rewarded_dwells": 113,
+      "screening_rows": 0,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_lookups": 0,
+      "sqlite_fallback_seconds": 0.0,
+      "start_ts": 1700010980.0,
+      "target_entities": 1,
+      "tiny_mlp_finalization_deferred": false,
+      "tiny_mlp_finalization_seconds": 0.03528,
+      "total_seconds": 1.0554,
+      "tracker_init_seconds": 0.007333,
+      "transition_edge_cursor_rewinds": 0,
+      "transition_edge_entities": 1,
+      "transition_edge_estimated_bytes": 18240,
+      "transition_edge_fallback_entities": 0,
+      "transition_edge_index_construction_seconds": 0.0017,
+      "transition_edge_index_fallbacks": 0,
+      "transition_edge_index_hits": 227,
+      "transition_edge_index_lookups": 227,
+      "transition_edge_index_reused": false,
+      "transition_edge_rows_applied": 114,
+      "transition_edge_scan_rows_avoided_estimate": 13109,
+      "transition_edge_source_rows": 114
+    },
+    "worker_budget": {
+      "effective_training_duty_cycle": 0.7023,
+      "effective_training_wall_duty_cycle": 0.7023,
+      "interactive_cooldown_seconds": 0.1,
+      "interactive_epoch_escalations": 0,
+      "interactive_max_burst_seconds": 1.25,
+      "interactive_preemptions": 0,
+      "interactive_priority_epochs": 0,
+      "interactive_requests_suppressed": 0,
+      "interactive_sleep_seconds": 0.0,
+      "interactive_yield_quantum_ms": 35.0,
+      "last_checkpoint": "finalization_complete",
+      "max_continuous_work_ms": 35.0,
+      "max_observed_slice_ms": 170.3,
+      "max_throttle_sleep_seconds": 0.05,
+      "realtime_cooldown_seconds": 0.2,
+      "realtime_max_burst_seconds": 0.45,
+      "slice_checkpoints": 96,
+      "slice_overruns": 78,
+      "throttle_active_seconds": 3.02,
+      "throttle_batches": 96,
+      "throttle_sleep_seconds": 1.28,
+      "training_cpu_duty_cycle": 0.7,
+      "training_wall_duty_cycle_target": 0.7
+    },
+    "learning_hash": "508280614719ad933a1e9eefbf017303b521fcf51e30a016c2c88a156d86a2fd",
+    "benchmark_counts": {
+      "samples": 122,
+      "correct": 122,
+      "per_action": {
+        "0": {
+          "samples": 61,
+          "correct": 61
+        },
+        "1": {
+          "samples": 61,
+          "correct": 61
+        }
+      },
+      "automation_rules": 0,
+      "origin_counts": {
+        "anonymous_external": 122
+      }
+    },
+    "frozen_holdout_counts": {
+      "samples": 122,
+      "correct": 122,
+      "per_action": {
+        "0": {
+          "samples": 61,
+          "correct": 61
+        },
+        "1": {
+          "samples": 61,
+          "correct": 61
+        }
+      }
+    },
+    "history_recovery": {
+      "agent_id": "0331edad",
+      "archive_status": "ARCHIVE_CORRUPTED",
+      "attempts": 158,
+      "availability": "PARTIAL",
+      "contract": "training-history-generation-v4",
+      "copy_tables": {
+        "agents": {
+          "bytes_copied": 11903,
+          "copy_strategy": "all_controller_configuration",
+          "rows_copied": 2,
+          "source_rows_scanned": 2,
+          "version_guard_rows_scanned": 0
+        },
+        "app_meta": {
+          "bytes_copied": 0,
+          "copy_strategy": "shared_training_context_keys",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "entity_history": {
+          "bytes_copied": 88351,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 887,
+          "source_rows_scanned": 887
+        },
+        "entity_history_revision": {
+          "bytes_copied": 32,
+          "copy_strategy": "single_archive_revision",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "events": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "feature_observation_events": {
+          "bytes_copied": 0,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "historical_experiences": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "model_backups": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_feedback": {
+          "bytes_copied": 0,
+          "copy_strategy": "correct_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_rebuild",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "tiny_mlp_shadow_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "selected_agent",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "training_generation_backup": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        }
+      },
+      "correct_agent_ids": [
+        "0331edad"
+      ],
+      "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+      "gaps": [
+        {
+          "end_ts": 1700009870.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 12,
+          "source": "local_archive",
+          "start_ts": 1700009870.0
+        },
+        {
+          "end_ts": 1700009898.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 15,
+          "source": "local_archive",
+          "start_ts": 1700009898.0
+        },
+        {
+          "end_ts": 1700009900.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 16,
+          "source": "local_archive",
+          "start_ts": 1700009900.0
+        },
+        {
+          "end_ts": 1700009928.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 18,
+          "source": "local_archive",
+          "start_ts": 1700009928.0
+        },
+        {
+          "end_ts": 1700009930.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 19,
+          "source": "local_archive",
+          "start_ts": 1700009930.0
+        },
+        {
+          "end_ts": 1700009958.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 23,
+          "source": "local_archive",
+          "start_ts": 1700009958.0
+        },
+        {
+          "end_ts": 1700009960.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 24,
+          "source": "local_archive",
+          "start_ts": 1700009960.0
+        },
+        {
+          "end_ts": 1700009988.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 26,
+          "source": "local_archive",
+          "start_ts": 1700009988.0
+        },
+        {
+          "end_ts": 1700009990.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 27,
+          "source": "local_archive",
+          "start_ts": 1700009990.0
+        },
+        {
+          "end_ts": 1700010018.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 30,
+          "source": "local_archive",
+          "start_ts": 1700010018.0
+        },
+        {
+          "end_ts": 1700010020.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 31,
+          "source": "local_archive",
+          "start_ts": 1700010020.0
+        },
+        {
+          "end_ts": 1700010048.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 33,
+          "source": "local_archive",
+          "start_ts": 1700010048.0
+        },
+        {
+          "end_ts": 1700010050.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 34,
+          "source": "local_archive",
+          "start_ts": 1700010050.0
+        },
+        {
+          "end_ts": 1700010078.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 40,
+          "source": "local_archive",
+          "start_ts": 1700010078.0
+        },
+        {
+          "end_ts": 1700010080.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 41,
+          "source": "local_archive",
+          "start_ts": 1700010080.0
+        },
+        {
+          "end_ts": 1700010108.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 43,
+          "source": "local_archive",
+          "start_ts": 1700010108.0
+        },
+        {
+          "end_ts": 1700010110.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 44,
+          "source": "local_archive",
+          "start_ts": 1700010110.0
+        },
+        {
+          "end_ts": 1700010138.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 47,
+          "source": "local_archive",
+          "start_ts": 1700010138.0
+        },
+        {
+          "end_ts": 1700010140.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 48,
+          "source": "local_archive",
+          "start_ts": 1700010140.0
+        },
+        {
+          "end_ts": 1700010168.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 50,
+          "source": "local_archive",
+          "start_ts": 1700010168.0
+        },
+        {
+          "end_ts": 1700010170.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 51,
+          "source": "local_archive",
+          "start_ts": 1700010170.0
+        },
+        {
+          "end_ts": 1700010198.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 55,
+          "source": "local_archive",
+          "start_ts": 1700010198.0
+        },
+        {
+          "end_ts": 1700010200.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 56,
+          "source": "local_archive",
+          "start_ts": 1700010200.0
+        },
+        {
+          "end_ts": 1700010228.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 58,
+          "source": "local_archive",
+          "start_ts": 1700010228.0
+        },
+        {
+          "end_ts": 1700010230.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 59,
+          "source": "local_archive",
+          "start_ts": 1700010230.0
+        },
+        {
+          "end_ts": 1700010258.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 62,
+          "source": "local_archive",
+          "start_ts": 1700010258.0
+        },
+        {
+          "end_ts": 1700010260.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 63,
+          "source": "local_archive",
+          "start_ts": 1700010260.0
+        },
+        {
+          "end_ts": 1700010288.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 65,
+          "source": "local_archive",
+          "start_ts": 1700010288.0
+        },
+        {
+          "end_ts": 1700010290.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 66,
+          "source": "local_archive",
+          "start_ts": 1700010290.0
+        },
+        {
+          "end_ts": 1700010318.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 71,
+          "source": "local_archive",
+          "start_ts": 1700010318.0
+        },
+        {
+          "end_ts": 1700010320.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 72,
+          "source": "local_archive",
+          "start_ts": 1700010320.0
+        },
+        {
+          "end_ts": 1700010348.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 74,
+          "source": "local_archive",
+          "start_ts": 1700010348.0
+        },
+        {
+          "end_ts": 1700010350.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 75,
+          "source": "local_archive",
+          "start_ts": 1700010350.0
+        },
+        {
+          "end_ts": 1700010378.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 78,
+          "source": "local_archive",
+          "start_ts": 1700010378.0
+        },
+        {
+          "end_ts": 1700010380.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 79,
+          "source": "local_archive",
+          "start_ts": 1700010380.0
+        },
+        {
+          "end_ts": 1700010408.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 81,
+          "source": "local_archive",
+          "start_ts": 1700010408.0
+        },
+        {
+          "end_ts": 1700010410.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 82,
+          "source": "local_archive",
+          "start_ts": 1700010410.0
+        },
+        {
+          "end_ts": 1700010438.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 86,
+          "source": "local_archive",
+          "start_ts": 1700010438.0
+        },
+        {
+          "end_ts": 1700010440.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 87,
+          "source": "local_archive",
+          "start_ts": 1700010440.0
+        },
+        {
+          "end_ts": 1700010468.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 89,
+          "source": "local_archive",
+          "start_ts": 1700010468.0
+        },
+        {
+          "end_ts": 1700010470.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 90,
+          "source": "local_archive",
+          "start_ts": 1700010470.0
+        },
+        {
+          "end_ts": 1700010498.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 93,
+          "source": "local_archive",
+          "start_ts": 1700010498.0
+        },
+        {
+          "end_ts": 1700010500.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 94,
+          "source": "local_archive",
+          "start_ts": 1700010500.0
+        },
+        {
+          "end_ts": 1700010528.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 96,
+          "source": "local_archive",
+          "start_ts": 1700010528.0
+        },
+        {
+          "end_ts": 1700010530.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 97,
+          "source": "local_archive",
+          "start_ts": 1700010530.0
+        },
+        {
+          "end_ts": 1700010558.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 104,
+          "source": "local_archive",
+          "start_ts": 1700010558.0
+        },
+        {
+          "end_ts": 1700010560.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 105,
+          "source": "local_archive",
+          "start_ts": 1700010560.0
+        },
+        {
+          "end_ts": 1700010588.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 107,
+          "source": "local_archive",
+          "start_ts": 1700010588.0
+        },
+        {
+          "end_ts": 1700010590.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 108,
+          "source": "local_archive",
+          "start_ts": 1700010590.0
+        },
+        {
+          "end_ts": 1700010618.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 111,
+          "source": "local_archive",
+          "start_ts": 1700010618.0
+        },
+        {
+          "end_ts": 1700010620.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 112,
+          "source": "local_archive",
+          "start_ts": 1700010620.0
+        },
+        {
+          "end_ts": 1700010648.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 114,
+          "source": "local_archive",
+          "start_ts": 1700010648.0
+        },
+        {
+          "end_ts": 1700010650.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 115,
+          "source": "local_archive",
+          "start_ts": 1700010650.0
+        },
+        {
+          "end_ts": 1700010678.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 119,
+          "source": "local_archive",
+          "start_ts": 1700010678.0
+        },
+        {
+          "end_ts": 1700010680.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 120,
+          "source": "local_archive",
+          "start_ts": 1700010680.0
+        },
+        {
+          "end_ts": 1700010708.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 122,
+          "source": "local_archive",
+          "start_ts": 1700010708.0
+        },
+        {
+          "end_ts": 1700010710.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 123,
+          "source": "local_archive",
+          "start_ts": 1700010710.0
+        },
+        {
+          "end_ts": 1700010738.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 126,
+          "source": "local_archive",
+          "start_ts": 1700010738.0
+        },
+        {
+          "end_ts": 1700010740.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 127,
+          "source": "local_archive",
+          "start_ts": 1700010740.0
+        },
+        {
+          "end_ts": 1700010768.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 129,
+          "source": "local_archive",
+          "start_ts": 1700010768.0
+        },
+        {
+          "end_ts": 1700010770.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 130,
+          "source": "local_archive",
+          "start_ts": 1700010770.0
+        },
+        {
+          "end_ts": 1700010798.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 135,
+          "source": "local_archive",
+          "start_ts": 1700010798.0
+        },
+        {
+          "end_ts": 1700010800.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 136,
+          "source": "local_archive",
+          "start_ts": 1700010800.0
+        },
+        {
+          "end_ts": 1700010828.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 138,
+          "source": "local_archive",
+          "start_ts": 1700010828.0
+        },
+        {
+          "end_ts": 1700010830.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 139,
+          "source": "local_archive",
+          "start_ts": 1700010830.0
+        },
+        {
+          "end_ts": 1700010858.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 142,
+          "source": "local_archive",
+          "start_ts": 1700010858.0
+        },
+        {
+          "end_ts": 1700010860.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 143,
+          "source": "local_archive",
+          "start_ts": 1700010860.0
+        },
+        {
+          "end_ts": 1700010888.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 145,
+          "source": "local_archive",
+          "start_ts": 1700010888.0
+        },
+        {
+          "end_ts": 1700010890.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 146,
+          "source": "local_archive",
+          "start_ts": 1700010890.0
+        },
+        {
+          "end_ts": 1700010918.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 150,
+          "source": "local_archive",
+          "start_ts": 1700010918.0
+        },
+        {
+          "end_ts": 1700010920.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 151,
+          "source": "local_archive",
+          "start_ts": 1700010920.0
+        },
+        {
+          "end_ts": 1700010948.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 153,
+          "source": "local_archive",
+          "start_ts": 1700010948.0
+        },
+        {
+          "end_ts": 1700010950.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 154,
+          "source": "local_archive",
+          "start_ts": 1700010950.0
+        }
+      ],
+      "lock_wait_seconds": 0.0,
+      "model_fingerprint": null,
+      "preparation_cpu_seconds": 0.140625,
+      "quality": {
+        "benchmark_samples": 122,
+        "experiences": 441,
+        "segments": 2,
+        "skipped_records": null,
+        "status": "SUFFICIENT"
+      },
+      "quarantine_cache_hit": false,
+      "recovered_records": 887,
+      "recovery_active_cpu_seconds": 0.046875,
+      "recovery_strategy": "selected_covering_keys",
+      "recovery_wall_seconds": 0.35999999986961484,
+      "resumed": false,
+      "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+      "skipped_records": null,
+      "snapshot_lifecycle": {
+        "boundary": {
+          "end_ts": 1700014400.0,
+          "schema": {
+            "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+            "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+            "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+            "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+            "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+            "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+            "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+            "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+            "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+            "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+            "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+            "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+            "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+            "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+            "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+            "__training_fence_tiny_mlp_shadow_models_delete": "f8f25d3e6de3d73af7efc413538de72426fde37eee31e35180f5c83e8c52163b",
+            "__training_fence_tiny_mlp_shadow_models_insert": "bc9ac236f97ebaefb71b0524d95d08229bfcc885937b1ff6c23f82f7c82b7e01",
+            "__training_fence_tiny_mlp_shadow_models_update": "8cd9f7f8e5950001e6b2264d88a32d02fc95a814e1db6d90430638247accfddc",
+            "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+            "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+            "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+            "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+            "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+            "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+            "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+            "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+            "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+            "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0",
+            "tiny_mlp_shadow_models": "7be5d0ea0bd1f1221f4bb70b52f801a3b9d0de6e972ca0ad82b0f35ac1f4043d"
+          },
+          "tables": {
+            "entity_history": {
+              "epoch": 0,
+              "upper": 1459
+            },
+            "feature_observation_events": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "historical_experiences": {
+              "epoch": 0,
+              "upper": 479
+            },
+            "rl_feedback": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_models": {
+              "epoch": 0,
+              "upper": 1
+            },
+            "tiny_mlp_shadow_models": {
+              "epoch": 0,
+              "upper": 1
+            }
+          },
+          "token": "4d6a0b46804c445fb4fc3c97958307d1"
+        },
+        "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+        "max_explicit_transaction_seconds": 0.0009622001089155674,
+        "max_source_execute_seconds": 0.0,
+        "owned_generation_connections": 1,
+        "owned_source_connections": 1,
+        "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+        "source_readers_between_batches": 0,
+        "wal_peak_bytes": 1680992
+      },
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-z5xg57nt\\adaptive_ai.db",
+      "source_signature": [
+        [
+          696320,
+          1794433493971484900
+        ],
+        [
+          840512,
+          1794433494327907800
+        ]
+      ],
+      "sqlite_errorcode": 11,
+      "sqlite_errorname": "SQLITE_CORRUPT",
+      "sqlite_wait_estimated": true,
+      "sqlite_wait_seconds": 0.0007500001229345798,
+      "status": "TRAINED",
+      "throttle_seconds": 0.0
+    },
+    "worker_resource_metrics": {
+      "cpu_seconds": null,
+      "peak_rss_mb": null
+    },
+    "source_table_rows": {},
+    "realtime_simulation": {
+      "ha_rows_written": 284,
+      "ui_reads": 284,
+      "ui_read_max_seconds": 0.008650299860164523,
+      "writer_max_seconds": 0.0038876000326126814,
+      "loss": 0,
+      "environment": "host SQLite ingress/read simulation; not physical Pi"
+    },
+    "validation_wall_seconds": 9.639999999897555
+  },
+  "http_and_table": {
+    "agent_mode": "shadow",
+    "agent_progress": 1.0,
+    "concurrent_writes": 0,
+    "version": "0.15.8",
+    "input_history_rows": 960,
+    "worker_wall_seconds": 5.240800000028685,
+    "worker_phases": {
+      "benchmark_persist_seconds": 0.006528,
+      "causal_home_statistics": {
+        "compressed_bytes": 12742,
+        "contract": "causal_home_statistics_v1",
+        "cursor_bytes": 27491,
+        "cursor_entries": 2,
+        "cursor_hits": 489,
+        "cursor_restores": 179,
+        "direct_sources": 1,
+        "max_bytes": 8388608,
+        "query_calls": 668,
+        "query_rows": 1039,
+        "snapshots": 24,
+        "source_rows": 223
+      },
+      "causal_home_statistics_build_seconds": 0.033996,
+      "causal_home_statistics_reused": false,
+      "causal_home_statistics_validation_seconds": 0.0,
+      "context_assessment_seconds": 0.0,
+      "context_entities_reconstructed_by_trackers": 1,
+      "context_screening_scope": "persisted_schema",
+      "continuation_cached_rows": 223,
+      "contract": "single_agent_training_phase_timing_v1",
+      "end_ts": 1700014400.0,
+      "experience_dedup_cache_hits": 0,
+      "experience_dedup_cached_ids": 214,
+      "experience_dedup_db_loads": 1,
+      "experience_dedup_load_seconds": 0.001131,
+      "feature_snapshot_build_seconds": 0.281552,
+      "feature_snapshot_builds": 557,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 557,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_session_builds_total": 557,
+      "feature_snapshot_session_hits_total": 0,
+      "feature_snapshot_session_reused": false,
+      "feature_snapshot_unique_timestamps": 256,
+      "finalization_seconds": 0.1573,
+      "full_archive_count_skipped": true,
+      "heldout_fold_seconds": 2e-06,
+      "legacy_outer_stream_entity_count": 2,
+      "neural_finalize_requested": true,
+      "neural_train_samples_buffered": 327,
+      "policy_serialize_persist_seconds": 0.017179,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_load_seconds": 1e-06,
+      "provenance_loaded_rows": 0,
+      "qualification_seconds": 0.009376,
+      "ram_index_construction_seconds": 0.0026,
+      "ram_replay_actual_bytes": 26865,
+      "ram_replay_entities": 2,
+      "ram_replay_estimated_bytes": 29425,
+      "ram_replay_fallback": false,
+      "ram_replay_fallback_entities": 0,
+      "ram_replay_index_reused": false,
+      "ram_replay_lookup_seconds": 0.020862,
+      "ram_replay_lookups": 2004,
+      "ram_replay_rows": 447,
+      "replay_driver_rows_planned": 223,
+      "replay_driver_rows_processed": 223,
+      "replay_seconds": 1.6499,
+      "replay_stream_contract": "target_only_driver_v1",
+      "rewarded_dwells": 222,
+      "screening_rows": 0,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_lookups": 0,
+      "sqlite_fallback_seconds": 0.0,
+      "start_ts": 1700007708.0,
+      "target_entities": 1,
+      "tiny_mlp_finalization_deferred": false,
+      "tiny_mlp_finalization_seconds": 0.057348,
+      "total_seconds": 1.8617,
+      "tracker_init_seconds": 0.034787,
+      "transition_edge_cursor_rewinds": 0,
+      "transition_edge_entities": 1,
+      "transition_edge_estimated_bytes": 35680,
+      "transition_edge_fallback_entities": 0,
+      "transition_edge_index_construction_seconds": 0.0026,
+      "transition_edge_index_fallbacks": 0,
+      "transition_edge_index_hits": 445,
+      "transition_edge_index_lookups": 445,
+      "transition_edge_index_reused": false,
+      "transition_edge_rows_applied": 223,
+      "transition_edge_scan_rows_avoided_estimate": 49951,
+      "transition_edge_source_rows": 223
+    },
+    "worker_budget": {
+      "effective_training_duty_cycle": 0.7076,
+      "effective_training_wall_duty_cycle": 0.7076,
+      "interactive_cooldown_seconds": 0.1,
+      "interactive_epoch_escalations": 0,
+      "interactive_max_burst_seconds": 1.25,
+      "interactive_preemptions": 0,
+      "interactive_priority_epochs": 0,
+      "interactive_requests_suppressed": 0,
+      "interactive_sleep_seconds": 0.0,
+      "interactive_yield_quantum_ms": 35.0,
+      "last_checkpoint": "finalization_complete",
+      "max_continuous_work_ms": 35.0,
+      "max_observed_slice_ms": 247.7,
+      "max_throttle_sleep_seconds": 0.05,
+      "realtime_cooldown_seconds": 0.2,
+      "realtime_max_burst_seconds": 0.45,
+      "slice_checkpoints": 105,
+      "slice_overruns": 84,
+      "throttle_active_seconds": 3.358,
+      "throttle_batches": 105,
+      "throttle_sleep_seconds": 1.388,
+      "training_cpu_duty_cycle": 0.7,
+      "training_wall_duty_cycle_target": 0.7
+    },
+    "learning_hash": "68b5ea020d3bef4630b62e972f0cb7248815841092c774ae5ad152a4f0523966",
+    "benchmark_counts": {
+      "samples": 176,
+      "correct": 176,
+      "per_action": {
+        "1": {
+          "samples": 88,
+          "correct": 88
+        },
+        "0": {
+          "samples": 88,
+          "correct": 88
+        }
+      },
+      "automation_rules": 0,
+      "origin_counts": {
+        "anonymous_external": 176
+      }
+    },
+    "frozen_holdout_counts": {
+      "samples": 176,
+      "correct": 176,
+      "per_action": {
+        "1": {
+          "samples": 88,
+          "correct": 88
+        },
+        "0": {
+          "samples": 88,
+          "correct": 88
+        }
+      }
+    },
+    "history_recovery": {
+      "agent_id": "edce6652",
+      "archive_status": "ARCHIVE_CORRUPTED",
+      "attempts": 168,
+      "availability": "PARTIAL",
+      "contract": "training-history-generation-v4",
+      "copy_tables": {
+        "agents": {
+          "bytes_copied": 467,
+          "copy_strategy": "all_controller_configuration",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "app_meta": {
+          "bytes_copied": 136,
+          "copy_strategy": "shared_training_context_keys",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "entity_history": {
+          "bytes_copied": 78080,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 887,
+          "source_rows_scanned": 887
+        },
+        "entity_history_revision": {
+          "bytes_copied": 32,
+          "copy_strategy": "single_archive_revision",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "events": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "feature_observation_events": {
+          "bytes_copied": 0,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "historical_experiences": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "model_backups": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_feedback": {
+          "bytes_copied": 0,
+          "copy_strategy": "correct_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_rebuild",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        }
+      },
+      "correct_agent_ids": [
+        "edce6652"
+      ],
+      "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+      "gaps": [
+        {
+          "end_ts": 1700006598.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 12,
+          "source": "local_archive",
+          "start_ts": 1700006598.0
+        },
+        {
+          "end_ts": 1700006600.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 13,
+          "source": "local_archive",
+          "start_ts": 1700006600.0
+        },
+        {
+          "end_ts": 1700006628.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 15,
+          "source": "local_archive",
+          "start_ts": 1700006628.0
+        },
+        {
+          "end_ts": 1700006630.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 16,
+          "source": "local_archive",
+          "start_ts": 1700006630.0
+        },
+        {
+          "end_ts": 1700006658.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 19,
+          "source": "local_archive",
+          "start_ts": 1700006658.0
+        },
+        {
+          "end_ts": 1700006660.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 20,
+          "source": "local_archive",
+          "start_ts": 1700006660.0
+        },
+        {
+          "end_ts": 1700006688.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 22,
+          "source": "local_archive",
+          "start_ts": 1700006688.0
+        },
+        {
+          "end_ts": 1700006690.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 23,
+          "source": "local_archive",
+          "start_ts": 1700006690.0
+        },
+        {
+          "end_ts": 1700006718.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 30,
+          "source": "local_archive",
+          "start_ts": 1700006718.0
+        },
+        {
+          "end_ts": 1700006720.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 31,
+          "source": "local_archive",
+          "start_ts": 1700006720.0
+        },
+        {
+          "end_ts": 1700006748.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 33,
+          "source": "local_archive",
+          "start_ts": 1700006748.0
+        },
+        {
+          "end_ts": 1700006750.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 34,
+          "source": "local_archive",
+          "start_ts": 1700006750.0
+        },
+        {
+          "end_ts": 1700006778.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 37,
+          "source": "local_archive",
+          "start_ts": 1700006778.0
+        },
+        {
+          "end_ts": 1700006780.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 38,
+          "source": "local_archive",
+          "start_ts": 1700006780.0
+        },
+        {
+          "end_ts": 1700006808.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 40,
+          "source": "local_archive",
+          "start_ts": 1700006808.0
+        },
+        {
+          "end_ts": 1700006810.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 41,
+          "source": "local_archive",
+          "start_ts": 1700006810.0
+        },
+        {
+          "end_ts": 1700006838.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 45,
+          "source": "local_archive",
+          "start_ts": 1700006838.0
+        },
+        {
+          "end_ts": 1700006840.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 46,
+          "source": "local_archive",
+          "start_ts": 1700006840.0
+        },
+        {
+          "end_ts": 1700006868.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 48,
+          "source": "local_archive",
+          "start_ts": 1700006868.0
+        },
+        {
+          "end_ts": 1700006870.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 49,
+          "source": "local_archive",
+          "start_ts": 1700006870.0
+        },
+        {
+          "end_ts": 1700006898.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 52,
+          "source": "local_archive",
+          "start_ts": 1700006898.0
+        },
+        {
+          "end_ts": 1700006900.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 53,
+          "source": "local_archive",
+          "start_ts": 1700006900.0
+        },
+        {
+          "end_ts": 1700006928.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 55,
+          "source": "local_archive",
+          "start_ts": 1700006928.0
+        },
+        {
+          "end_ts": 1700006930.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 56,
+          "source": "local_archive",
+          "start_ts": 1700006930.0
+        },
+        {
+          "end_ts": 1700006958.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 61,
+          "source": "local_archive",
+          "start_ts": 1700006958.0
+        },
+        {
+          "end_ts": 1700006960.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 62,
+          "source": "local_archive",
+          "start_ts": 1700006960.0
+        },
+        {
+          "end_ts": 1700006988.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 64,
+          "source": "local_archive",
+          "start_ts": 1700006988.0
+        },
+        {
+          "end_ts": 1700006990.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 65,
+          "source": "local_archive",
+          "start_ts": 1700006990.0
+        },
+        {
+          "end_ts": 1700007018.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 68,
+          "source": "local_archive",
+          "start_ts": 1700007018.0
+        },
+        {
+          "end_ts": 1700007020.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 69,
+          "source": "local_archive",
+          "start_ts": 1700007020.0
+        },
+        {
+          "end_ts": 1700007048.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 71,
+          "source": "local_archive",
+          "start_ts": 1700007048.0
+        },
+        {
+          "end_ts": 1700007050.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 72,
+          "source": "local_archive",
+          "start_ts": 1700007050.0
+        },
+        {
+          "end_ts": 1700007078.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 76,
+          "source": "local_archive",
+          "start_ts": 1700007078.0
+        },
+        {
+          "end_ts": 1700007080.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 77,
+          "source": "local_archive",
+          "start_ts": 1700007080.0
+        },
+        {
+          "end_ts": 1700007108.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 79,
+          "source": "local_archive",
+          "start_ts": 1700007108.0
+        },
+        {
+          "end_ts": 1700007110.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 80,
+          "source": "local_archive",
+          "start_ts": 1700007110.0
+        },
+        {
+          "end_ts": 1700007138.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 83,
+          "source": "local_archive",
+          "start_ts": 1700007138.0
+        },
+        {
+          "end_ts": 1700007140.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 84,
+          "source": "local_archive",
+          "start_ts": 1700007140.0
+        },
+        {
+          "end_ts": 1700007168.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 86,
+          "source": "local_archive",
+          "start_ts": 1700007168.0
+        },
+        {
+          "end_ts": 1700007170.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 87,
+          "source": "local_archive",
+          "start_ts": 1700007170.0
+        },
+        {
+          "end_ts": 1700007198.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 93,
+          "source": "local_archive",
+          "start_ts": 1700007198.0
+        },
+        {
+          "end_ts": 1700007200.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 94,
+          "source": "local_archive",
+          "start_ts": 1700007200.0
+        },
+        {
+          "end_ts": 1700007228.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 96,
+          "source": "local_archive",
+          "start_ts": 1700007228.0
+        },
+        {
+          "end_ts": 1700007230.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 97,
+          "source": "local_archive",
+          "start_ts": 1700007230.0
+        },
+        {
+          "end_ts": 1700007258.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 100,
+          "source": "local_archive",
+          "start_ts": 1700007258.0
+        },
+        {
+          "end_ts": 1700007260.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 101,
+          "source": "local_archive",
+          "start_ts": 1700007260.0
+        },
+        {
+          "end_ts": 1700007288.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 103,
+          "source": "local_archive",
+          "start_ts": 1700007288.0
+        },
+        {
+          "end_ts": 1700007290.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 104,
+          "source": "local_archive",
+          "start_ts": 1700007290.0
+        },
+        {
+          "end_ts": 1700007318.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 108,
+          "source": "local_archive",
+          "start_ts": 1700007318.0
+        },
+        {
+          "end_ts": 1700007320.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 109,
+          "source": "local_archive",
+          "start_ts": 1700007320.0
+        },
+        {
+          "end_ts": 1700007348.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 111,
+          "source": "local_archive",
+          "start_ts": 1700007348.0
+        },
+        {
+          "end_ts": 1700007350.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 112,
+          "source": "local_archive",
+          "start_ts": 1700007350.0
+        },
+        {
+          "end_ts": 1700007378.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 115,
+          "source": "local_archive",
+          "start_ts": 1700007378.0
+        },
+        {
+          "end_ts": 1700007380.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 116,
+          "source": "local_archive",
+          "start_ts": 1700007380.0
+        },
+        {
+          "end_ts": 1700007408.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 118,
+          "source": "local_archive",
+          "start_ts": 1700007408.0
+        },
+        {
+          "end_ts": 1700007410.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 119,
+          "source": "local_archive",
+          "start_ts": 1700007410.0
+        },
+        {
+          "end_ts": 1700007438.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 124,
+          "source": "local_archive",
+          "start_ts": 1700007438.0
+        },
+        {
+          "end_ts": 1700007440.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 125,
+          "source": "local_archive",
+          "start_ts": 1700007440.0
+        },
+        {
+          "end_ts": 1700007468.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 127,
+          "source": "local_archive",
+          "start_ts": 1700007468.0
+        },
+        {
+          "end_ts": 1700007470.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 128,
+          "source": "local_archive",
+          "start_ts": 1700007470.0
+        },
+        {
+          "end_ts": 1700007498.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 131,
+          "source": "local_archive",
+          "start_ts": 1700007498.0
+        },
+        {
+          "end_ts": 1700007500.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 132,
+          "source": "local_archive",
+          "start_ts": 1700007500.0
+        },
+        {
+          "end_ts": 1700007528.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 134,
+          "source": "local_archive",
+          "start_ts": 1700007528.0
+        },
+        {
+          "end_ts": 1700007530.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 135,
+          "source": "local_archive",
+          "start_ts": 1700007530.0
+        },
+        {
+          "end_ts": 1700007558.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 139,
+          "source": "local_archive",
+          "start_ts": 1700007558.0
+        },
+        {
+          "end_ts": 1700007560.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 140,
+          "source": "local_archive",
+          "start_ts": 1700007560.0
+        },
+        {
+          "end_ts": 1700007588.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 142,
+          "source": "local_archive",
+          "start_ts": 1700007588.0
+        },
+        {
+          "end_ts": 1700007590.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 143,
+          "source": "local_archive",
+          "start_ts": 1700007590.0
+        },
+        {
+          "end_ts": 1700007618.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 146,
+          "source": "local_archive",
+          "start_ts": 1700007618.0
+        },
+        {
+          "end_ts": 1700007620.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 147,
+          "source": "local_archive",
+          "start_ts": 1700007620.0
+        },
+        {
+          "end_ts": 1700007648.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 149,
+          "source": "local_archive",
+          "start_ts": 1700007648.0
+        },
+        {
+          "end_ts": 1700007650.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 150,
+          "source": "local_archive",
+          "start_ts": 1700007650.0
+        },
+        {
+          "end_ts": 1700007678.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 158,
+          "source": "local_archive",
+          "start_ts": 1700007678.0
+        },
+        {
+          "end_ts": 1700002100.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_HTTP500",
+          "recovery_attempts": 0,
+          "source": "ha_recorder",
+          "start_ts": 1700002000.0
+        }
+      ],
+      "lock_wait_seconds": 0.0,
+      "model_fingerprint": null,
+      "preparation_cpu_seconds": 0.15625,
+      "quality": {
+        "benchmark_samples": 176,
+        "experiences": 436,
+        "segments": 3,
+        "skipped_records": null,
+        "status": "SUFFICIENT"
+      },
+      "quarantine_cache_hit": false,
+      "recovered_records": 887,
+      "recovery_active_cpu_seconds": 0.109375,
+      "recovery_strategy": "selected_covering_keys",
+      "recovery_wall_seconds": 0.34300000010989606,
+      "resumed": false,
+      "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+      "skipped_records": null,
+      "snapshot_lifecycle": {
+        "boundary": {
+          "end_ts": 1700014400.0,
+          "schema": {
+            "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+            "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+            "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+            "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+            "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+            "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+            "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+            "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+            "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+            "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+            "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+            "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+            "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+            "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+            "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+            "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+            "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+            "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+            "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+            "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+            "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+            "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+            "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+            "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+            "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0"
+          },
+          "tables": {
+            "entity_history": {
+              "epoch": 0,
+              "upper": 960
+            },
+            "feature_observation_events": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "historical_experiences": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_feedback": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_models": {
+              "epoch": 0,
+              "upper": 0
+            }
+          },
+          "token": "b56cd6e2a24e4f279fda1290def260bc"
+        },
+        "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+        "max_explicit_transaction_seconds": 0.0009306999854743481,
+        "max_source_execute_seconds": 0.015999999828636646,
+        "owned_generation_connections": 1,
+        "owned_source_connections": 1,
+        "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+        "source_readers_between_batches": 0,
+        "wal_peak_bytes": 0
+      },
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-lcpiq3lb\\adaptive_ai.db",
+      "source_signature": [
+        [
+          290816,
+          1794433499218722700
+        ],
+        null
+      ],
+      "sqlite_errorcode": 11,
+      "sqlite_errorname": "SQLITE_CORRUPT",
+      "sqlite_wait_estimated": true,
+      "sqlite_wait_seconds": 0.060374999884516,
+      "status": "TRAINED",
+      "throttle_seconds": 0.0
+    },
+    "worker_resource_metrics": {
+      "cpu_seconds": null,
+      "peak_rss_mb": null
+    },
+    "source_table_rows": {},
+    "realtime_simulation": {
+      "ha_rows_written": 0,
+      "ui_reads": 0,
+      "ui_read_max_seconds": 0.0,
+      "writer_max_seconds": 0.0,
+      "loss": 0,
+      "environment": "host SQLite ingress/read simulation; not physical Pi"
+    },
+    "validation_wall_seconds": 5.391000000061467
+  },
+  "kill_and_restart": {
+    "agent_mode": "shadow",
+    "agent_progress": 1.0,
+    "concurrent_writes": 0,
+    "version": "0.15.8",
+    "input_history_rows": 960,
+    "worker_wall_seconds": 5.188229500083253,
+    "worker_phases": {
+      "benchmark_persist_seconds": 0.025529,
+      "causal_home_statistics": {
+        "compressed_bytes": 6365,
+        "contract": "causal_home_statistics_v1",
+        "cursor_bytes": 26991,
+        "cursor_entries": 2,
+        "cursor_hits": 260,
+        "cursor_restores": 81,
+        "direct_sources": 1,
+        "max_bytes": 8388608,
+        "query_calls": 341,
+        "query_rows": 493,
+        "snapshots": 13,
+        "source_rows": 114
+      },
+      "causal_home_statistics_build_seconds": 0.006403,
+      "causal_home_statistics_reused": false,
+      "causal_home_statistics_validation_seconds": 0.0,
+      "context_assessment_seconds": 0.0,
+      "context_entities_reconstructed_by_trackers": 1,
+      "context_screening_scope": "persisted_schema",
+      "continuation_cached_rows": 114,
+      "contract": "single_agent_training_phase_timing_v1",
+      "end_ts": 1700014400.0,
+      "experience_dedup_cache_hits": 0,
+      "experience_dedup_cached_ids": 328,
+      "experience_dedup_db_loads": 1,
+      "experience_dedup_load_seconds": 0.001318,
+      "feature_snapshot_build_seconds": 0.098686,
+      "feature_snapshot_builds": 284,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 284,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_session_builds_total": 284,
+      "feature_snapshot_session_hits_total": 0,
+      "feature_snapshot_session_reused": false,
+      "feature_snapshot_unique_timestamps": 256,
+      "finalization_seconds": 0.1529,
+      "full_archive_count_skipped": true,
+      "heldout_fold_seconds": 3e-06,
+      "legacy_outer_stream_entity_count": 2,
+      "neural_finalize_requested": true,
+      "neural_train_samples_buffered": 109,
+      "policy_serialize_persist_seconds": 0.025613,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_load_seconds": 1e-06,
+      "provenance_loaded_rows": 0,
+      "qualification_seconds": 0.010605,
+      "ram_index_construction_seconds": 0.0175,
+      "ram_replay_actual_bytes": 13725,
+      "ram_replay_entities": 2,
+      "ram_replay_estimated_bytes": 16285,
+      "ram_replay_fallback": false,
+      "ram_replay_fallback_entities": 0,
+      "ram_replay_index_reused": false,
+      "ram_replay_lookup_seconds": 0.01008,
+      "ram_replay_lookups": 1023,
+      "ram_replay_rows": 228,
+      "replay_driver_rows_planned": 114,
+      "replay_driver_rows_processed": 114,
+      "replay_seconds": 0.8233,
+      "replay_stream_contract": "target_only_driver_v1",
+      "rewarded_dwells": 113,
+      "screening_rows": 0,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_lookups": 0,
+      "sqlite_fallback_seconds": 0.0,
+      "start_ts": 1700010980.0,
+      "target_entities": 1,
+      "tiny_mlp_finalization_deferred": false,
+      "tiny_mlp_finalization_seconds": 0.037804,
+      "total_seconds": 1.0212,
+      "tracker_init_seconds": 0.007235,
+      "transition_edge_cursor_rewinds": 0,
+      "transition_edge_entities": 1,
+      "transition_edge_estimated_bytes": 18240,
+      "transition_edge_fallback_entities": 0,
+      "transition_edge_index_construction_seconds": 0.0016,
+      "transition_edge_index_fallbacks": 0,
+      "transition_edge_index_hits": 227,
+      "transition_edge_index_lookups": 227,
+      "transition_edge_index_reused": false,
+      "transition_edge_rows_applied": 114,
+      "transition_edge_scan_rows_avoided_estimate": 13109,
+      "transition_edge_source_rows": 114
+    },
+    "worker_budget": {
+      "effective_training_duty_cycle": 0.7026,
+      "effective_training_wall_duty_cycle": 0.7026,
+      "interactive_cooldown_seconds": 0.1,
+      "interactive_epoch_escalations": 0,
+      "interactive_max_burst_seconds": 1.25,
+      "interactive_preemptions": 0,
+      "interactive_priority_epochs": 0,
+      "interactive_requests_suppressed": 0,
+      "interactive_sleep_seconds": 0.0,
+      "interactive_yield_quantum_ms": 35.0,
+      "last_checkpoint": "finalization_complete",
+      "max_continuous_work_ms": 35.0,
+      "max_observed_slice_ms": 174.1,
+      "max_throttle_sleep_seconds": 0.05,
+      "realtime_cooldown_seconds": 0.2,
+      "realtime_max_burst_seconds": 0.45,
+      "slice_checkpoints": 95,
+      "slice_overruns": 77,
+      "throttle_active_seconds": 3.011,
+      "throttle_batches": 95,
+      "throttle_sleep_seconds": 1.274,
+      "training_cpu_duty_cycle": 0.7,
+      "training_wall_duty_cycle_target": 0.7
+    },
+    "learning_hash": "508280614719ad933a1e9eefbf017303b521fcf51e30a016c2c88a156d86a2fd",
+    "benchmark_counts": {
+      "samples": 122,
+      "correct": 122,
+      "per_action": {
+        "0": {
+          "samples": 61,
+          "correct": 61
+        },
+        "1": {
+          "samples": 61,
+          "correct": 61
+        }
+      },
+      "automation_rules": 0,
+      "origin_counts": {
+        "anonymous_external": 122
+      }
+    },
+    "frozen_holdout_counts": {
+      "samples": 122,
+      "correct": 122,
+      "per_action": {
+        "0": {
+          "samples": 61,
+          "correct": 61
+        },
+        "1": {
+          "samples": 61,
+          "correct": 61
+        }
+      }
+    },
+    "history_recovery": {
+      "agent_id": "a3ebdff1",
+      "archive_status": "ARCHIVE_CORRUPTED",
+      "attempts": 158,
+      "availability": "PARTIAL",
+      "contract": "training-history-generation-v4",
+      "copy_tables": {
+        "agents": {
+          "bytes_copied": 11895,
+          "copy_strategy": "all_controller_configuration",
+          "rows_copied": 2,
+          "source_rows_scanned": 2,
+          "version_guard_rows_scanned": 0
+        },
+        "app_meta": {
+          "bytes_copied": 0,
+          "copy_strategy": "shared_training_context_keys",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "entity_history": {
+          "bytes_copied": 88351,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 887,
+          "source_rows_scanned": 887
+        },
+        "entity_history_revision": {
+          "bytes_copied": 32,
+          "copy_strategy": "single_archive_revision",
+          "rows_copied": 1,
+          "source_rows_scanned": 1,
+          "version_guard_rows_scanned": 0
+        },
+        "events": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "feature_observation_events": {
+          "bytes_copied": 0,
+          "copy_strategy": "entity_time_keyset",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "historical_experiences": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "model_backups": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_feedback": {
+          "bytes_copied": 0,
+          "copy_strategy": "correct_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "rl_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_rebuild",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "tiny_mlp_shadow_models": {
+          "bytes_copied": 0,
+          "copy_strategy": "selected_agent",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        },
+        "training_generation_backup": {
+          "bytes_copied": 0,
+          "copy_strategy": "schema_only_not_a_training_dependency",
+          "rows_copied": 0,
+          "source_rows_scanned": 0,
+          "version_guard_rows_scanned": 0
+        }
+      },
+      "correct_agent_ids": [
+        "a3ebdff1"
+      ],
+      "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+      "gaps": [
+        {
+          "end_ts": 1700009870.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 12,
+          "source": "local_archive",
+          "start_ts": 1700009870.0
+        },
+        {
+          "end_ts": 1700009898.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 15,
+          "source": "local_archive",
+          "start_ts": 1700009898.0
+        },
+        {
+          "end_ts": 1700009900.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 16,
+          "source": "local_archive",
+          "start_ts": 1700009900.0
+        },
+        {
+          "end_ts": 1700009928.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 18,
+          "source": "local_archive",
+          "start_ts": 1700009928.0
+        },
+        {
+          "end_ts": 1700009930.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 19,
+          "source": "local_archive",
+          "start_ts": 1700009930.0
+        },
+        {
+          "end_ts": 1700009958.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 23,
+          "source": "local_archive",
+          "start_ts": 1700009958.0
+        },
+        {
+          "end_ts": 1700009960.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 24,
+          "source": "local_archive",
+          "start_ts": 1700009960.0
+        },
+        {
+          "end_ts": 1700009988.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 26,
+          "source": "local_archive",
+          "start_ts": 1700009988.0
+        },
+        {
+          "end_ts": 1700009990.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 27,
+          "source": "local_archive",
+          "start_ts": 1700009990.0
+        },
+        {
+          "end_ts": 1700010018.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 30,
+          "source": "local_archive",
+          "start_ts": 1700010018.0
+        },
+        {
+          "end_ts": 1700010020.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 31,
+          "source": "local_archive",
+          "start_ts": 1700010020.0
+        },
+        {
+          "end_ts": 1700010048.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 33,
+          "source": "local_archive",
+          "start_ts": 1700010048.0
+        },
+        {
+          "end_ts": 1700010050.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 34,
+          "source": "local_archive",
+          "start_ts": 1700010050.0
+        },
+        {
+          "end_ts": 1700010078.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 40,
+          "source": "local_archive",
+          "start_ts": 1700010078.0
+        },
+        {
+          "end_ts": 1700010080.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 41,
+          "source": "local_archive",
+          "start_ts": 1700010080.0
+        },
+        {
+          "end_ts": 1700010108.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 43,
+          "source": "local_archive",
+          "start_ts": 1700010108.0
+        },
+        {
+          "end_ts": 1700010110.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 44,
+          "source": "local_archive",
+          "start_ts": 1700010110.0
+        },
+        {
+          "end_ts": 1700010138.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 47,
+          "source": "local_archive",
+          "start_ts": 1700010138.0
+        },
+        {
+          "end_ts": 1700010140.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 48,
+          "source": "local_archive",
+          "start_ts": 1700010140.0
+        },
+        {
+          "end_ts": 1700010168.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 50,
+          "source": "local_archive",
+          "start_ts": 1700010168.0
+        },
+        {
+          "end_ts": 1700010170.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 51,
+          "source": "local_archive",
+          "start_ts": 1700010170.0
+        },
+        {
+          "end_ts": 1700010198.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 55,
+          "source": "local_archive",
+          "start_ts": 1700010198.0
+        },
+        {
+          "end_ts": 1700010200.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 56,
+          "source": "local_archive",
+          "start_ts": 1700010200.0
+        },
+        {
+          "end_ts": 1700010228.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 58,
+          "source": "local_archive",
+          "start_ts": 1700010228.0
+        },
+        {
+          "end_ts": 1700010230.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 59,
+          "source": "local_archive",
+          "start_ts": 1700010230.0
+        },
+        {
+          "end_ts": 1700010258.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 62,
+          "source": "local_archive",
+          "start_ts": 1700010258.0
+        },
+        {
+          "end_ts": 1700010260.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 63,
+          "source": "local_archive",
+          "start_ts": 1700010260.0
+        },
+        {
+          "end_ts": 1700010288.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 65,
+          "source": "local_archive",
+          "start_ts": 1700010288.0
+        },
+        {
+          "end_ts": 1700010290.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 66,
+          "source": "local_archive",
+          "start_ts": 1700010290.0
+        },
+        {
+          "end_ts": 1700010318.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 71,
+          "source": "local_archive",
+          "start_ts": 1700010318.0
+        },
+        {
+          "end_ts": 1700010320.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 72,
+          "source": "local_archive",
+          "start_ts": 1700010320.0
+        },
+        {
+          "end_ts": 1700010348.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 74,
+          "source": "local_archive",
+          "start_ts": 1700010348.0
+        },
+        {
+          "end_ts": 1700010350.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 75,
+          "source": "local_archive",
+          "start_ts": 1700010350.0
+        },
+        {
+          "end_ts": 1700010378.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 78,
+          "source": "local_archive",
+          "start_ts": 1700010378.0
+        },
+        {
+          "end_ts": 1700010380.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 79,
+          "source": "local_archive",
+          "start_ts": 1700010380.0
+        },
+        {
+          "end_ts": 1700010408.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 81,
+          "source": "local_archive",
+          "start_ts": 1700010408.0
+        },
+        {
+          "end_ts": 1700010410.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 82,
+          "source": "local_archive",
+          "start_ts": 1700010410.0
+        },
+        {
+          "end_ts": 1700010438.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 86,
+          "source": "local_archive",
+          "start_ts": 1700010438.0
+        },
+        {
+          "end_ts": 1700010440.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 87,
+          "source": "local_archive",
+          "start_ts": 1700010440.0
+        },
+        {
+          "end_ts": 1700010468.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 89,
+          "source": "local_archive",
+          "start_ts": 1700010468.0
+        },
+        {
+          "end_ts": 1700010470.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 90,
+          "source": "local_archive",
+          "start_ts": 1700010470.0
+        },
+        {
+          "end_ts": 1700010498.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 93,
+          "source": "local_archive",
+          "start_ts": 1700010498.0
+        },
+        {
+          "end_ts": 1700010500.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 94,
+          "source": "local_archive",
+          "start_ts": 1700010500.0
+        },
+        {
+          "end_ts": 1700010528.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 96,
+          "source": "local_archive",
+          "start_ts": 1700010528.0
+        },
+        {
+          "end_ts": 1700010530.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 97,
+          "source": "local_archive",
+          "start_ts": 1700010530.0
+        },
+        {
+          "end_ts": 1700010558.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 104,
+          "source": "local_archive",
+          "start_ts": 1700010558.0
+        },
+        {
+          "end_ts": 1700010560.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 105,
+          "source": "local_archive",
+          "start_ts": 1700010560.0
+        },
+        {
+          "end_ts": 1700010588.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 107,
+          "source": "local_archive",
+          "start_ts": 1700010588.0
+        },
+        {
+          "end_ts": 1700010590.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 108,
+          "source": "local_archive",
+          "start_ts": 1700010590.0
+        },
+        {
+          "end_ts": 1700010618.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 111,
+          "source": "local_archive",
+          "start_ts": 1700010618.0
+        },
+        {
+          "end_ts": 1700010620.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 112,
+          "source": "local_archive",
+          "start_ts": 1700010620.0
+        },
+        {
+          "end_ts": 1700010648.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 114,
+          "source": "local_archive",
+          "start_ts": 1700010648.0
+        },
+        {
+          "end_ts": 1700010650.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 115,
+          "source": "local_archive",
+          "start_ts": 1700010650.0
+        },
+        {
+          "end_ts": 1700010678.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 119,
+          "source": "local_archive",
+          "start_ts": 1700010678.0
+        },
+        {
+          "end_ts": 1700010680.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 120,
+          "source": "local_archive",
+          "start_ts": 1700010680.0
+        },
+        {
+          "end_ts": 1700010708.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 122,
+          "source": "local_archive",
+          "start_ts": 1700010708.0
+        },
+        {
+          "end_ts": 1700010710.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 123,
+          "source": "local_archive",
+          "start_ts": 1700010710.0
+        },
+        {
+          "end_ts": 1700010738.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 126,
+          "source": "local_archive",
+          "start_ts": 1700010738.0
+        },
+        {
+          "end_ts": 1700010740.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 127,
+          "source": "local_archive",
+          "start_ts": 1700010740.0
+        },
+        {
+          "end_ts": 1700010768.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 129,
+          "source": "local_archive",
+          "start_ts": 1700010768.0
+        },
+        {
+          "end_ts": 1700010770.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 130,
+          "source": "local_archive",
+          "start_ts": 1700010770.0
+        },
+        {
+          "end_ts": 1700010798.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 135,
+          "source": "local_archive",
+          "start_ts": 1700010798.0
+        },
+        {
+          "end_ts": 1700010800.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 136,
+          "source": "local_archive",
+          "start_ts": 1700010800.0
+        },
+        {
+          "end_ts": 1700010828.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 138,
+          "source": "local_archive",
+          "start_ts": 1700010828.0
+        },
+        {
+          "end_ts": 1700010830.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 139,
+          "source": "local_archive",
+          "start_ts": 1700010830.0
+        },
+        {
+          "end_ts": 1700010858.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 142,
+          "source": "local_archive",
+          "start_ts": 1700010858.0
+        },
+        {
+          "end_ts": 1700010860.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 143,
+          "source": "local_archive",
+          "start_ts": 1700010860.0
+        },
+        {
+          "end_ts": 1700010888.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 145,
+          "source": "local_archive",
+          "start_ts": 1700010888.0
+        },
+        {
+          "end_ts": 1700010890.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 146,
+          "source": "local_archive",
+          "start_ts": 1700010890.0
+        },
+        {
+          "end_ts": 1700010918.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 150,
+          "source": "local_archive",
+          "start_ts": 1700010918.0
+        },
+        {
+          "end_ts": 1700010920.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 151,
+          "source": "local_archive",
+          "start_ts": 1700010920.0
+        },
+        {
+          "end_ts": 1700010948.0,
+          "entity_id": "binary_sensor.motion",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 153,
+          "source": "local_archive",
+          "start_ts": 1700010948.0
+        },
+        {
+          "end_ts": 1700010950.0,
+          "entity_id": "switch.target",
+          "failure_reason": "HISTORY_GAP_SQLITE_CORRUPT",
+          "recovery_attempts": 154,
+          "source": "local_archive",
+          "start_ts": 1700010950.0
+        }
+      ],
+      "lock_wait_seconds": 0.0,
+      "model_fingerprint": "b9955d38bfe1ba99a565ae4b101dd7ad2f1e152f3f4a2fcf630a2ceee6352326",
+      "preparation_cpu_seconds": 0.171875,
+      "quality": {
+        "benchmark_samples": 122,
+        "experiences": 441,
+        "segments": 2,
+        "skipped_records": null,
+        "status": "SUFFICIENT"
+      },
+      "quarantine_cache_hit": false,
+      "recovered_records": 887,
+      "recovery_active_cpu_seconds": 0.0625,
+      "recovery_strategy": "selected_covering_keys",
+      "recovery_wall_seconds": 0.3440000000409782,
+      "resumed": false,
+      "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+      "skipped_records": null,
+      "snapshot_lifecycle": {
+        "boundary": {
+          "end_ts": 1700014400.0,
+          "schema": {
+            "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+            "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+            "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+            "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+            "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+            "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+            "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+            "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+            "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+            "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+            "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+            "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+            "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+            "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+            "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+            "__training_fence_tiny_mlp_shadow_models_delete": "f8f25d3e6de3d73af7efc413538de72426fde37eee31e35180f5c83e8c52163b",
+            "__training_fence_tiny_mlp_shadow_models_insert": "bc9ac236f97ebaefb71b0524d95d08229bfcc885937b1ff6c23f82f7c82b7e01",
+            "__training_fence_tiny_mlp_shadow_models_update": "8cd9f7f8e5950001e6b2264d88a32d02fc95a814e1db6d90430638247accfddc",
+            "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+            "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+            "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+            "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+            "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+            "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+            "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+            "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+            "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+            "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0",
+            "tiny_mlp_shadow_models": "7be5d0ea0bd1f1221f4bb70b52f801a3b9d0de6e972ca0ad82b0f35ac1f4043d"
+          },
+          "tables": {
+            "entity_history": {
+              "epoch": 0,
+              "upper": 1440
+            },
+            "feature_observation_events": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "historical_experiences": {
+              "epoch": 0,
+              "upper": 479
+            },
+            "rl_feedback": {
+              "epoch": 0,
+              "upper": 0
+            },
+            "rl_models": {
+              "epoch": 0,
+              "upper": 2
+            },
+            "tiny_mlp_shadow_models": {
+              "epoch": 0,
+              "upper": 1
+            }
+          },
+          "token": "c4c623b0bf90460fb64efabf2a0fa0a7"
+        },
+        "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+        "max_explicit_transaction_seconds": 0.0012789999600499868,
+        "max_source_execute_seconds": 0.0,
+        "owned_generation_connections": 1,
+        "owned_source_connections": 1,
+        "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+        "source_readers_between_batches": 0,
+        "wal_peak_bytes": 0
+      },
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-dlsok2ux\\adaptive_ai.db",
+      "source_signature": [
+        [
+          802816,
+          1794433509933208300
+        ],
+        null
+      ],
+      "sqlite_errorcode": 11,
+      "sqlite_errorname": "SQLITE_CORRUPT",
+      "sqlite_wait_estimated": true,
+      "sqlite_wait_seconds": 0.016374999890103936,
+      "status": "TRAINED",
+      "throttle_seconds": 0.0
+    },
+    "worker_resource_metrics": {
+      "cpu_seconds": null,
+      "peak_rss_mb": null
+    },
+    "source_table_rows": {},
+    "realtime_simulation": {
+      "ha_rows_written": 0,
+      "ui_reads": 0,
+      "ui_read_max_seconds": 0.0,
+      "writer_max_seconds": 0.0,
+      "loss": 0,
+      "environment": "host SQLite ingress/read simulation; not physical Pi"
+    },
+    "validation_wall_seconds": 10.202999999979511
+  },
+  "insufficient": {
+    "status": "INSUFFICIENT",
+    "previous_model_retained": true,
+    "error": "RecoveryUnavailable: History quality insufficient: too few held-out benchmark samples"
+  }
+}

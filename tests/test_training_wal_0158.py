@@ -299,6 +299,39 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
             self.assertEqual(list(process.pending_training_agents(store)),[])
         self.assertEqual(store.get_model(agent['id']),before)
 
+    def test_11_metadata_and_prefix_share_one_atomic_capture(self):
+        import threading
+        with self.store.conn() as connection:
+            connection.execute("INSERT OR REPLACE INTO app_meta VALUES('shared_home_model_v1','{\"version\":1}')")
+        attempted,done=threading.Event(),threading.Event()
+        errors=[]
+        def change_context():
+            try:
+                with closing(sqlite3.connect(self.store.path,timeout=5)) as writer:
+                    attempted.set()
+                    writer.execute("UPDATE app_meta SET value='{\"version\":2}' WHERE key='shared_home_model_v1'")
+                    writer.commit()
+                done.set()
+            except Exception as exc:
+                errors.append(exc)
+        threads=[]
+        original=Preparation.read_initial_metadata
+        def read_initial(preparation,connection):
+            thread=threading.Thread(target=change_context)
+            threads.append(thread)
+            thread.start()
+            self.assertTrue(attempted.wait(2))
+            self.assertFalse(done.wait(.02),'writer crossed initial metadata/boundary capture')
+            return original(preparation,connection)
+        with patch.object(Preparation,'read_initial_metadata',read_initial):
+            self.fixture.prepare()
+        for thread in threads: thread.join(5)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors,[])
+        self.assertTrue(done.is_set())
+        with sqlite3.connect(self.fixture.fixture.destination) as connection:
+            self.assertEqual(json.loads(connection.execute("SELECT value FROM app_meta WHERE key='shared_home_model_v1'").fetchone()[0]),dict(version=1))
+
 
 if __name__=='__main__':
     unittest.main()
