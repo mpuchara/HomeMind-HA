@@ -22,6 +22,8 @@ Konfiguracje kontrolerów i potrzebny wspólny kontekst trafiają do ograniczone
 
 Correct jest kopiowany według dotychczasowych relacji. Fingerprint powstaje z skopiowanego wejścia, nie z późniejszego widoku aktywnego źródła. Publikacja ponownie sprawdza Correct, model, konfigurację oraz wersję prefiksu i pozostaje atomowa. Zmiana lub utrata zaufania oznacza brak publikacji i zachowanie poprzedniego modelu.
 
+Niezmienny katalog wejścia jest zapisywany w generacji jednokrotnie; checkpoint partii zawiera tylko zmienny stan i wersje. Bufor konfiguracji jest zwalniany przed kopiowaniem historii. Zapytania keyset stosują porównanie pary (czas,id), umożliwiające seek indeksu zamiast wielokrotnego sprawdzania wcześniej skopiowanego prefiksu. Callback VM korzysta z istniejącego 50 ms okresu odświeżania budżetu; granice partii nadal wykonują świeży pomiar. Nie dodano statystyki dysku dla każdego wywołania VM.
+
 Wersjonowanie jest konserwatywne na poziomie tabel: mutacja starego prefiksu innego agenta może unieważnić przygotowanie. Nie pomijamy takiej zmiany. Nie jest to historyczna baza MVCC przechowująca stare wartości po UPDATE/DELETE; w takim przypadku potrzebne jest nowe wejście, z jawną przyczyną.
 
 ## StorageBudget i utrzymanie WAL

@@ -18,7 +18,7 @@ from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct
 from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
 
-CONTRACT = 'training-history-generation-v4'
+CONTRACT = 'training-history-generation-v5'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
     'rl_models', 'historical_experiences', 'tiny_mlp_shadow_models',
     'agent_candidate_generations', 'automatic_reward_experiences',
@@ -156,7 +156,7 @@ class Preparation:
             progress=min(.09,.01+.08*len([x for x in self.state['queries'].values() if x.get('done')])/(len(self.schema)+len(self.entities)+1)))
 
     def save(self):
-        self.dst.execute('INSERT OR REPLACE INTO __training_copy_state VALUES(1,?)',(json.dumps(self.state),))
+        self.dst.execute('INSERT OR REPLACE INTO __training_copy_state VALUES(1,?)',(json.dumps({k:v for k,v in self.state.items() if k!='source_schema'}),))
         self.dst.commit()
 
     def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql'):
@@ -180,7 +180,9 @@ class Preparation:
             if last is not None:
                 if key in ('ts,id','event_time,rowid'):
                     stamp, identity = key.split(',')
-                    where.append(f'({stamp}>? OR ({stamp}=? AND {identity}>?))'); values += [last[0],last[0],last[1]]
+                    # Tuple keyset lets SQLite seek the composite index rather
+                    # than rechecking the entire copied prefix for every batch.
+                    where.append(f'({stamp},{identity})>(?,?)'); values += [last[0],last[1]]
                 else:
                     where.append('rowid>?'); values.append(last)
             extra = '' if key == 'ts,id' else 'rowid AS __copy_rowid,'
@@ -315,6 +317,7 @@ class Preparation:
         if self.working.exists():
             with closing(sqlite3.connect(self.working)) as old:
                 saved=json.loads(old.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()[0])
+                saved['source_schema']=json.loads(old.execute('SELECT payload FROM __training_source_schema WHERE id=1').fetchone()[0])
             with closing(sqlite3.connect(self.source.as_uri()+'?mode=ro',uri=True,timeout=.2)) as fence:
                 validate(fence,saved['boundary'])
             self.state['boundary']=saved['boundary']
@@ -362,7 +365,7 @@ class Preparation:
                         TRAINING_BUDGET.checkpoint('training_history_sql_vm')
                     self.throttle+=max(0.,TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)-before)
                     guard=worker_storage_budget()
-                    if guard.check_operation('source_read',refresh=True)!='normal':
+                    if guard.check_operation('source_read',refresh=False)!='normal':
                         self.pressure=guard.pressure()
                         return 1
                 except StoragePressure as exc:
@@ -382,6 +385,7 @@ class Preparation:
                 previous = None
             if previous:
                 self.state = json.loads(previous[0])
+                self.state['source_schema']=json.loads(self.dst.execute('SELECT payload FROM __training_source_schema WHERE id=1').fetchone()[0])
                 self.schema=self.state['source_schema']
                 tables={x['name']:x for x in self.schema if x['type']=='table' and not x['name'].startswith(('sqlite_','__training_'))}
                 if self.state['identity']!=self.identity:
@@ -398,6 +402,10 @@ class Preparation:
                 for item in tables.values():
                     self.dst.execute(item['sql'])
                 self.dst.execute('CREATE TABLE __training_copy_state(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
+                # Immutable catalog is stored ONCE, not serialized/journalled with
+                # every 128-row progress checkpoint on a multi-month archive.
+                self.dst.execute('CREATE TABLE __training_source_schema(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
+                self.dst.execute('INSERT INTO __training_source_schema VALUES(1,?)',(json.dumps(self.state['source_schema']),))
                 self.save()
             from training_snapshot import validate
             # A bounded initial transaction captures mutable controller/context
@@ -538,8 +546,8 @@ class Preparation:
                     last=None
                     while True:
                         self.checkpoint()
-                        predicate=' AND (ts>? OR (ts=? AND id>?))' if last else ''
-                        params=(entity,self.end,self.state['boundary']['tables']['entity_history']['upper'])+tuple((last[0],last[0],last[1]) if last else ())
+                        predicate=' AND (ts,id)>(?,?)' if last else ''
+                        params=(entity,self.end,self.state['boundary']['tables']['entity_history']['upper'])+tuple((last[0],last[1]) if last else ())
                         with closing(self.sql(self.src,'execute',f'SELECT id,entity_id,ts FROM entity_history INDEXED BY {quote(index)} WHERE entity_id=? AND ts<=? AND rowid<=?'+predicate+' ORDER BY ts,id LIMIT 128',params)) as cursor:
                             batch=self.sql(cursor,'fetchall')
                         if not batch:

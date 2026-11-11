@@ -231,7 +231,8 @@ class StorageBudget:
         """
         if operation not in ('source_read', 'generation_write', 'checkpoint'):
             raise ValueError('Unknown storage operation')
-        data=self.sample() if refresh else self.snapshot()
+        due=refresh or time.monotonic()-self._last_sample_at>=SAMPLE_INTERVAL_SECONDS
+        data=self.sample() if due else self.snapshot()
         if (data.get('sample_error') or (data.get('free_bytes') or 0)<self.reserve):
             raise self.pressure(data.get('reason') or 'disk_reserve')
         if operation=='checkpoint':

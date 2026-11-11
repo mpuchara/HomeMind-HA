@@ -34,7 +34,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
         raise ValueError('matched workload requires training, agents and at most 100 steps')
     if correct_every < 1 or (candidate_limit is not None and not 0 <= candidate_limit <= count):
         raise ValueError('invalid Correct cadence or Candidate count')
-    with tempfile.TemporaryDirectory(prefix='hm-scaling-') as data, ExitStack() as stack:
+    with tempfile.TemporaryDirectory(prefix='hm-scaling-',ignore_cleanup_errors=(os.name=='nt')) as data, ExitStack() as stack:
         # Replay identical event/received wall-clock values in independent runs.
         # Scheduling, latency clocks and CPU accounting still use real time.
         logical_time = [1793275200.]
