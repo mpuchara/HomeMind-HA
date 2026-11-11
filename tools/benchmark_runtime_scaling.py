@@ -182,7 +182,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                 ui_server_thread.join(5)
             stack.callback(close_ui)
             ui_url='http://127.0.0.1:'+str(ui_server.server_port)+'/api/agents'
-            prep_root=Path(data)/'history_generations' 
+            prep_root=Path(data)/'history_generations'
             prep_root.mkdir()
             def prepare_history():
                 from history_recovery import prepare_generation

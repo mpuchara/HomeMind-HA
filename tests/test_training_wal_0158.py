@@ -165,7 +165,7 @@ class TrainingWALTests(unittest.TestCase):
         self.addCleanup(worker.stop)
         history=SimpleNamespace(stop_event=__import__('threading').Event(),job_cancel_event=None,
                                 training_process_status={})
-        job=dict(agent_id=self.fixture.agent['id'],job_id='wal-resume',generation_rebuild=True)
+        job=dict(agent_id=self.fixture.agent['id'],job_id='wal-resume',generation_rebuild=True,training_generation=True)
         calls=[]
         def attempt(history,start,end,descriptor,path):
             calls.append((descriptor['job_id'],start,end,descriptor['generation_rebuild']))
@@ -233,7 +233,7 @@ store=storage.Store(sys.argv[2]); storage.STORE=store
 store.storage_budget.wal_limit=256*1024
 root=Path(sys.argv[3]); process._job_dir=lambda:root
 agent=store.get_agent_config(sys.argv[4])
-job=dict(agent_id=agent['id'],job_id='kill-wait',start_ts=900,end_ts=77000,
+job=dict(agent_id=agent['id'],job_id='kill-wait',start_ts=900,end_ts=77000,training_generation=True,
  app_version=process.APP_VERSION,agent_fingerprint=process.agent_config_fingerprint(agent))
 history=SimpleNamespace(stop_event=threading.Event(),job_cancel_event=None,training_process_status={})
 process._run_isolated_training_attempt=lambda *args:prepare_generation(store.path,root/'killed.generation.db',
@@ -274,10 +274,30 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
         with self.store.conn() as conn:
             conn.execute("UPDATE entity_history SET state='enriched' WHERE ts=1000000")
             validate(conn,boundary)
+
         with self.store.conn() as conn:
             conn.execute('UPDATE entity_history SET ts=70001 WHERE ts=1000000')
         with self.store.conn() as conn,self.assertRaisesRegex(RuntimeError,'prefix changed'):
             validate(conn,boundary)
+
+    def test_10_repeated_deferral_is_bounded_and_not_automatically_requeued(self):
+        import storage
+        import training_process as process
+        store=self.store
+        agent=self.fixture.agent
+        store.save_model(agent['id'],dict(marker='approved'))
+        before=store.get_model(agent['id'])
+        stop=SimpleNamespace(wait=lambda seconds:False,is_set=lambda:False)
+        history=SimpleNamespace(stop_event=stop,job_cancel_event=None,training_process_status={})
+        job=dict(agent_id=agent['id'],job_id='bounded',training_generation=True)
+        with patch.object(storage,'STORE',store),patch.object(process,'_job_dir',return_value=self.fixture.fixture.root), \
+             patch.object(process,'_run_isolated_training_attempt',side_effect=store.storage_budget.pressure('wal_budget')) as attempt:
+            with self.assertRaises(StoragePressure) as raised:
+                process._supervise_generation(history,900,77000,job,self.fixture.fixture.root/'bounded.job.json')
+            self.assertEqual(raised.exception.reason,'wal_retry_exhausted')
+            self.assertEqual(attempt.call_count,5)
+            self.assertEqual(list(process.pending_training_agents(store)),[])
+        self.assertEqual(store.get_model(agent['id']),before)
 
 
 if __name__=='__main__':

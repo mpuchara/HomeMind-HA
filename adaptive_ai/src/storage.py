@@ -87,9 +87,6 @@ class Store:
                 started = time.perf_counter()
                 operation()
                 self.startup_timings[name] = round(time.perf_counter()-started, 4)
-            from training_snapshot import install
-            with self.lock, self.conn() as connection:
-                install(connection)
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.
@@ -749,6 +746,9 @@ class Store:
                            (training_window_start_ts IS NULL OR training_window_end_ts IS NULL
                             OR training_cursor_ts IS NULL)""",
                           (bounds[0], bounds[1], bounds[1], iso_now()))
+
+            from training_snapshot import install
+            install(c)
 
     def _load_meta_cache(self):
         with self.conn() as c:

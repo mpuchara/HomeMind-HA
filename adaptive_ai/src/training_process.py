@@ -1020,6 +1020,8 @@ def resume_deferred_training(history, agent_id):
 def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
     from storage import STORE
     from storage_budget import run_storage_write, require_storage_available
+    if not job.get('training_generation'):
+        return _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path)
     marker=_resume_path(job['agent_id'])
     state=dict(saved or {},source=str(Path(STORE.path).resolve()),job=job,job_path=str(job_path))
     attempts=int(state.get('attempts',0))
