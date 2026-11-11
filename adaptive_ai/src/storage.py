@@ -379,6 +379,10 @@ class Store:
                     self._connection_session.connection_busy_timeout_ms = busy_timeout_ms
             if not reuse:
                 c.execute("PRAGMA synchronous=NORMAL")
+                if getattr(self, 'recovery_generation', False):
+                    page_size = int(c.execute('PRAGMA page_size').fetchone()[0])
+                    disk_mb = max(16,min(2048,int(OPTIONS.get('max_recovery_disk_mb',512))))
+                    c.execute(f'PRAGMA max_page_count={disk_mb*1048576//page_size}')
                 c.execute(f"PRAGMA journal_size_limit={WAL_RETAIN_BYTES}")
                 c.execute("PRAGMA temp_store=MEMORY")
                 c.execute("PRAGMA cache_size=-16384")

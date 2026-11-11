@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.15.5"
+version: "0.15.6"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -18,6 +18,11 @@ panel_title: Adaptive AI
 panel_admin: true
 backup: hot
 options:
+  max_recovery_attempts: 4096
+  max_recovery_depth: 32
+  max_recovery_wall_seconds: 120
+  max_recovery_memory_mb: 8
+  max_recovery_disk_mb: 512
   policy_half_life_days: 30
   home_model_half_life_days: 45
   entity_area_mapping: "{}"
@@ -253,6 +258,11 @@ options:
   teach_rl_positive_weight: 6
   teach_rl_negative_weight: 3
 schema:
+  max_recovery_attempts: "int(1,16384)"
+  max_recovery_depth: "int(1,48)"
+  max_recovery_wall_seconds: "int(1,600)"
+  max_recovery_memory_mb: "int(1,32)"
+  max_recovery_disk_mb: "int(16,2048)"
   policy_half_life_days: "int(1,365)"
   home_model_half_life_days: "int(1,365)"
   entity_area_mapping: "str"

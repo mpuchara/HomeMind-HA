@@ -414,7 +414,7 @@ class StatefulChunkSchedulingTests(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 3)
-        self.assertEqual(store.cleared, agent['id'])
+        self.assertFalse(hasattr(store, 'cleared'))  # isolated generation owns reset
         self.assertEqual((calls[0][0], calls[0][1]), (0.0, 6 * 3600.0))
         self.assertIsNone(calls[0][2]["continuation_from_ts"])
 

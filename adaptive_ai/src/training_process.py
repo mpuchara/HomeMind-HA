@@ -226,6 +226,40 @@ def training_relevant_entities(agent, model=None, schema_item=None, neural_artif
     return out
 
 
+def training_history_scope(job, store):
+    """Use the existing schema/context admission rules, not every HA entity.
+
+    An unrelated diagnostic or retired actuator must not turn its damaged rows
+    into a trust boundary for this agent. Wildcard feature screening still gets
+    its established eligible candidate pool; learning/selection rules are unchanged.
+    """
+    from context_engine import ContextEngine
+    from context import is_context_candidate_entity, is_fast_reactive_agent
+    agent = store.get_agent_config(str(job['agent_id']))
+    states, registry = dict(job.get('state_map') or {}), dict(job.get('entity_registry') or {})
+    seed = dict(job.get('schema_cache_item') or {})
+    raw = store.get_model(agent['id']) or {}
+    entities = training_relevant_entities(agent, model=raw, schema_item=seed)
+    from additional_signal import entities as additional_entities
+    entities.update(additional_entities(agent))
+    # Metadata-only construction: no Store means no DDL or history reads on the
+    # original database. configure() uses the same mapping/admission implementation.
+    context = ContextEngine(OPTIONS)
+    context.configure(states, entities=registry)
+    entities.update(context.relevant_entities())
+    schema = (seed.get('model') or raw).get('schema') or seed.get('schema') or {}
+    if '*' in set(agent.get('input_entities') or ('*',)):
+        if schema.get('entities'):
+            if job.get('generation_rebuild') and is_fast_reactive_agent(agent):
+                from training_context_selection import candidates
+                entities.update(candidates(agent, (seed.get('model') or raw).get('selection_meta') or {},
+                    states, registry, schema['entities']))
+        else:
+            entities.update(eid for eid, state in states.items()
+                            if is_context_candidate_entity(eid, state, context.excluded))
+    return entities
+
+
 def _expand_topology_scope(entity_ids, *registries):
     """Include device siblings because actuator exclusion is device-level."""
     scope = {str(x) for x in (entity_ids or ()) if x}
@@ -315,7 +349,16 @@ def _same_process_alive(pid, start_token=None):
 def _atomic_json(path, payload):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_text(path, _canonical(payload))
+    for attempt in range(6):
+        try:
+            atomic_text(path, _canonical(payload))
+            break
+        except PermissionError as exc:
+            # Windows may briefly deny replacement while the supervisor reads a
+            # heartbeat. This is transport contention, not a training/data failure.
+            if os.name != 'nt' or getattr(exc,'winerror',None) not in (5,32) or attempt == 5:
+                raise
+            time.sleep(.01)
 
 
 def _read_json(path, default=None):
@@ -638,6 +681,8 @@ def _build_job(history, start_ts, end_ts, kwargs):
         "parent_pid": os.getpid(),
         "parent_start_token": _process_start_token(os.getpid()),
         "agent_id": agent_id,
+        "generation_rebuild": bool(getattr(history, 'training_generation_rebuild', False)),
+        "training_generation": True,
         "agent_fingerprint": agent_config_fingerprint(agent),
         "context_fingerprint": runtime_context_fingerprint(
             state_map, registry, dict(OPTIONS)
@@ -978,6 +1023,11 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     env["MKL_NUM_THREADS"] = "1"
     env["NUMEXPR_NUM_THREADS"] = "1"
 
+    if job.get('training_generation'):
+        STORE.event(agent_id,'info','training_history_recovery_started',
+                    'Preparing an isolated consistent history generation',
+                    dict(agent_id=agent_id,training_phase='history_recovery',query_start_ts=start_ts,query_end_ts=end_ts))
+
     process = subprocess.Popen(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],
         cwd=str(Path(__file__).resolve().parent),
@@ -1171,7 +1221,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         # Long Pi training jobs routinely overlap harmless HA Entity Registry refreshes.
         # Validate only topology that can affect the model actually produced by this
         # worker, plus device siblings used by controllable-context exclusion.
-        model_after = STORE.get_model(agent_id) or {}
+        model_after = result.get('generation_model') or STORE.get_model(agent_id) or {}
         schema_item_after = result.get("schema_cache_item") or {}
         neural_artifact = (
             (dict(result.get("neural_training_artifacts") or {})).get(agent_id)
@@ -1222,6 +1272,28 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                     "runtime topology/options changed while isolated training was running",
                     preserve_lifecycle=False,
                 )
+
+        if result.get('generation_path'):
+            from history_recovery import publish_generation
+            publish_generation(STORE, result['generation_path'], agent_id,
+                               job['agent_fingerprint'], agent_config_fingerprint)
+            neural_service = getattr(history.engine,'tiny_mlp_shadow',None)
+            if neural_service is not None and callable(getattr(neural_service,'invalidate',None)):
+                neural_service.invalidate(agent_id)
+            history.training_process_status['history_recovery'] = result.get('history_recovery')
+            recovery = result.get('history_recovery') or {}
+            if recovery.get('gaps'):
+                STORE.event(agent_id,'warning','training_partial_history',
+                    'Training used synchronized trustworthy intervals; missing record count is unknown', recovery.get('quality'))
+            if recovery.get('sqlite_errorcode') is not None:
+                STORE.event(agent_id,'warning','training_corruption_detected',
+                    'Local archive corruption isolated in the training generation', recovery)
+            for gap in list(recovery.get('gaps') or ())[:16]:
+                STORE.event(agent_id,'warning','training_history_range_skipped',
+                    'Untrusted history excluded from replay', gap)
+            STORE.event(agent_id, 'warning' if recovery.get('gaps') else 'info',
+                        'training_completed_with_gaps' if recovery.get('gaps') else 'training_history_recovered',
+                        'Training generation committed atomically', recovery)
 
         # Child writes are durable, but all parent runtime caches are process-local.
         history.engine.models.pop(agent_id, None)
@@ -1277,7 +1349,7 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
 
         neural_artifacts = dict(result.get("neural_training_artifacts") or {})
         history.neural_training_artifacts = neural_artifacts
-        if neural_artifacts:
+        if neural_artifacts and not result.get('generation_path'):
             from tiny_mlp_shadow import publish_training_artifact
             service = getattr(history.engine, "tiny_mlp_shadow", None)
             for neural_agent_id, artifact in neural_artifacts.items():
@@ -1322,6 +1394,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
+        if job.get('training_generation'):
+            STORE.event(agent_id,'warning','training_recovery_failed',
+                        str(exc),dict(agent_id=agent_id,previous_model_retained=True))
         rollback_agent = agent_before
         rollback_model = model_before
         rollback_neural = neural_before
@@ -1336,15 +1411,17 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
                 rollback_model = rollback.get("model_before")
             if "neural_before" in rollback:
                 rollback_neural = rollback.get("neural_before")
-        _restore_rejected_chunk(
-            STORE, agent_id, rollback_agent, rollback_model,
-            preserve_lifecycle=bool(
-                isinstance(exc, StaleTrainingJob) and exc.preserve_lifecycle
-            ),
-        )
+        if not job.get('training_generation'):
+            _restore_rejected_chunk(
+                STORE, agent_id, rollback_agent, rollback_model,
+                preserve_lifecycle=bool(
+                    isinstance(exc, StaleTrainingJob) and exc.preserve_lifecycle
+                ),
+            )
         try:
             from tiny_mlp_shadow import restore_training_record
-            restore_training_record(STORE, agent_id, rollback_neural)
+            if not job.get('training_generation'):
+                restore_training_record(STORE, agent_id, rollback_neural)
             service = getattr(history.engine, "tiny_mlp_shadow", None)
             if service is not None and callable(getattr(service, "invalidate", None)):
                 service.invalidate(agent_id)
@@ -1363,9 +1440,20 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         raise
     finally:
+        if process.poll() is None:
+            _terminate(process, grace)
         if log_writer is not None and process.poll() is not None:
             log_writer.join(1)
         history.active_training_process = None
+        if job.get('training_generation') and process.poll() is not None:
+            generation = Path(job['result_path']).with_suffix('.generation.db').resolve()
+            # Only this job's disposable generation is removed, never source DB/WAL.
+            if generation.parent == Path(job['result_path']).resolve().parent:
+                for suffix in ('','-wal','-shm','-journal'):
+                    try:
+                        Path(str(generation)+suffix).unlink(missing_ok=True)
+                    except OSError:
+                        pass
 
 
 class TrainingWorkerEngine:
@@ -1524,6 +1612,44 @@ def worker_main(job_path):
         stage="training_imports_complete",
     )
 
+    generation_report = None
+    generation_path = None
+    if job.get('training_generation'):
+        _worker_configure_budget().begin(thread_name='adaptive-ai-index-process')
+        from history_recovery import prepare_generation, RecoveryUnavailable
+        generation_path = str(Path(job['result_path']).with_suffix('.generation.db'))
+        _worker_boot_status(job, 'Preparing consistent training generation', stage='history_recovery')
+        agent = STORE.get_agent_config(str(job['agent_id']))
+        entities = training_history_scope(job, STORE)
+        def recovery_progress(**fields):
+            _worker_boot_status(job, fields.get('message', 'Recovering history'), stage='history_recovery')
+        parent = int(job.get('parent_pid') or 0)
+        try:
+            generation_report = prepare_generation(
+                STORE.path, generation_path, entities,
+                float(job.get('sequence_start_ts', job['start_ts'])),
+                float(job.get('sequence_target_end_ts', job['end_ts'])), options=OPTIONS,
+                agent_id=str(job['agent_id']),
+                cancelled=lambda: bool(parent and not _same_process_alive(parent, job.get('parent_start_token'))),
+                progress=recovery_progress,
+                http_gaps=json.loads(STORE.meta_get('training_history_gaps_v1', '[]'))
+                    + json.loads(STORE.meta_get('discovery_recorder_gaps_v1', '[]')),
+            )
+        except Exception as exc:
+            _atomic_json(job['result_path'], dict(format=RESULT_FORMAT, version=RESULT_VERSION,
+                job_id=job['job_id'], ok=False, error=f'{type(exc).__name__}: {exc}',
+                error_type=type(exc).__name__, trace=traceback.format_exc(limit=8)))
+            return 2
+        # This is a fresh child: all subsequent Store, context, RAM index, temporal
+        # and long-memory readers/writers share the SAME clean generation path.
+        STORE.path = generation_path
+        STORE.recovery_generation = True
+        from storage_budget import StorageBudget
+        STORE.storage_budget = StorageBudget(generation_path, OPTIONS)
+        STORE._meta_cache.clear()
+        STORE._load_meta_cache()
+        if job.get('generation_rebuild'):
+            STORE.clear_learning(str(job['agent_id']))
     STORE.checkpointed_archive_reads = True
     engine = TrainingWorkerEngine(job, STORE)
     # Use the exact parent automation snapshot, including enabled controllers and
@@ -1620,12 +1746,37 @@ def worker_main(job_path):
                 "checkpoint_cursor_ts": float(job["end_ts"]),
                 "checkpoint_meta": {},
             }]
+        if generation_report and generation_report['gaps']:
+            from history_recovery import safe_segments, RecoveryUnavailable
+            lo = float(job.get('sequence_start_ts', job['start_ts']))
+            hi = float(job.get('sequence_target_end_ts', job['end_ts']))
+            segments = safe_segments(generation_report, lo, hi)
+            synchronized_segments = []
+            with STORE.conn() as conn:
+                required = conn.execute('SELECT COUNT(DISTINCT entity_id) FROM recovery_rows').fetchone()[0]
+                for left, right in segments:
+                    seeds = conn.execute('SELECT entity_id,MIN(MAX(ts,COALESCE(received_ts,ts))) FROM recovery_rows WHERE ts>=? AND ts<=? AND (received_ts IS NULL OR received_ts<=?) GROUP BY entity_id', (left,right,right)).fetchall()
+                    if seeds and len(seeds) == required and max(float(r[1]) for r in seeds) < right:
+                        synchronized_segments.append((left,right))
+            segments = synchronized_segments
+            if not segments:
+                raise RecoveryUnavailable('History quality insufficient: no trustworthy replay interval')
+            base = dict(chunks[-1]['train_kwargs'])
+            chunks = []
+            for index, (left, right) in enumerate(segments):
+                segment_kwargs = dict(base, continuation_from_ts=None, include_long_memory=False,
+                    qualify=index == len(segments)-1, finalize_neural=index == len(segments)-1,
+                    progress_lo=index/len(segments), progress_hi=(index+1)/len(segments))
+                chunks.append(dict(start_ts=left, end_ts=right, train_kwargs=segment_kwargs,
+                    checkpoint_cursor_ts=right, recovery_segment=True))
         sequence_mode = bool(job.get("sequence_chunks"))
         total_value = 0
         chunk_reports = []
         from tiny_mlp_shadow import load_training_record, publish_training_artifact
 
         def write_rollback_snapshot(next_chunk_index):
+            if job.get('training_generation'):
+                return
             path = job.get("rollback_path")
             if not path:
                 return
@@ -1643,6 +1794,15 @@ def worker_main(job_path):
             if history.stop_event.is_set():
                 raise InterruptedError("Persistent training worker cancelled")
             chunk_kwargs = dict(chunk.get("train_kwargs") or {})
+            if chunk.get('recovery_segment'):
+                from history_recovery import project_segment
+                history.close_persistent_training_resources()
+                synchronized = project_segment(STORE.path, chunk['start_ts'], chunk['end_ts'])
+                if synchronized is None or synchronized >= chunk['end_ts']:
+                    # This segment has no trustworthy common context. No decisions,
+                    # zero rewards, benchmark rows or cursor checkpoint are emitted.
+                    continue
+                chunk['start_ts'] = synchronized
             history.set_status(
                 phase='training',
                 progress=chunk_kwargs.get("progress_lo"),
@@ -1734,6 +1894,27 @@ def worker_main(job_path):
         training_session_profile = aggregate_training_sequence_profile(
             chunk_reports
         )
+        if generation_report is not None:
+            from history_recovery import RecoveryUnavailable
+            model = STORE.get_model(aid)
+            with STORE.conn() as conn:
+                experiences = conn.execute('SELECT COUNT(*) FROM historical_experiences WHERE agent_id=?', (aid,)).fetchone()[0]
+            trained_agent = STORE.get_agent_config(aid)
+            if not model or experiences < 1 or (int(total_value or 0) < 1 and job.get('generation_rebuild')):
+                raise RecoveryUnavailable('History quality insufficient: no newly trained model with real experiences')
+            if bool(chunks[-1]['train_kwargs'].get('qualify')) and int(trained_agent.get('benchmark_samples') or 0) < int(OPTIONS.get('candidate_benchmark_min_samples', 12)):
+                raise RecoveryUnavailable('History quality insufficient: too few held-out benchmark samples')
+            if bool(chunks[-1]['train_kwargs'].get('qualify')) and trained_agent.get('mode') != 'shadow':
+                raise RecoveryUnavailable('Training did not finish qualification and Shadow transition')
+            if bool(chunks[-1]['train_kwargs'].get('qualify')):
+                STORE.set_training_progress(aid, float(job.get('sequence_start_ts', job['start_ts'])),
+                    float(job.get('sequence_target_end_ts', job['end_ts'])), float(job.get('sequence_target_end_ts', job['end_ts'])))
+            generation_report['quality'] = dict(experiences=experiences, benchmark_samples=trained_agent.get('benchmark_samples'),
+                segments=len(chunks), status='SUFFICIENT', skipped_records=None)
+            generation_report['status'] = 'TRAINED'
+            with STORE.conn() as conn:
+                conn.execute('UPDATE recovery_manifest SET payload=?', (json.dumps(generation_report),))
+            result.update(generation_path=generation_path, generation_model=model, history_recovery=generation_report)
         result.update({
             "ok": True,
             "return_value": int(total_value),

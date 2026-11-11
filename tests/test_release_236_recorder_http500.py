@@ -152,8 +152,9 @@ class RecorderHTTP500Tests(unittest.TestCase):
         self.obj.training_job_agent_id = "agent"
         self.simulate(lambda *args: True)
         with patch.object(history, "TRAINING_HTTP_500_LIMIT", 3):
-            with self.assertRaisesRegex(history.TrainingRecorderUnavailable, "3 consecutive HTTP 500"):
-                self.run_fetch(["light.a"], span=21600)
+            self.assertEqual(self.run_fetch(["light.a"], span=21600),0)
+            self.assertTrue(self.store.meta_get('training_history_gaps_v1'))
+            self.assertEqual(self.run_fetch(["light.a"], span=21600),0)
         self.assertEqual(len(self.requests), 3)
         self.assertFalse(self.covered)
 

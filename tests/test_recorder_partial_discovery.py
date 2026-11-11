@@ -116,6 +116,7 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.assertLessEqual(len(self.requests), 16)
 
     def test_affected_agent_cannot_prepare_replay_across_known_gap(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         self.discover()
         self.obj._training_recorder_import = Mock()
         self.obj._eligible_rebuild_context = lambda: []
@@ -130,6 +131,7 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.obj._require_agent_history({BAD}, START + 3600, END)
 
     def test_fatal_preparation_errors_stop_rebuild_before_learning_reset(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         config = self.store.create_agent(agent(target_entity=GOOD))
         agent_id = config["id"]
         self.store.save_model(agent_id, {"marker": "existing model"})
@@ -157,7 +159,20 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
                 self.obj._persist_training_recorder_coverage()
         self.assertIs(raised.exception.__cause__, error)
 
+    def test_import_disk_failure_is_not_quarantined_as_recorder_history(self):
+        import errno
+        self.obj.training_job_agent_id = 'disk-failure-agent'
+        history.HEAVY_JOBS.owner = 'agent_training'
+        error = OSError(errno.ENOSPC,'No space left on device')
+        with patch.object(self.obj,'_archive_history_payload',side_effect=error):
+            with self.assertRaises(OSError) as raised:
+                self.obj._fetch_history_resilient([GOOD],START,END,
+                    minimal=False,no_attributes=False,source=SOURCE)
+        self.assertIs(raised.exception,error)
+        self.assertFalse(self.store.meta_get('training_history_gaps_v1'))
+
     def test_import_write_corruption_continues_to_replay_from_committed_archive(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         config = self.store.create_agent(agent(target_entity=GOOD))
         self.obj.training_job_agent_id = config["id"]
         self.obj.session_mode = True
