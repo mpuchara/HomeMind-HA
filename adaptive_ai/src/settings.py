@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.15.5"
+APP_VERSION = "0.15.6"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -28,6 +28,11 @@ HA_BASE_URL = os.environ.get("HA_BASE_URL", "http://supervisor/core/api").rstrip
 HA_TOKEN = os.environ.get("HA_TOKEN") or os.environ.get("SUPERVISOR_TOKEN", "")
 
 DEFAULT_OPTIONS = {
+    "max_recovery_attempts": 4096,
+    "max_recovery_depth": 32,
+    "max_recovery_wall_seconds": 120,
+    "max_recovery_memory_mb": 8,
+    "max_recovery_disk_mb": 512,
     "training_pattern_weighting_enabled": True,
     "training_pattern_min_days": 3,
     "training_light_outcome_enabled": True,

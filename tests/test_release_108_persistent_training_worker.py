@@ -198,7 +198,7 @@ class PersistentSchedulingTests(unittest.TestCase):
             )
 
         self.assertIs(captured["history"], manager)
-        self.assertEqual(store.cleared, agent['id'])
+        self.assertFalse(hasattr(store, 'cleared'))  # reset belongs to the disposable child generation
         chunks = captured["chunks"]
         self.assertEqual(len(chunks), 3)
         self.assertEqual(

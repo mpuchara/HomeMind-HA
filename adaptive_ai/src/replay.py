@@ -431,7 +431,20 @@ class RAMReplayIndex:
                 index.budget_exhausted = True
                 index.fallback_entities.append(eid)
                 continue
-            timeline = index._load_entity(connection, eid, remaining)
+            try:
+                timeline = index._load_entity(connection, eid, remaining)
+            except MemoryError:
+                # The validated clean SQLite generation remains authoritative.
+                # Retain already indexed entities if this optimization runs out of RAM.
+                timeline = None
+            except sqlite3.DatabaseError as exc:
+                print('[history] archive_read_failed '+json.dumps(dict(
+                    entity_id=eid, training_phase='ram_replay_index', archive_query_type='entity_timeline',
+                    query_start_ts=index.cover_start, query_end_ts=index.cover_end,
+                    sqlite_errorcode=getattr(exc,'sqlite_errorcode',None),
+                    sqlite_errorname=getattr(exc,'sqlite_errorname',None),
+                    recovery_strategy='clean_generation_required', recovery_result='failed')),flush=True)
+                raise
             if timeline is None:
                 index.budget_exhausted = True
                 index.fallback_entities.append(eid)
@@ -513,6 +526,8 @@ class RAMReplayIndex:
         return {
             "contract": self.CONTRACT,
             "cover_start": self.cover_start,
+            "index_state": ('RAM_INDEX_OK' if not self.fallback_entities else
+                            'RAM_INDEX_PARTIAL' if self.timelines else 'RAM_INDEX_UNAVAILABLE'),
             "cover_end": self.cover_end,
             "requested_entities": len(self.requested_entities),
             "indexed_entities": len(self.timelines),

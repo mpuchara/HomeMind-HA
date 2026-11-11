@@ -679,7 +679,9 @@ class ActualWorkerSmoke(unittest.TestCase):
         self.assertGreater(recovered["concurrent_writes"], 0)
 
     def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False, *,
-                           qualify=False, concurrent_writes=False):
+                           qualify=False, concurrent_writes=False,
+                           corruption_recovery=False, corrupt_table_page=False,
+                           two_agents=False, http_gap=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -790,6 +792,59 @@ class ActualWorkerSmoke(unittest.TestCase):
             job_path = Path(root) / "job.json"
             job_path.write_text(json.dumps(job), encoding="utf-8")
 
+            if corruption_recovery:
+                job['training_generation'] = True
+                job['generation_rebuild'] = True
+                # A new generation accumulates benchmark evidence only from its
+                # own trustworthy segments, retaining the established scorer.
+                job['train_kwargs']['accumulate_benchmark'] = True
+                if http_gap:
+                    store.meta_set('training_history_gaps_v1', json.dumps([dict(
+                        entity_id='binary_sensor.motion', start=base+2000, end=base+2100,
+                        source='ha_history_full')]))
+                if two_agents:
+                    healthy = store.create_agent(dict(name='First healthy agent', target_entity='switch.healthy',
+                        target_property='power', min_value=0,max_value=1,deadband=.5,exploration_step=1,
+                        confidence_threshold=.78,action_interval=30,input_entities=['binary_sensor.motion']))
+                    store.archive_batch([('switch.healthy',r[1],r[2],r[3],r[4],r[5]) for r in rows if r[0]=='switch.target'])
+                    first_job = dict(job, agent_id=healthy['id'], generation_rebuild=True,
+                        agent_fingerprint=agent_config_fingerprint(store.get_agent_config(healthy['id'])),
+                        result_path=str(Path(root)/'first.result.json'))
+                    first_job['state_map'] = dict(state_map, **{'switch.healthy': dict(state_map['switch.target'],entity_id='switch.healthy')})
+                    first_job['checksum'] = descriptor_checksum(first_job)
+                    first_path = Path(root)/'first.job.json'
+                    first_path.write_text(json.dumps(first_job),encoding='utf-8')
+                    env = dict(os.environ, ADAPTIVE_AI_DATA=root, ADAPTIVE_AI_TRAINING_WORKER='1')
+                    proc = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1]/'adaptive_ai/src/training_process.py'), '--worker',str(first_path)],
+                        env=env, capture_output=True,text=True,timeout=180)
+                    self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr)
+                    first_result = json.loads(Path(first_job['result_path']).read_text())
+                    self.assertTrue(first_result['ok'],first_result)
+                    from history_recovery import publish_generation
+                    publish_generation(store, first_result['generation_path'], healthy['id'], first_job['agent_fingerprint'], agent_config_fingerprint)
+                    healthy_model = store.get_model(healthy['id'])
+                    self.assertEqual(store.get_agent_config(healthy['id'])['mode'],'shadow')
+                job['checksum'] = descriptor_checksum(job)
+                job_path.write_text(json.dumps(job), encoding='utf-8')
+
+            if corrupt_table_page:
+                with sqlite3.connect(db) as conn:
+                    conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                    size = conn.execute('PRAGMA page_size').fetchone()[0]
+                    page = conn.execute("SELECT rootpage FROM sqlite_master WHERE name='entity_history'").fetchone()[0]
+                conn.close()
+                raw = db.read_bytes()
+                # Walk the real table b-tree to a leaf, keeping its interior root
+                # readable so healthy physical ranges remain independently seekable.
+                while raw[(page-1)*size] == 5:
+                    offset = (page-1)*size
+                    count = int.from_bytes(raw[offset+3:offset+5], 'big')
+                    cell = int.from_bytes(raw[offset+12+2*(count//2):offset+14+2*(count//2)],'big')
+                    page = int.from_bytes(raw[offset+cell:offset+cell+4],'big')
+                with db.open('r+b') as stream:
+                    stream.seek((page-1)*size)
+                    stream.write(b'\xff')
+
             if corrupt_archive_indexes:
                 # Modify only disposable index pages after closing SQLite readers.
                 with sqlite3.connect(db) as connection:
@@ -868,6 +923,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 )
             result = json.loads(Path(job["result_path"]).read_text())
             self.assertTrue(result["ok"])
+            if corruption_recovery:
+                from history_recovery import publish_generation
+                publish_generation(store,result['generation_path'],agent['id'],job['agent_fingerprint'],agent_config_fingerprint)
+                if two_agents:
+                    self.assertEqual(store.get_model(healthy['id']),healthy_model)
             self.assertNotEqual(os.getpid(), result["worker_pid"])
             model = store.get_model(agent["id"])
             self.assertIsNotNone(model)
@@ -900,6 +960,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                 ).encode()).hexdigest(),
                 "benchmark_counts": model.get("_benchmark_counts"),
                 "frozen_holdout_counts": model.get("_frozen_holdout_counts"),
+                "history_recovery": result.get('history_recovery'),
             }
 
 

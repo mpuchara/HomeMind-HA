@@ -1230,7 +1230,7 @@ class HistoryManager(threading.Thread):
             from training_context_selection import candidates
             context_ids = candidates(agent, seed.get("selection_meta") or {},
                                      live_states, live_registry, context_ids)
-        if replay_start is not None:
+        if replay_start is not None and not OPTIONS.get("training_process_isolation", True):
             inputs = set(agent.get("input_entities") or ())
             self._require_agent_history({target, *context_ids, *inputs}, replay_start, end_ts)
         fast_ids = [eid for eid in context_ids if entity_capability_tags(eid, live_states.get(eid) or {}) & {"occupancy", "activity"}]
@@ -1292,6 +1292,7 @@ class HistoryManager(threading.Thread):
             STORE.event(agent["id"], "warning", "agent_history_refresh_partial", str(exc), None)
 
     def _run_agent_indexing(self, agent_id, rebuild=False, rebuild_reason=None):
+        self.training_generation_rebuild = bool(rebuild)
         agent = STORE.get_agent_config(agent_id)
         if not agent:
             return
@@ -1327,16 +1328,13 @@ class HistoryManager(threading.Thread):
             # The read path can still work when the import touches a damaged index
             # or other page only needed by writes. Keep a working model on Rebuild.
             print(f"[history] {exc}", flush=True)
-            if rebuild and STORE.get_model(agent_id) is not None:
+            if not OPTIONS.get("training_process_isolation", True) and rebuild and STORE.get_model(agent_id) is not None:
                 raise TrainingImportWriteCorruption(
                     f"{exc}; use Resume to keep the existing model"
                 ) from exc
             target = agent["target_entity"]
-            with closing(STORE.archive_iter(start_ts, target_end, [target], chunk_size=100)) as rows:
-                if next(rows, None) is None or next(rows, None) is None:
-                    raise TrainingImportWriteCorruption(
-                        f"{exc}; insufficient readable local target history"
-                    ) from exc
+            # The isolated generation validates and salvages target rows before any
+            # reset. A direct read here would hit the same damaged table again.
             self.training_job_timings["recorder_import_fallback"] = "local_archive"
             STORE.event(
                 agent_id, "warning", "agent_training_local_archive",
@@ -1353,7 +1351,7 @@ class HistoryManager(threading.Thread):
         self.training_overall_eta_seconds = None
         run_storage_write(STORE, lambda: require_storage_available(STORE),
             self.stop_event, getattr(self, 'job_cancel_event', None))
-        if rebuild:
+        if rebuild and not OPTIONS.get("training_process_isolation", True):
             with self.engine.executor.target_lock(agent['target_entity']):
                 STORE.clear_learning(agent_id)
                 self.engine.models.pop(agent_id, None)
@@ -1370,7 +1368,8 @@ class HistoryManager(threading.Thread):
         )
         # Recorder refresh may extend the archive, but the requested pass still ends at
         # the captured current time for deterministic progress.
-        STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
+        if not OPTIONS.get("training_process_isolation", True):
+            STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
         STORE.event(agent_id, "info", "agent_rebuild_started" if rebuild else "agent_resume_started",
                     "Full historical rebuild started from archive beginning" if rebuild else
                     "Training resumed from saved historical cursor",
@@ -1485,8 +1484,7 @@ class HistoryManager(threading.Thread):
             getattr(self, "_persistent_worker_capable", False)
             and not getattr(self, "worker_mode", False)
             and OPTIONS.get("training_process_isolation", True)
-            and OPTIONS.get("training_persistent_worker_enabled", True)
-            and len(chunks) > 1
+            and (OPTIONS.get("training_persistent_worker_enabled", True) or rebuild)
         )
         if persistent:
             # Ridge remains checkpointed every 6 h for crash recovery and exact
@@ -2326,6 +2324,21 @@ class HistoryManager(threading.Thread):
         if not entity_ids or end_ts <= start_ts:
             return 0
         discovery = HEAVY_JOBS.owner == "discovery"
+        if explicit:
+            known = self._read_discovery_metadata('training_history_gaps_v1', [])
+            # A known unavailable range stays quarantined until a successful rescan
+            # or an explicit metadata reset. Do not restart a recursive HTTP storm.
+            blocked = [g for g in known if g['entity_id'] in entity_ids
+                       and g['start'] < end_ts and g['end'] > start_ts]
+            if blocked:
+                self.recorder_skipped_slices = int(getattr(self, 'recorder_skipped_slices', 0)) + 1
+                # Exclude the complete unrequested slice, not just the old failure.
+                self._record_training_gap(entity_ids, start_ts, end_ts, source, 'CACHED_HTTP500')
+                return 0
+            if int(getattr(self, '_training_recorder_http500_total', 0)) >= TRAINING_HTTP_500_LIMIT:
+                self._record_training_gap(entity_ids, start_ts, end_ts, source, 'HTTP500_BUDGET')
+                self.recorder_skipped_slices = int(getattr(self, 'recorder_skipped_slices', 0)) + 1
+                return 0
         skip_initial_state = discovery or explicit or skip_initial_state
         cycle = getattr(self, "_discovery_recorder_cycle", None) if discovery else None
         filtered = False
@@ -2387,12 +2400,13 @@ class HistoryManager(threading.Thread):
             # Authentication / malformed-request errors will not improve by splitting.
             status = getattr(exc, "code", 500)
             if explicit and status == 500:
+                self._training_recorder_http500_total = int(getattr(self, '_training_recorder_http500_total', 0)) + 1
                 failures = getattr(self, "_training_recorder_failures", 0) + 1
                 self._training_recorder_failures = failures
                 if failures >= TRAINING_HTTP_500_LIMIT:
-                    raise TrainingRecorderUnavailable(
-                        f"Recorder returned {failures} consecutive HTTP 500 errors during training preparation"
-                    ) from None
+                    self._record_training_gap(entity_ids, start_ts, end_ts, source, 'HTTP500_BUDGET')
+                    self.recorder_skipped_slices = int(getattr(self, 'recorder_skipped_slices', 0)) + 1
+                    return 0
             if status in (400, 401, 403, 404):
                 if HEAVY_JOBS.owner == "discovery":
                     # HTTPError.__str__ can include a full URL/query. The guard
@@ -2495,7 +2509,27 @@ class HistoryManager(threading.Thread):
             "source": str(source),
         })
         self.recorder_skipped_slices = int(getattr(self, "recorder_skipped_slices", 0) or 0) + 1
+        if explicit:
+            self._record_training_gap(entity_ids, start_ts, end_ts, source, 'HTTP500' if status == 500 else 'RECORDER_UNAVAILABLE')
         return 0
+
+    def _record_training_gap(self, entities, start, end, source, reason):
+        gaps = self._read_discovery_metadata('training_history_gaps_v1', [])
+        for eid in entities:
+            lo, hi = float(start), float(end)
+            remaining = []
+            for gap in gaps:
+                if gap['entity_id'] == eid and gap['source'] == source and gap['start'] <= hi and gap['end'] >= lo:
+                    lo, hi = min(lo, gap['start']), max(hi, gap['end'])
+                else:
+                    remaining.append(gap)
+            gaps = remaining + [dict(entity_id=eid, start=lo, end=hi, source=source, failure_reason=reason, recovery_attempts=0)]
+        if len(gaps) > 4096:
+            raise TrainingRecorderUnavailable('History quarantine metadata budget exceeded')
+        STORE.meta_set('training_history_gaps_v1', json.dumps(gaps))
+        STORE.event(getattr(self, 'training_job_agent_id', None), 'warning', 'training_history_range_skipped',
+                    'Recorder history quarantined; local recovery will evaluate remaining history',
+                    dict(entities=list(entities), start_ts=start, end_ts=end, source=source, reason=reason))
 
     @staticmethod
     def _time_windows(start_ts, end_ts, max_hours=24):
