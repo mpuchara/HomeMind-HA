@@ -424,6 +424,9 @@ class Preparation:
                     self.emit(name,strategy,True)
                 self.state['bootstrap_complete']=True
                 self.save()
+                self.initial_metadata=None
+                initial.clear()
+                rows=batch=None
             if self.agent_id:
                 self.agent_ids=[r[0] for r in self.dst.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))]
             # Normal metadata copying has no corruption time budget; all work still

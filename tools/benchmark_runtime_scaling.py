@@ -435,6 +435,13 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             raise AssertionError(('matched background counts differ from plan', background_stats))
         if training and not background_stats['updates']:
             raise AssertionError('No concurrent policy training executed')
+        ingress_loss=0
+        if history_preparation:
+            with store.conn() as connection:
+                recorded=connection.execute("SELECT COUNT(*) FROM entity_history WHERE entity_id='sensor.ingress_probe'").fetchone()[0]
+            ingress_loss=len(ingress_write_ms)-recorded
+            if ingress_loss:
+                raise AssertionError(('WAL fixture lost recorded ingress',ingress_loss))
         metrics = TELEMETRY.snapshot()
         try:
             import resource
@@ -459,7 +466,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             background_work=background_stats, history_preparation=preparation_stats, candidate_count=len(candidate_ids),
             ui_http=dict(endpoint='/api/agents',environment='loopback shipped Handler; not Supervisor ingress',
                          samples=len(ui_http_ms),max_ms=max(ui_http_ms,default=0.),**quantiles(ui_http_ms)),
-            ingress_archive_write=dict(samples=len(ingress_write_ms),max_ms=max(ingress_write_ms,default=0.),**quantiles(ingress_write_ms)),
+            ingress_archive_write=dict(samples=len(ingress_write_ms),loss=ingress_loss,max_ms=max(ingress_write_ms,default=0.),**quantiles(ingress_write_ms)),
             matched_workload=(dict(updates_per_step=matched_updates, model_writes_per_step=matched_writes,
                                    queue_capacity=1, correct_every=correct_every, batches=matched_timeline)
                               if matched_updates else None),
