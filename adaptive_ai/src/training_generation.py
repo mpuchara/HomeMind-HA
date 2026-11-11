@@ -18,7 +18,7 @@ from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct
 from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
 
-CONTRACT = 'training-history-generation-v3'
+CONTRACT = 'training-history-generation-v4'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
     'rl_models', 'historical_experiences', 'tiny_mlp_shadow_models',
     'agent_candidate_generations', 'automatic_reward_experiences',
@@ -73,6 +73,8 @@ class Preparation:
         self.last_disk_check = 0.
         self.pressure = None
         self.bootstrap = False
+        self.initial_metadata = None
+        self.agent_ids = []
         self.snapshot_max_seconds = 0.
         self.source_sql_max_seconds = 0.
         self.wal_peak_bytes = 0
@@ -262,6 +264,37 @@ class Preparation:
             return '(ts>=? AND ts<=?) OR ts=(SELECT MAX(ts) FROM '+quote(name)+' WHERE ts<?)',(lower,self.end,lower),'causal_checkpoint_window_and_seed'
         return None
 
+    def read_initial_metadata(self, connection):
+        initial={}
+        buffered_bytes=0
+        started=time.perf_counter()
+        tables={item['name']:item for item in self.state['source_schema'] if item['type']=='table'}
+        for name in ('agents','app_meta','entity_history_revision','rl_models','tiny_mlp_shadow_models'):
+            if name not in tables:
+                continue
+            plan=self.table_plan(tables[name])
+            if not plan:
+                self.state['tables'][name]=dict(source_rows_scanned=0,rows_copied=0,bytes_copied=0,copy_strategy='schema_only_rebuild')
+                continue
+            predicate,params,strategy=plan
+            rows=[]
+            with closing(connection.execute('SELECT * FROM '+quote(name)+(' WHERE '+predicate if predicate else ''),params)) as cursor:
+                while True:
+                    batch=cursor.fetchmany(128)
+                    if not batch: break
+                    if self.cancelled():
+                        raise InterruptedError('Initial metadata snapshot cancelled')
+                    buffered_bytes+=sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
+                    if buffered_bytes>self.memory:
+                        raise RecoveryUnavailable('Initial controller/context snapshot exceeds memory budget')
+                    if time.perf_counter()-started>1.:
+                        raise RecoveryUnavailable('Initial controller/context snapshot exceeded bounded admission time')
+                    rows.extend(batch)
+            initial[name]=(rows,strategy)
+        model=connection.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id else None
+        self.state['model_fingerprint']=hashlib.sha256(model[0].encode()).hexdigest() if model else None
+        return initial
+
     def run(self, http_gaps):
         self.destination.parent.mkdir(parents=True,exist_ok=True)
         if self.destination.exists():
@@ -285,6 +318,7 @@ class Preparation:
             with closing(sqlite3.connect(self.source.as_uri()+'?mode=ro',uri=True,timeout=.2)) as fence:
                 validate(fence,saved['boundary'])
             self.state['boundary']=saved['boundary']
+            self.state['source_schema']=saved['source_schema']
         else:
             # Registering the bounded fence IS a source metadata write. It uses
             # ordinary source admission/page limits; read-only resume does not.
@@ -297,10 +331,17 @@ class Preparation:
                 fence.execute(f'PRAGMA max_page_count={max(1,guard.db_limit//page_size)}')
                 install(fence)
                 fence.commit()
+                snapshot_started=time.perf_counter()
+                fence.row_factory=sqlite3.Row
                 fence.execute('BEGIN IMMEDIATE')
                 try:
+                    self.src=fence
                     self.state['boundary']=capture(fence,self.end)
+                    self.state['source_schema']=[dict(row) for row in fence.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB '__training_*'").fetchall()]
+                    self.agent_ids=[row[0] for row in fence.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))] if self.agent_id else []
+                    self.initial_metadata=self.read_initial_metadata(fence)
                     fence.commit()
+                    self.snapshot_max_seconds=max(self.snapshot_max_seconds,time.perf_counter()-snapshot_started)
                 except Exception:
                     fence.rollback()
                     raise
@@ -327,10 +368,10 @@ class Preparation:
                 except StoragePressure as exc:
                     self.pressure=exc
                     return 1
-                return int((self.bootstrap and time.monotonic()-begin>1.) or self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds))
+                return int(self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds))
             self.src.set_progress_handler(lambda: interrupt(False),10000)
             self.dst.set_progress_handler(interrupt,10000)
-            self.schema = self.src.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL").fetchall()
+            self.schema = self.state['source_schema'] if 'source_schema' in self.state else []
             tables = {x['name']:x for x in self.schema if x['type']=='table' and not x['name'].startswith(('sqlite_','__training_'))}
             self.agent_ids = []
             if self.agent_id:
@@ -341,6 +382,8 @@ class Preparation:
                 previous = None
             if previous:
                 self.state = json.loads(previous[0])
+                self.schema=self.state['source_schema']
+                tables={x['name']:x for x in self.schema if x['type']=='table' and not x['name'].startswith(('sqlite_','__training_'))}
                 if self.state['identity']!=self.identity:
                     raise RecoveryUnavailable('Preparation checkpoint source mismatch')
                 self.resumed = True
@@ -361,38 +404,9 @@ class Preparation:
             # metadata together. Large immutable prefixes use persisted fences.
             if not self.state.get('bootstrap_complete'):
                 self.checkpoint()
-                begin=time.monotonic()
-                snapshot_started=time.perf_counter()
-                self.bootstrap=True
-                initial={}
-                buffered_bytes=0
-                self.src.execute('BEGIN')
-                try:
-                    validate(self.src,self.state['boundary'])
-                    for name in ('agents','app_meta','entity_history_revision','rl_models','tiny_mlp_shadow_models'):
-                        if name not in tables:
-                            continue
-                        plan=self.table_plan(tables[name])
-                        if not plan:
-                            self.state['tables'][name]=dict(source_rows_scanned=0,rows_copied=0,bytes_copied=0,copy_strategy='schema_only_rebuild')
-                            continue
-                        predicate,params,strategy=plan
-                        rows=[]
-                        with closing(self.sql(self.src,'execute','SELECT * FROM '+quote(name)+(' WHERE '+predicate if predicate else ''),params)) as cursor:
-                            while True:
-                                batch=self.sql(cursor,'fetchmany',128)
-                                if not batch: break
-                                buffered_bytes+=sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
-                                if buffered_bytes>self.memory:
-                                    raise RecoveryUnavailable('Initial controller/context snapshot exceeds memory budget')
-                                rows.extend(batch)
-                        initial[name]=(rows,strategy)
-                    model=self.src.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id else None
-                    self.state['model_fingerprint']=hashlib.sha256(model[0].encode()).hexdigest() if model else None
-                finally:
-                    self.src.rollback()
-                    self.bootstrap=False
-                    self.snapshot_max_seconds=max(self.snapshot_max_seconds,time.perf_counter()-snapshot_started)
+                initial=self.initial_metadata
+                if initial is None:
+                    raise RecoveryUnavailable('Incomplete initial snapshot cannot be resumed; previous model retained')
                 # All throttling, local disk writes and progress callbacks happen
                 # AFTER the source reader is released, including configuration.
                 for name,(rows,strategy) in initial.items():
