@@ -1,6 +1,7 @@
 """Real WAL/read-mark and durable-prefix regressions, not mocked SQLite errors."""
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -359,6 +360,22 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
         with self.assertRaisesRegex(RecoveryUnavailable,'neural model changed'):
             publish_generation(self.store,self.fixture.fixture.destination,self.fixture.agent['id'],
                                agent_config_fingerprint(self.fixture.agent),agent_config_fingerprint)
+
+    def test_14_generation_keeps_frozen_policy_without_rebinding_untrusted_env(self):
+        from storage_budget import StorageBudget
+        from settings import OPTIONS
+        source=self.store.storage_budget
+        path=self.fixture.fixture.root/'isolated.db'
+        with patch.dict(os.environ,source.worker_environment()):
+            with self.assertRaisesRegex(StoragePressure,'invalid inherited worker budget'):
+                StorageBudget(path,OPTIONS)
+            generation=source.generation_budget(path,16*1048576)
+        self.assertEqual(generation.path,path)
+        self.assertEqual(generation.db_limit,min(source.db_limit,16*1048576))
+        for key in ('reserve','hard_reserve','wal_limit','auto_pool_bytes','auto_use_percent'):
+            self.assertEqual(getattr(generation,key),getattr(source,key))
+        self.assertIsNot(generation.lock,source.lock)
+        self.assertIsNot(generation.stats,source.stats)
 
 
 if __name__=='__main__':

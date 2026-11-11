@@ -150,6 +150,30 @@ class StorageBudget:
         return {'ADAPTIVE_AI_STORAGE_WORKER': '1',
                 'ADAPTIVE_AI_STORAGE_BUDGET': json.dumps(data, separators=(',', ':'))}
 
+    def generation_budget(self, path, maximum_bytes):
+        """Retarget trusted frozen policy to an owned generation, not env input.
+
+        The inherited environment remains bound to the original database. Parsing
+        it again for a different filename is correctly rejected. Copy only the
+        already-validated policy; metrics, locks and file ownership stay separate.
+        """
+        if self.mode=='auto' and self.auto_pool_bytes is None:
+            self.sample()
+        child=object.__new__(StorageBudget)
+        child.__dict__=dict(self.__dict__)
+        child.path=Path(path)
+        child.db_limit=min(self.db_limit,max(4096,int(maximum_bytes)))
+        child.lock=threading.Lock()
+        child.local=threading.local()
+        child.recovery_event=None
+        child.training_process=True
+        child._last_sample_at=float('-inf')
+        child._unchecked_payload_bytes=0
+        child.stats=dict(level='normal',reason=None,blocked_writes=0,
+            db_bytes=0,database_used_bytes=0,wal_bytes=0,free_bytes=None,
+            sample_error=None,page_observations=0,readonly_page_observations_skipped=0)
+        return child
+
     @contextmanager
     def maintenance(self, *, update_tables=()):
         previous = getattr(self.local, 'maintenance', False)

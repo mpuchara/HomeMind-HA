@@ -5,9 +5,9 @@
     "concurrent_writes": 0,
     "version": "0.15.8",
     "input_history_rows": 960,
-    "worker_wall_seconds": 4.9083825999405235,
+    "worker_wall_seconds": 5.278258700156584,
     "worker_phases": {
-      "benchmark_persist_seconds": 0.005694,
+      "benchmark_persist_seconds": 0.008705,
       "causal_home_statistics": {
         "compressed_bytes": 26150,
         "contract": "causal_home_statistics_v1",
@@ -22,9 +22,9 @@
         "snapshots": 49,
         "source_rows": 480
       },
-      "causal_home_statistics_build_seconds": 0.045896,
+      "causal_home_statistics_build_seconds": 0.021136,
       "causal_home_statistics_reused": false,
-      "causal_home_statistics_validation_seconds": 1e-06,
+      "causal_home_statistics_validation_seconds": 0.0,
       "context_assessment_seconds": 0.0,
       "context_entities_reconstructed_by_trackers": 1,
       "context_screening_scope": "persisted_schema",
@@ -34,8 +34,8 @@
       "experience_dedup_cache_hits": 0,
       "experience_dedup_cached_ids": 0,
       "experience_dedup_db_loads": 1,
-      "experience_dedup_load_seconds": 0.001017,
-      "feature_snapshot_build_seconds": 0.536819,
+      "experience_dedup_load_seconds": 0.000785,
+      "feature_snapshot_build_seconds": 0.539269,
       "feature_snapshot_builds": 1199,
       "feature_snapshot_cache_hits": 0,
       "feature_snapshot_cache_misses": 1199,
@@ -44,32 +44,32 @@
       "feature_snapshot_session_hits_total": 0,
       "feature_snapshot_session_reused": false,
       "feature_snapshot_unique_timestamps": 256,
-      "finalization_seconds": 0.2186,
+      "finalization_seconds": 0.3152,
       "full_archive_count_skipped": true,
-      "heldout_fold_seconds": 3e-06,
+      "heldout_fold_seconds": 4e-06,
       "legacy_outer_stream_entity_count": 2,
       "neural_finalize_requested": true,
       "neural_train_samples_buffered": 769,
-      "policy_serialize_persist_seconds": 0.02015,
+      "policy_serialize_persist_seconds": 0.017586,
       "provenance_cache_hits": 0,
       "provenance_cached_rows": 0,
       "provenance_db_loads": 0,
       "provenance_load_seconds": 1e-06,
       "provenance_loaded_rows": 0,
-      "qualification_seconds": 0.011461,
-      "ram_index_construction_seconds": 0.0313,
+      "qualification_seconds": 0.017712,
+      "ram_index_construction_seconds": 0.0213,
       "ram_replay_actual_bytes": 57645,
       "ram_replay_entities": 2,
       "ram_replay_estimated_bytes": 60205,
       "ram_replay_fallback": false,
       "ram_replay_fallback_entities": 0,
       "ram_replay_index_reused": false,
-      "ram_replay_lookup_seconds": 0.045987,
+      "ram_replay_lookup_seconds": 0.049965,
       "ram_replay_lookups": 4317,
       "ram_replay_rows": 960,
       "replay_driver_rows_planned": 480,
       "replay_driver_rows_processed": 480,
-      "replay_seconds": 3.8707,
+      "replay_seconds": 4.1988,
       "replay_stream_contract": "target_only_driver_v1",
       "rewarded_dwells": 479,
       "screening_rows": 0,
@@ -79,14 +79,14 @@
       "start_ts": 1699999995.0,
       "target_entities": 1,
       "tiny_mlp_finalization_deferred": false,
-      "tiny_mlp_finalization_seconds": 0.119575,
-      "total_seconds": 4.2147,
-      "tracker_init_seconds": 0.048609,
+      "tiny_mlp_finalization_seconds": 0.18827,
+      "total_seconds": 4.5898,
+      "tracker_init_seconds": 0.023011,
       "transition_edge_cursor_rewinds": 0,
       "transition_edge_entities": 1,
       "transition_edge_estimated_bytes": 76800,
       "transition_edge_fallback_entities": 0,
-      "transition_edge_index_construction_seconds": 0.0052,
+      "transition_edge_index_construction_seconds": 0.0044,
       "transition_edge_index_fallbacks": 0,
       "transition_edge_index_hits": 959,
       "transition_edge_index_lookups": 959,
@@ -96,8 +96,8 @@
       "transition_edge_source_rows": 480
     },
     "worker_budget": {
-      "effective_training_duty_cycle": 0.7069,
-      "effective_training_wall_duty_cycle": 0.7069,
+      "effective_training_duty_cycle": 0.7031,
+      "effective_training_wall_duty_cycle": 0.7031,
       "interactive_cooldown_seconds": 0.1,
       "interactive_epoch_escalations": 0,
       "interactive_max_burst_seconds": 1.25,
@@ -108,15 +108,15 @@
       "interactive_yield_quantum_ms": 35.0,
       "last_checkpoint": "finalization_complete",
       "max_continuous_work_ms": 35.0,
-      "max_observed_slice_ms": 221.3,
+      "max_observed_slice_ms": 170.1,
       "max_throttle_sleep_seconds": 0.05,
       "realtime_cooldown_seconds": 0.2,
       "realtime_max_burst_seconds": 0.45,
-      "slice_checkpoints": 95,
-      "slice_overruns": 78,
-      "throttle_active_seconds": 3.134,
-      "throttle_batches": 95,
-      "throttle_sleep_seconds": 1.3,
+      "slice_checkpoints": 101,
+      "slice_overruns": 86,
+      "throttle_active_seconds": 3.364,
+      "throttle_batches": 101,
+      "throttle_sleep_seconds": 1.42,
       "training_cpu_duty_cycle": 0.7,
       "training_wall_duty_cycle_target": 0.7
     },
@@ -154,11 +154,11 @@
       }
     },
     "history_recovery": {
-      "agent_id": "bc2cac32",
+      "agent_id": "17d15309",
       "archive_status": "HISTORY_OK",
       "attempts": 0,
       "availability": "HISTORY_OK",
-      "contract": "training-history-generation-v4",
+      "contract": "training-history-generation-v5",
       "copy_tables": {
         "agents": {
           "bytes_copied": 467,
@@ -231,12 +231,13 @@
         }
       },
       "correct_agent_ids": [
-        "bc2cac32"
+        "17d15309"
       ],
       "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
       "gaps": [],
       "lock_wait_seconds": 0.0,
       "model_fingerprint": null,
+      "neural_fingerprint": null,
       "preparation_cpu_seconds": 0.109375,
       "quality": {
         "benchmark_samples": 94,
@@ -290,23 +291,15 @@
               "epoch": 0,
               "upper": 0
             },
-            "historical_experiences": {
-              "epoch": 0,
-              "upper": 0
-            },
             "rl_feedback": {
-              "epoch": 0,
-              "upper": 0
-            },
-            "rl_models": {
               "epoch": 0,
               "upper": 0
             }
           },
-          "token": "abfee14e6fcd4396afa19e14a53fc53c"
+          "token": "1904f285063942cc8efe05ac975cfa30"
         },
         "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
-        "max_explicit_transaction_seconds": 0.0009666001424193382,
+        "max_explicit_transaction_seconds": 0.0013009000103920698,
         "max_source_execute_seconds": 0.0,
         "owned_generation_connections": 1,
         "owned_source_connections": 1,
@@ -314,16 +307,16 @@
         "source_readers_between_batches": 0,
         "wal_peak_bytes": 0
       },
-      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-bh5kd0rb\\adaptive_ai.db",
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-s3cl1ij0\\adaptive_ai.db",
       "source_signature": [
         [
           290816,
-          1794433479419698900
+          1794435179288491500
         ],
         null
       ],
       "sqlite_wait_estimated": true,
-      "sqlite_wait_seconds": 0.00012500002048909664,
+      "sqlite_wait_seconds": 0.01537500019185245,
       "status": "TRAINED",
       "throttle_seconds": 0.0
     },
@@ -340,7 +333,7 @@
       "loss": 0,
       "environment": "host SQLite ingress/read simulation; not physical Pi"
     },
-    "validation_wall_seconds": 5.077999999979511
+    "validation_wall_seconds": 5.452999999979511
   },
   "index": {
     "agent_mode": "shadow",
@@ -348,9 +341,9 @@
     "concurrent_writes": 0,
     "version": "0.15.8",
     "input_history_rows": 960,
-    "worker_wall_seconds": 4.936736000003293,
+    "worker_wall_seconds": 4.900139900157228,
     "worker_phases": {
-      "benchmark_persist_seconds": 0.005015,
+      "benchmark_persist_seconds": 0.026431,
       "causal_home_statistics": {
         "compressed_bytes": 26150,
         "contract": "causal_home_statistics_v1",
@@ -365,7 +358,7 @@
         "snapshots": 49,
         "source_rows": 480
       },
-      "causal_home_statistics_build_seconds": 0.04295,
+      "causal_home_statistics_build_seconds": 0.022898,
       "causal_home_statistics_reused": false,
       "causal_home_statistics_validation_seconds": 1e-06,
       "context_assessment_seconds": 0.0,
@@ -377,8 +370,8 @@
       "experience_dedup_cache_hits": 0,
       "experience_dedup_cached_ids": 0,
       "experience_dedup_db_loads": 1,
-      "experience_dedup_load_seconds": 0.000888,
-      "feature_snapshot_build_seconds": 0.535128,
+      "experience_dedup_load_seconds": 0.000941,
+      "feature_snapshot_build_seconds": 0.583912,
       "feature_snapshot_builds": 1199,
       "feature_snapshot_cache_hits": 0,
       "feature_snapshot_cache_misses": 1199,
@@ -387,32 +380,32 @@
       "feature_snapshot_session_hits_total": 0,
       "feature_snapshot_session_reused": false,
       "feature_snapshot_unique_timestamps": 256,
-      "finalization_seconds": 0.2047,
+      "finalization_seconds": 0.2681,
       "full_archive_count_skipped": true,
-      "heldout_fold_seconds": 2e-06,
+      "heldout_fold_seconds": 4e-06,
       "legacy_outer_stream_entity_count": 2,
       "neural_finalize_requested": true,
       "neural_train_samples_buffered": 769,
-      "policy_serialize_persist_seconds": 0.017494,
+      "policy_serialize_persist_seconds": 0.021381,
       "provenance_cache_hits": 0,
       "provenance_cached_rows": 0,
       "provenance_db_loads": 0,
       "provenance_load_seconds": 1e-06,
       "provenance_loaded_rows": 0,
-      "qualification_seconds": 0.012158,
-      "ram_index_construction_seconds": 0.0284,
+      "qualification_seconds": 0.017462,
+      "ram_index_construction_seconds": 0.0226,
       "ram_replay_actual_bytes": 57645,
       "ram_replay_entities": 2,
       "ram_replay_estimated_bytes": 60205,
       "ram_replay_fallback": false,
       "ram_replay_fallback_entities": 0,
       "ram_replay_index_reused": false,
-      "ram_replay_lookup_seconds": 0.047027,
+      "ram_replay_lookup_seconds": 0.047447,
       "ram_replay_lookups": 4317,
       "ram_replay_rows": 960,
       "replay_driver_rows_planned": 480,
       "replay_driver_rows_processed": 480,
-      "replay_seconds": 3.9994,
+      "replay_seconds": 3.9096,
       "replay_stream_contract": "target_only_driver_v1",
       "rewarded_dwells": 479,
       "screening_rows": 0,
@@ -422,14 +415,14 @@
       "start_ts": 1699999995.0,
       "target_entities": 1,
       "tiny_mlp_finalization_deferred": false,
-      "tiny_mlp_finalization_seconds": 0.104649,
-      "total_seconds": 4.3157,
-      "tracker_init_seconds": 0.045505,
+      "tiny_mlp_finalization_seconds": 0.136106,
+      "total_seconds": 4.2576,
+      "tracker_init_seconds": 0.024883,
       "transition_edge_cursor_rewinds": 0,
       "transition_edge_entities": 1,
       "transition_edge_estimated_bytes": 76800,
       "transition_edge_fallback_entities": 0,
-      "transition_edge_index_construction_seconds": 0.0054,
+      "transition_edge_index_construction_seconds": 0.0043,
       "transition_edge_index_fallbacks": 0,
       "transition_edge_index_hits": 959,
       "transition_edge_index_lookups": 959,
@@ -439,8 +432,8 @@
       "transition_edge_source_rows": 480
     },
     "worker_budget": {
-      "effective_training_duty_cycle": 0.7054,
-      "effective_training_wall_duty_cycle": 0.7054,
+      "effective_training_duty_cycle": 0.7021,
+      "effective_training_wall_duty_cycle": 0.7021,
       "interactive_cooldown_seconds": 0.1,
       "interactive_epoch_escalations": 0,
       "interactive_max_burst_seconds": 1.25,
@@ -451,15 +444,15 @@
       "interactive_yield_quantum_ms": 35.0,
       "last_checkpoint": "finalization_complete",
       "max_continuous_work_ms": 35.0,
-      "max_observed_slice_ms": 201.5,
+      "max_observed_slice_ms": 149.0,
       "max_throttle_sleep_seconds": 0.05,
       "realtime_cooldown_seconds": 0.2,
       "realtime_max_burst_seconds": 0.45,
-      "slice_checkpoints": 97,
-      "slice_overruns": 80,
-      "throttle_active_seconds": 3.16,
-      "throttle_batches": 97,
-      "throttle_sleep_seconds": 1.32,
+      "slice_checkpoints": 96,
+      "slice_overruns": 79,
+      "throttle_active_seconds": 3.094,
+      "throttle_batches": 96,
+      "throttle_sleep_seconds": 1.313,
       "training_cpu_duty_cycle": 0.7,
       "training_wall_duty_cycle_target": 0.7
     },
@@ -497,11 +490,11 @@
       }
     },
     "history_recovery": {
-      "agent_id": "c2425952",
+      "agent_id": "05b527b6",
       "archive_status": "ARCHIVE_CORRUPTED",
       "attempts": 8,
       "availability": "HISTORY_OK",
-      "contract": "training-history-generation-v4",
+      "contract": "training-history-generation-v5",
       "copy_tables": {
         "agents": {
           "bytes_copied": 467,
@@ -574,13 +567,14 @@
         }
       },
       "correct_agent_ids": [
-        "c2425952"
+        "05b527b6"
       ],
       "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
       "gaps": [],
       "lock_wait_seconds": 0.0,
       "model_fingerprint": null,
-      "preparation_cpu_seconds": 0.109375,
+      "neural_fingerprint": null,
+      "preparation_cpu_seconds": 0.078125,
       "quality": {
         "benchmark_samples": 94,
         "experiences": 479,
@@ -590,7 +584,7 @@
       },
       "quarantine_cache_hit": false,
       "recovered_records": 960,
-      "recovery_active_cpu_seconds": 0.0,
+      "recovery_active_cpu_seconds": 0.015625,
       "recovery_strategy": "bounded_pk_ranges_sql_filtered_no_readable_entity_index",
       "recovery_wall_seconds": 0.2029999999795109,
       "resumed": false,
@@ -635,23 +629,15 @@
               "epoch": 0,
               "upper": 0
             },
-            "historical_experiences": {
-              "epoch": 0,
-              "upper": 0
-            },
             "rl_feedback": {
-              "epoch": 0,
-              "upper": 0
-            },
-            "rl_models": {
               "epoch": 0,
               "upper": 0
             }
           },
-          "token": "66efe6a6b9a44f238c8e795375ac8b06"
+          "token": "951af6e7591a4716ae4008643327298d"
         },
         "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
-        "max_explicit_transaction_seconds": 0.0009178998880088329,
+        "max_explicit_transaction_seconds": 0.0008980000857263803,
         "max_source_execute_seconds": 0.0,
         "owned_generation_connections": 1,
         "owned_source_connections": 1,
@@ -659,18 +645,18 @@
         "source_readers_between_batches": 0,
         "wal_peak_bytes": 0
       },
-      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-hq20d5g7\\adaptive_ai.db",
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-ml1bdg8f\\adaptive_ai.db",
       "source_signature": [
         [
           290816,
-          1794433484483734300
+          1794435184717815900
         ],
         null
       ],
       "sqlite_errorcode": 11,
       "sqlite_errorname": "SQLITE_CORRUPT",
       "sqlite_wait_estimated": true,
-      "sqlite_wait_seconds": 0.0003750000614672899,
+      "sqlite_wait_seconds": 0.0,
       "status": "TRAINED",
       "throttle_seconds": 0.0
     },
@@ -687,17 +673,17 @@
       "loss": 0,
       "environment": "host SQLite ingress/read simulation; not physical Pi"
     },
-    "validation_wall_seconds": 5.078999999910593
+    "validation_wall_seconds": 5.125
   },
   "table_two_agents": {
     "agent_mode": "shadow",
     "agent_progress": 1.0,
-    "concurrent_writes": 284,
+    "concurrent_writes": 303,
     "version": "0.15.8",
     "input_history_rows": 960,
-    "worker_wall_seconds": 4.758166400017217,
+    "worker_wall_seconds": 4.893519800156355,
     "worker_phases": {
-      "benchmark_persist_seconds": 0.006681,
+      "benchmark_persist_seconds": 0.031242,
       "causal_home_statistics": {
         "compressed_bytes": 6365,
         "contract": "causal_home_statistics_v1",
@@ -712,7 +698,7 @@
         "snapshots": 13,
         "source_rows": 114
       },
-      "causal_home_statistics_build_seconds": 0.006414,
+      "causal_home_statistics_build_seconds": 0.00552,
       "causal_home_statistics_reused": false,
       "causal_home_statistics_validation_seconds": 0.0,
       "context_assessment_seconds": 0.0,
@@ -724,8 +710,8 @@
       "experience_dedup_cache_hits": 0,
       "experience_dedup_cached_ids": 328,
       "experience_dedup_db_loads": 1,
-      "experience_dedup_load_seconds": 0.001253,
-      "feature_snapshot_build_seconds": 0.107921,
+      "experience_dedup_load_seconds": 0.000992,
+      "feature_snapshot_build_seconds": 0.128234,
       "feature_snapshot_builds": 284,
       "feature_snapshot_cache_hits": 0,
       "feature_snapshot_cache_misses": 284,
@@ -734,32 +720,32 @@
       "feature_snapshot_session_hits_total": 0,
       "feature_snapshot_session_reused": false,
       "feature_snapshot_unique_timestamps": 256,
-      "finalization_seconds": 0.1356,
+      "finalization_seconds": 0.1723,
       "full_archive_count_skipped": true,
-      "heldout_fold_seconds": 2e-06,
+      "heldout_fold_seconds": 3e-06,
       "legacy_outer_stream_entity_count": 2,
       "neural_finalize_requested": true,
       "neural_train_samples_buffered": 109,
-      "policy_serialize_persist_seconds": 0.018102,
+      "policy_serialize_persist_seconds": 0.021378,
       "provenance_cache_hits": 0,
       "provenance_cached_rows": 0,
       "provenance_db_loads": 0,
       "provenance_load_seconds": 1e-06,
       "provenance_loaded_rows": 0,
-      "qualification_seconds": 0.028859,
-      "ram_index_construction_seconds": 0.0173,
+      "qualification_seconds": 0.015672,
+      "ram_index_construction_seconds": 0.0266,
       "ram_replay_actual_bytes": 13725,
       "ram_replay_entities": 2,
       "ram_replay_estimated_bytes": 16285,
       "ram_replay_fallback": false,
       "ram_replay_fallback_entities": 0,
       "ram_replay_index_reused": false,
-      "ram_replay_lookup_seconds": 0.010385,
+      "ram_replay_lookup_seconds": 0.011185,
       "ram_replay_lookups": 1023,
       "ram_replay_rows": 228,
       "replay_driver_rows_planned": 114,
       "replay_driver_rows_processed": 114,
-      "replay_seconds": 0.8758,
+      "replay_seconds": 0.9769,
       "replay_stream_contract": "target_only_driver_v1",
       "rewarded_dwells": 113,
       "screening_rows": 0,
@@ -769,14 +755,14 @@
       "start_ts": 1700010980.0,
       "target_entities": 1,
       "tiny_mlp_finalization_deferred": false,
-      "tiny_mlp_finalization_seconds": 0.03528,
-      "total_seconds": 1.0554,
-      "tracker_init_seconds": 0.007333,
+      "tiny_mlp_finalization_seconds": 0.037758,
+      "total_seconds": 1.2091,
+      "tracker_init_seconds": 0.006106,
       "transition_edge_cursor_rewinds": 0,
       "transition_edge_entities": 1,
       "transition_edge_estimated_bytes": 18240,
       "transition_edge_fallback_entities": 0,
-      "transition_edge_index_construction_seconds": 0.0017,
+      "transition_edge_index_construction_seconds": 0.0014,
       "transition_edge_index_fallbacks": 0,
       "transition_edge_index_hits": 227,
       "transition_edge_index_lookups": 227,
@@ -786,8 +772,8 @@
       "transition_edge_source_rows": 114
     },
     "worker_budget": {
-      "effective_training_duty_cycle": 0.7023,
-      "effective_training_wall_duty_cycle": 0.7023,
+      "effective_training_duty_cycle": 0.7007,
+      "effective_training_wall_duty_cycle": 0.7007,
       "interactive_cooldown_seconds": 0.1,
       "interactive_epoch_escalations": 0,
       "interactive_max_burst_seconds": 1.25,
@@ -798,15 +784,15 @@
       "interactive_yield_quantum_ms": 35.0,
       "last_checkpoint": "finalization_complete",
       "max_continuous_work_ms": 35.0,
-      "max_observed_slice_ms": 170.3,
+      "max_observed_slice_ms": 148.4,
       "max_throttle_sleep_seconds": 0.05,
       "realtime_cooldown_seconds": 0.2,
       "realtime_max_burst_seconds": 0.45,
-      "slice_checkpoints": 96,
-      "slice_overruns": 78,
-      "throttle_active_seconds": 3.02,
-      "throttle_batches": 96,
-      "throttle_sleep_seconds": 1.28,
+      "slice_checkpoints": 97,
+      "slice_overruns": 79,
+      "throttle_active_seconds": 3.08,
+      "throttle_batches": 97,
+      "throttle_sleep_seconds": 1.315,
       "training_cpu_duty_cycle": 0.7,
       "training_wall_duty_cycle_target": 0.7
     },
@@ -844,14 +830,14 @@
       }
     },
     "history_recovery": {
-      "agent_id": "0331edad",
+      "agent_id": "c17353f1",
       "archive_status": "ARCHIVE_CORRUPTED",
       "attempts": 158,
       "availability": "PARTIAL",
-      "contract": "training-history-generation-v4",
+      "contract": "training-history-generation-v5",
       "copy_tables": {
         "agents": {
-          "bytes_copied": 11903,
+          "bytes_copied": 11885,
           "copy_strategy": "all_controller_configuration",
           "rows_copied": 2,
           "source_rows_scanned": 2,
@@ -935,7 +921,7 @@
         }
       },
       "correct_agent_ids": [
-        "0331edad"
+        "c17353f1"
       ],
       "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
       "gaps": [
@@ -1526,7 +1512,8 @@
       ],
       "lock_wait_seconds": 0.0,
       "model_fingerprint": null,
-      "preparation_cpu_seconds": 0.140625,
+      "neural_fingerprint": null,
+      "preparation_cpu_seconds": 0.171875,
       "quality": {
         "benchmark_samples": 122,
         "experiences": 441,
@@ -1536,9 +1523,9 @@
       },
       "quarantine_cache_hit": false,
       "recovered_records": 887,
-      "recovery_active_cpu_seconds": 0.046875,
+      "recovery_active_cpu_seconds": 0.0625,
       "recovery_strategy": "selected_covering_keys",
-      "recovery_wall_seconds": 0.35999999986961484,
+      "recovery_wall_seconds": 0.3130000000819564,
       "resumed": false,
       "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
       "skipped_records": null,
@@ -1579,55 +1566,43 @@
           "tables": {
             "entity_history": {
               "epoch": 0,
-              "upper": 1459
+              "upper": 1460
             },
             "feature_observation_events": {
               "epoch": 0,
               "upper": 0
             },
-            "historical_experiences": {
-              "epoch": 0,
-              "upper": 479
-            },
             "rl_feedback": {
               "epoch": 0,
               "upper": 0
-            },
-            "rl_models": {
-              "epoch": 0,
-              "upper": 1
-            },
-            "tiny_mlp_shadow_models": {
-              "epoch": 0,
-              "upper": 1
             }
           },
-          "token": "4d6a0b46804c445fb4fc3c97958307d1"
+          "token": "a96b3c5ffdb54b059546a49ddd165b4d"
         },
         "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
-        "max_explicit_transaction_seconds": 0.0009622001089155674,
+        "max_explicit_transaction_seconds": 0.0010598001535981894,
         "max_source_execute_seconds": 0.0,
         "owned_generation_connections": 1,
         "owned_source_connections": 1,
         "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
         "source_readers_between_batches": 0,
-        "wal_peak_bytes": 1680992
+        "wal_peak_bytes": 1643912
       },
-      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-z5xg57nt\\adaptive_ai.db",
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-ak6rkuj6\\adaptive_ai.db",
       "source_signature": [
         [
           696320,
-          1794433493971484900
+          1794435193949416700
         ],
         [
-          840512,
-          1794433494327907800
+          877592,
+          1794435194310261900
         ]
       ],
       "sqlite_errorcode": 11,
       "sqlite_errorname": "SQLITE_CORRUPT",
       "sqlite_wait_estimated": true,
-      "sqlite_wait_seconds": 0.0007500001229345798,
+      "sqlite_wait_seconds": 0.0,
       "status": "TRAINED",
       "throttle_seconds": 0.0
     },
@@ -1637,14 +1612,14 @@
     },
     "source_table_rows": {},
     "realtime_simulation": {
-      "ha_rows_written": 284,
-      "ui_reads": 284,
-      "ui_read_max_seconds": 0.008650299860164523,
-      "writer_max_seconds": 0.0038876000326126814,
+      "ha_rows_written": 303,
+      "ui_reads": 303,
+      "ui_read_max_seconds": 0.008294800063595176,
+      "writer_max_seconds": 0.019067599903792143,
       "loss": 0,
       "environment": "host SQLite ingress/read simulation; not physical Pi"
     },
-    "validation_wall_seconds": 9.639999999897555
+    "validation_wall_seconds": 9.5
   },
   "http_and_table": {
     "agent_mode": "shadow",
@@ -1652,9 +1627,9 @@
     "concurrent_writes": 0,
     "version": "0.15.8",
     "input_history_rows": 960,
-    "worker_wall_seconds": 5.240800000028685,
+    "worker_wall_seconds": 4.6882949999999255,
     "worker_phases": {
-      "benchmark_persist_seconds": 0.006528,
+      "benchmark_persist_seconds": 0.025794,
       "causal_home_statistics": {
         "compressed_bytes": 12742,
         "contract": "causal_home_statistics_v1",
@@ -1669,7 +1644,7 @@
         "snapshots": 24,
         "source_rows": 223
       },
-      "causal_home_statistics_build_seconds": 0.033996,
+      "causal_home_statistics_build_seconds": 0.030798,
       "causal_home_statistics_reused": false,
       "causal_home_statistics_validation_seconds": 0.0,
       "context_assessment_seconds": 0.0,
@@ -1681,8 +1656,8 @@
       "experience_dedup_cache_hits": 0,
       "experience_dedup_cached_ids": 214,
       "experience_dedup_db_loads": 1,
-      "experience_dedup_load_seconds": 0.001131,
-      "feature_snapshot_build_seconds": 0.281552,
+      "experience_dedup_load_seconds": 0.001082,
+      "feature_snapshot_build_seconds": 0.284564,
       "feature_snapshot_builds": 557,
       "feature_snapshot_cache_hits": 0,
       "feature_snapshot_cache_misses": 557,
@@ -1691,32 +1666,32 @@
       "feature_snapshot_session_hits_total": 0,
       "feature_snapshot_session_reused": false,
       "feature_snapshot_unique_timestamps": 256,
-      "finalization_seconds": 0.1573,
+      "finalization_seconds": 0.2045,
       "full_archive_count_skipped": true,
-      "heldout_fold_seconds": 2e-06,
+      "heldout_fold_seconds": 4e-06,
       "legacy_outer_stream_entity_count": 2,
       "neural_finalize_requested": true,
       "neural_train_samples_buffered": 327,
-      "policy_serialize_persist_seconds": 0.017179,
+      "policy_serialize_persist_seconds": 0.02545,
       "provenance_cache_hits": 0,
       "provenance_cached_rows": 0,
       "provenance_db_loads": 0,
       "provenance_load_seconds": 1e-06,
       "provenance_loaded_rows": 0,
-      "qualification_seconds": 0.009376,
-      "ram_index_construction_seconds": 0.0026,
+      "qualification_seconds": 0.017656,
+      "ram_index_construction_seconds": 0.0024,
       "ram_replay_actual_bytes": 26865,
       "ram_replay_entities": 2,
       "ram_replay_estimated_bytes": 29425,
       "ram_replay_fallback": false,
       "ram_replay_fallback_entities": 0,
       "ram_replay_index_reused": false,
-      "ram_replay_lookup_seconds": 0.020862,
+      "ram_replay_lookup_seconds": 0.022696,
       "ram_replay_lookups": 2004,
       "ram_replay_rows": 447,
       "replay_driver_rows_planned": 223,
       "replay_driver_rows_processed": 223,
-      "replay_seconds": 1.6499,
+      "replay_seconds": 1.8539,
       "replay_stream_contract": "target_only_driver_v1",
       "rewarded_dwells": 222,
       "screening_rows": 0,
@@ -1726,9 +1701,9 @@
       "start_ts": 1700007708.0,
       "target_entities": 1,
       "tiny_mlp_finalization_deferred": false,
-      "tiny_mlp_finalization_seconds": 0.057348,
-      "total_seconds": 1.8617,
-      "tracker_init_seconds": 0.034787,
+      "tiny_mlp_finalization_seconds": 0.063893,
+      "total_seconds": 2.1078,
+      "tracker_init_seconds": 0.031509,
       "transition_edge_cursor_rewinds": 0,
       "transition_edge_entities": 1,
       "transition_edge_estimated_bytes": 35680,
@@ -1743,8 +1718,8 @@
       "transition_edge_source_rows": 223
     },
     "worker_budget": {
-      "effective_training_duty_cycle": 0.7076,
-      "effective_training_wall_duty_cycle": 0.7076,
+      "effective_training_duty_cycle": 0.7036,
+      "effective_training_wall_duty_cycle": 0.7036,
       "interactive_cooldown_seconds": 0.1,
       "interactive_epoch_escalations": 0,
       "interactive_max_burst_seconds": 1.25,
@@ -1755,15 +1730,15 @@
       "interactive_yield_quantum_ms": 35.0,
       "last_checkpoint": "finalization_complete",
       "max_continuous_work_ms": 35.0,
-      "max_observed_slice_ms": 247.7,
+      "max_observed_slice_ms": 179.6,
       "max_throttle_sleep_seconds": 0.05,
       "realtime_cooldown_seconds": 0.2,
       "realtime_max_burst_seconds": 0.45,
-      "slice_checkpoints": 105,
-      "slice_overruns": 84,
-      "throttle_active_seconds": 3.358,
-      "throttle_batches": 105,
-      "throttle_sleep_seconds": 1.388,
+      "slice_checkpoints": 95,
+      "slice_overruns": 76,
+      "throttle_active_seconds": 2.991,
+      "throttle_batches": 95,
+      "throttle_sleep_seconds": 1.26,
       "training_cpu_duty_cycle": 0.7,
       "training_wall_duty_cycle_target": 0.7
     },
@@ -1801,11 +1776,11 @@
       }
     },
     "history_recovery": {
-      "agent_id": "edce6652",
+      "agent_id": "5a6773f0",
       "archive_status": "ARCHIVE_CORRUPTED",
       "attempts": 168,
       "availability": "PARTIAL",
-      "contract": "training-history-generation-v4",
+      "contract": "training-history-generation-v5",
       "copy_tables": {
         "agents": {
           "bytes_copied": 467,
@@ -1878,7 +1853,7 @@
         }
       },
       "correct_agent_ids": [
-        "edce6652"
+        "5a6773f0"
       ],
       "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
       "gaps": [
@@ -2477,7 +2452,8 @@
       ],
       "lock_wait_seconds": 0.0,
       "model_fingerprint": null,
-      "preparation_cpu_seconds": 0.15625,
+      "neural_fingerprint": null,
+      "preparation_cpu_seconds": 0.171875,
       "quality": {
         "benchmark_samples": 176,
         "experiences": 436,
@@ -2487,9 +2463,9 @@
       },
       "quarantine_cache_hit": false,
       "recovered_records": 887,
-      "recovery_active_cpu_seconds": 0.109375,
+      "recovery_active_cpu_seconds": 0.078125,
       "recovery_strategy": "selected_covering_keys",
-      "recovery_wall_seconds": 0.34300000010989606,
+      "recovery_wall_seconds": 0.2809999999590218,
       "resumed": false,
       "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
       "skipped_records": null,
@@ -2532,42 +2508,34 @@
               "epoch": 0,
               "upper": 0
             },
-            "historical_experiences": {
-              "epoch": 0,
-              "upper": 0
-            },
             "rl_feedback": {
-              "epoch": 0,
-              "upper": 0
-            },
-            "rl_models": {
               "epoch": 0,
               "upper": 0
             }
           },
-          "token": "b56cd6e2a24e4f279fda1290def260bc"
+          "token": "a6a9ac2814a2439fb0509bb4c1a95bf7"
         },
         "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
-        "max_explicit_transaction_seconds": 0.0009306999854743481,
-        "max_source_execute_seconds": 0.015999999828636646,
+        "max_explicit_transaction_seconds": 0.0008759999182075262,
+        "max_source_execute_seconds": 0.0,
         "owned_generation_connections": 1,
         "owned_source_connections": 1,
         "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
         "source_readers_between_batches": 0,
         "wal_peak_bytes": 0
       },
-      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-lcpiq3lb\\adaptive_ai.db",
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-7h_n9alq\\adaptive_ai.db",
       "source_signature": [
         [
           290816,
-          1794433499218722700
+          1794435199351606700
         ],
         null
       ],
       "sqlite_errorcode": 11,
       "sqlite_errorname": "SQLITE_CORRUPT",
       "sqlite_wait_estimated": true,
-      "sqlite_wait_seconds": 0.060374999884516,
+      "sqlite_wait_seconds": 0.0,
       "status": "TRAINED",
       "throttle_seconds": 0.0
     },
@@ -2584,7 +2552,7 @@
       "loss": 0,
       "environment": "host SQLite ingress/read simulation; not physical Pi"
     },
-    "validation_wall_seconds": 5.391000000061467
+    "validation_wall_seconds": 4.905999999959022
   },
   "kill_and_restart": {
     "agent_mode": "shadow",
@@ -2592,9 +2560,9 @@
     "concurrent_writes": 0,
     "version": "0.15.8",
     "input_history_rows": 960,
-    "worker_wall_seconds": 5.188229500083253,
+    "worker_wall_seconds": 5.260731399990618,
     "worker_phases": {
-      "benchmark_persist_seconds": 0.025529,
+      "benchmark_persist_seconds": 0.009823,
       "causal_home_statistics": {
         "compressed_bytes": 6365,
         "contract": "causal_home_statistics_v1",
@@ -2609,9 +2577,9 @@
         "snapshots": 13,
         "source_rows": 114
       },
-      "causal_home_statistics_build_seconds": 0.006403,
+      "causal_home_statistics_build_seconds": 0.011066,
       "causal_home_statistics_reused": false,
-      "causal_home_statistics_validation_seconds": 0.0,
+      "causal_home_statistics_validation_seconds": 1e-06,
       "context_assessment_seconds": 0.0,
       "context_entities_reconstructed_by_trackers": 1,
       "context_screening_scope": "persisted_schema",
@@ -2621,8 +2589,8 @@
       "experience_dedup_cache_hits": 0,
       "experience_dedup_cached_ids": 328,
       "experience_dedup_db_loads": 1,
-      "experience_dedup_load_seconds": 0.001318,
-      "feature_snapshot_build_seconds": 0.098686,
+      "experience_dedup_load_seconds": 0.002174,
+      "feature_snapshot_build_seconds": 0.120484,
       "feature_snapshot_builds": 284,
       "feature_snapshot_cache_hits": 0,
       "feature_snapshot_cache_misses": 284,
@@ -2631,32 +2599,32 @@
       "feature_snapshot_session_hits_total": 0,
       "feature_snapshot_session_reused": false,
       "feature_snapshot_unique_timestamps": 256,
-      "finalization_seconds": 0.1529,
+      "finalization_seconds": 0.2583,
       "full_archive_count_skipped": true,
       "heldout_fold_seconds": 3e-06,
       "legacy_outer_stream_entity_count": 2,
       "neural_finalize_requested": true,
       "neural_train_samples_buffered": 109,
-      "policy_serialize_persist_seconds": 0.025613,
+      "policy_serialize_persist_seconds": 0.045328,
       "provenance_cache_hits": 0,
       "provenance_cached_rows": 0,
       "provenance_db_loads": 0,
       "provenance_load_seconds": 1e-06,
       "provenance_loaded_rows": 0,
-      "qualification_seconds": 0.010605,
-      "ram_index_construction_seconds": 0.0175,
+      "qualification_seconds": 0.02593,
+      "ram_index_construction_seconds": 0.0255,
       "ram_replay_actual_bytes": 13725,
       "ram_replay_entities": 2,
       "ram_replay_estimated_bytes": 16285,
       "ram_replay_fallback": false,
       "ram_replay_fallback_entities": 0,
       "ram_replay_index_reused": false,
-      "ram_replay_lookup_seconds": 0.01008,
+      "ram_replay_lookup_seconds": 0.013182,
       "ram_replay_lookups": 1023,
       "ram_replay_rows": 228,
       "replay_driver_rows_planned": 114,
       "replay_driver_rows_processed": 114,
-      "replay_seconds": 0.8233,
+      "replay_seconds": 1.075,
       "replay_stream_contract": "target_only_driver_v1",
       "rewarded_dwells": 113,
       "screening_rows": 0,
@@ -2666,14 +2634,14 @@
       "start_ts": 1700010980.0,
       "target_entities": 1,
       "tiny_mlp_finalization_deferred": false,
-      "tiny_mlp_finalization_seconds": 0.037804,
-      "total_seconds": 1.0212,
-      "tracker_init_seconds": 0.007235,
+      "tiny_mlp_finalization_seconds": 0.091877,
+      "total_seconds": 1.4025,
+      "tracker_init_seconds": 0.012452,
       "transition_edge_cursor_rewinds": 0,
       "transition_edge_entities": 1,
       "transition_edge_estimated_bytes": 18240,
       "transition_edge_fallback_entities": 0,
-      "transition_edge_index_construction_seconds": 0.0016,
+      "transition_edge_index_construction_seconds": 0.0031,
       "transition_edge_index_fallbacks": 0,
       "transition_edge_index_hits": 227,
       "transition_edge_index_lookups": 227,
@@ -2683,8 +2651,8 @@
       "transition_edge_source_rows": 114
     },
     "worker_budget": {
-      "effective_training_duty_cycle": 0.7026,
-      "effective_training_wall_duty_cycle": 0.7026,
+      "effective_training_duty_cycle": 0.7018,
+      "effective_training_wall_duty_cycle": 0.7018,
       "interactive_cooldown_seconds": 0.1,
       "interactive_epoch_escalations": 0,
       "interactive_max_burst_seconds": 1.25,
@@ -2695,15 +2663,15 @@
       "interactive_yield_quantum_ms": 35.0,
       "last_checkpoint": "finalization_complete",
       "max_continuous_work_ms": 35.0,
-      "max_observed_slice_ms": 174.1,
+      "max_observed_slice_ms": 153.8,
       "max_throttle_sleep_seconds": 0.05,
       "realtime_cooldown_seconds": 0.2,
       "realtime_max_burst_seconds": 0.45,
-      "slice_checkpoints": 95,
-      "slice_overruns": 77,
-      "throttle_active_seconds": 3.011,
-      "throttle_batches": 95,
-      "throttle_sleep_seconds": 1.274,
+      "slice_checkpoints": 97,
+      "slice_overruns": 79,
+      "throttle_active_seconds": 3.101,
+      "throttle_batches": 97,
+      "throttle_sleep_seconds": 1.318,
       "training_cpu_duty_cycle": 0.7,
       "training_wall_duty_cycle_target": 0.7
     },
@@ -2741,14 +2709,14 @@
       }
     },
     "history_recovery": {
-      "agent_id": "a3ebdff1",
+      "agent_id": "ba31d87f",
       "archive_status": "ARCHIVE_CORRUPTED",
       "attempts": 158,
       "availability": "PARTIAL",
-      "contract": "training-history-generation-v4",
+      "contract": "training-history-generation-v5",
       "copy_tables": {
         "agents": {
-          "bytes_copied": 11895,
+          "bytes_copied": 11879,
           "copy_strategy": "all_controller_configuration",
           "rows_copied": 2,
           "source_rows_scanned": 2,
@@ -2832,7 +2800,7 @@
         }
       },
       "correct_agent_ids": [
-        "a3ebdff1"
+        "ba31d87f"
       ],
       "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
       "gaps": [
@@ -3422,7 +3390,8 @@
         }
       ],
       "lock_wait_seconds": 0.0,
-      "model_fingerprint": "b9955d38bfe1ba99a565ae4b101dd7ad2f1e152f3f4a2fcf630a2ceee6352326",
+      "model_fingerprint": "7e7a7b61bdbed99b74a6bbec0eac25948e8e27b3a88fde56ad6c73327b00912b",
+      "neural_fingerprint": null,
       "preparation_cpu_seconds": 0.171875,
       "quality": {
         "benchmark_samples": 122,
@@ -3433,9 +3402,9 @@
       },
       "quarantine_cache_hit": false,
       "recovered_records": 887,
-      "recovery_active_cpu_seconds": 0.0625,
+      "recovery_active_cpu_seconds": 0.046875,
       "recovery_strategy": "selected_covering_keys",
-      "recovery_wall_seconds": 0.3440000000409782,
+      "recovery_wall_seconds": 0.2970000000204891,
       "resumed": false,
       "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
       "skipped_records": null,
@@ -3482,46 +3451,34 @@
               "epoch": 0,
               "upper": 0
             },
-            "historical_experiences": {
-              "epoch": 0,
-              "upper": 479
-            },
             "rl_feedback": {
               "epoch": 0,
               "upper": 0
-            },
-            "rl_models": {
-              "epoch": 0,
-              "upper": 2
-            },
-            "tiny_mlp_shadow_models": {
-              "epoch": 0,
-              "upper": 1
             }
           },
-          "token": "c4c623b0bf90460fb64efabf2a0fa0a7"
+          "token": "8743a9fa68c6461085c539d61326081e"
         },
         "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
-        "max_explicit_transaction_seconds": 0.0012789999600499868,
-        "max_source_execute_seconds": 0.0,
+        "max_explicit_transaction_seconds": 0.0012948999647051096,
+        "max_source_execute_seconds": 0.014999999897554517,
         "owned_generation_connections": 1,
         "owned_source_connections": 1,
         "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
         "source_readers_between_batches": 0,
         "wal_peak_bytes": 0
       },
-      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-dlsok2ux\\adaptive_ai.db",
+      "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-kriqequ4\\adaptive_ai.db",
       "source_signature": [
         [
           802816,
-          1794433509933208300
+          1794435209133962300
         ],
         null
       ],
       "sqlite_errorcode": 11,
       "sqlite_errorname": "SQLITE_CORRUPT",
       "sqlite_wait_estimated": true,
-      "sqlite_wait_seconds": 0.016374999890103936,
+      "sqlite_wait_seconds": 0.0,
       "status": "TRAINED",
       "throttle_seconds": 0.0
     },
@@ -3538,7 +3495,7 @@
       "loss": 0,
       "environment": "host SQLite ingress/read simulation; not physical Pi"
     },
-    "validation_wall_seconds": 10.202999999979511
+    "validation_wall_seconds": 10.016000000061467
   },
   "insufficient": {
     "status": "INSUFFICIENT",

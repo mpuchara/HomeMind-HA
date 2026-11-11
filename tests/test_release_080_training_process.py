@@ -659,6 +659,13 @@ class ActualWorkerSmoke(unittest.TestCase):
     def test_clean_worker_process_trains_tiny_explicit_schema_job(self):
         self.run_worker_fixture()
 
+    def test_generation_child_completes_with_production_inherited_budget(self):
+        result=self.run_worker_fixture(samples=480,corruption_recovery=True,
+                                       qualify=True,inherit_storage_budget=True)
+        self.assertTrue(result['inherited_storage_budget'])
+        self.assertEqual(result['agent_mode'],'shadow')
+        self.assertEqual(result['agent_progress'],1.)
+
     def test_worker_with_corrupt_archive_indexes_keeps_the_same_learned_model(self):
         reference = self.run_worker_fixture(samples=120)
         recovered = self.run_worker_fixture(samples=120, corrupt_archive_indexes=True)
@@ -682,7 +689,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                            qualify=False, concurrent_writes=False,
                            corruption_recovery=False, corrupt_table_page=False,
                            two_agents=False, http_gap=False, kill_and_restart=False,
-                           expect_unavailable=False, large_noise_rows=0):
+                             expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -840,6 +847,8 @@ class ActualWorkerSmoke(unittest.TestCase):
                     first_path = Path(root)/'first.job.json'
                     first_path.write_text(json.dumps(first_job),encoding='utf-8')
                     env = dict(os.environ, ADAPTIVE_AI_DATA=root, ADAPTIVE_AI_TRAINING_WORKER='1')
+                    if inherit_storage_budget:
+                        env.update(store.storage_budget.worker_environment())
                     proc = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1]/'adaptive_ai/src/training_process.py'), '--worker',str(first_path)],
                         env=env, capture_output=True,text=True,timeout=180)
                     self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr)
@@ -893,6 +902,8 @@ class ActualWorkerSmoke(unittest.TestCase):
             env = dict(os.environ)
             env["ADAPTIVE_AI_DATA"] = root
             env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
+            if inherit_storage_budget:
+                env.update(store.storage_budget.worker_environment())
             worker_args = [training_process.__file__, "--worker", str(job_path)]
             command = [sys.executable, *worker_args]
             if samples > 24:
@@ -1047,6 +1058,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "agent_progress": trained_agent["training_progress"],
                 "concurrent_writes": len(writes),
                 "version": job["app_version"],
+                "inherited_storage_budget": bool(inherit_storage_budget),
                 "input_history_rows": len(rows),
                 "worker_wall_seconds": elapsed,
                 "worker_phases": result["training_phase_timings"],
