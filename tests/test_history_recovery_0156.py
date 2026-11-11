@@ -15,7 +15,7 @@ from history_recovery import prepare_generation, safe_segments, project_segment,
 from replay import RAMReplayIndex, SQLiteTemporalTracker
 from context_engine import ContextEngine
 from settings import DEFAULT_OPTIONS
-from training_process import agent_config_fingerprint
+from training_process import agent_config_fingerprint, training_history_scope
 
 
 class RealRecoveryTests(unittest.TestCase):
@@ -210,6 +210,13 @@ class RealRecoveryTests(unittest.TestCase):
             conn.execute("INSERT INTO app_meta VALUES('cache_invalidation','changed')")
         self.destination = self.root/'third.db'
         self.assertFalse(self.recover()['quarantine_cache_hit'])
+
+    def test_explicit_agent_does_not_require_unrelated_diagnostic_history(self):
+        agent = self.store.create_agent(support.agent(target_entity=self.entities[0],input_entities=[self.entities[1]]))
+        states = {e:support.state(e,'off') for e in self.entities}
+        states['sensor.unrelated_diagnostic'] = support.state('sensor.unrelated_diagnostic','123')
+        scope = training_history_scope(dict(agent_id=agent['id'],state_map=states,entity_registry={}),self.store)
+        self.assertEqual(scope,set(self.entities))
 
 
 if __name__ == '__main__':

@@ -226,6 +226,40 @@ def training_relevant_entities(agent, model=None, schema_item=None, neural_artif
     return out
 
 
+def training_history_scope(job, store):
+    """Use the existing schema/context admission rules, not every HA entity.
+
+    An unrelated diagnostic or retired actuator must not turn its damaged rows
+    into a trust boundary for this agent. Wildcard feature screening still gets
+    its established eligible candidate pool; learning/selection rules are unchanged.
+    """
+    from context_engine import ContextEngine
+    from context import is_context_candidate_entity, is_fast_reactive_agent
+    agent = store.get_agent_config(str(job['agent_id']))
+    states, registry = dict(job.get('state_map') or {}), dict(job.get('entity_registry') or {})
+    seed = dict(job.get('schema_cache_item') or {})
+    raw = store.get_model(agent['id']) or {}
+    entities = training_relevant_entities(agent, model=raw, schema_item=seed)
+    from additional_signal import entities as additional_entities
+    entities.update(additional_entities(agent))
+    # Metadata-only construction: no Store means no DDL or history reads on the
+    # original database. configure() uses the same mapping/admission implementation.
+    context = ContextEngine(OPTIONS)
+    context.configure(states, entities=registry)
+    entities.update(context.relevant_entities())
+    schema = (seed.get('model') or raw).get('schema') or seed.get('schema') or {}
+    if '*' in set(agent.get('input_entities') or ('*',)):
+        if schema.get('entities'):
+            if job.get('generation_rebuild') and is_fast_reactive_agent(agent):
+                from training_context_selection import candidates
+                entities.update(candidates(agent, (seed.get('model') or raw).get('selection_meta') or {},
+                    states, registry, schema['entities']))
+        else:
+            entities.update(eid for eid, state in states.items()
+                            if is_context_candidate_entity(eid, state, context.excluded))
+    return entities
+
+
 def _expand_topology_scope(entity_ids, *registries):
     """Include device siblings because actuator exclusion is device-level."""
     scope = {str(x) for x in (entity_ids or ()) if x}
@@ -1586,8 +1620,7 @@ def worker_main(job_path):
         generation_path = str(Path(job['result_path']).with_suffix('.generation.db'))
         _worker_boot_status(job, 'Preparing consistent training generation', stage='history_recovery')
         agent = STORE.get_agent_config(str(job['agent_id']))
-        entities = set(job.get('state_map') or {}) | set(agent.get('input_entities') or ())
-        entities.add(agent['target_entity'])
+        entities = training_history_scope(job, STORE)
         def recovery_progress(**fields):
             _worker_boot_status(job, fields.get('message', 'Recovering history'), stage='history_recovery')
         parent = int(job.get('parent_pid') or 0)
