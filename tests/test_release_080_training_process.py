@@ -930,14 +930,32 @@ class ActualWorkerSmoke(unittest.TestCase):
                 previous_agent = store.get_agent_config(agent['id'])
                 probe_log = Path(root)/'kill-probe.log'
                 probe_stream = probe_log.open('w',encoding='utf-8')
-                killed = subprocess.Popen(command,env=env,cwd=str(Path(training_process.__file__).parent),
+                checkpoint_ready=Path(root)/'committed-history-checkpoint'
+                probe_code='''
+import sys,runpy,time
+from pathlib import Path
+import policy,training_generation
+stamp=float(sys.argv[1]); ready=Path(sys.argv[2]); args=sys.argv[3:]
+policy.now_ts=lambda:stamp
+original=training_generation.Preparation.save
+def save(preparation):
+    original(preparation)
+    if any(key.startswith('history:') and value.get('last') and not value.get('done')
+           for key,value in preparation.state['queries'].items()):
+        ready.write_text('committed real history batch')
+        time.sleep(30)
+training_generation.Preparation.save=save
+sys.argv=args
+runpy.run_path(args[0],run_name='__main__')
+'''
+                probe_command=[sys.executable,'-c',probe_code,str(job['end_ts']),str(checkpoint_ready),*worker_args]
+                killed = subprocess.Popen(probe_command,env=env,cwd=str(Path(training_process.__file__).parent),
                     stdout=probe_stream,stderr=subprocess.STDOUT)
                 deadline = time.monotonic()+30
                 observed = False
                 while killed.poll() is None and time.monotonic()<deadline:
                     try:
-                        status = json.loads(Path(job['status_path']).read_text())
-                        if status.get('bootstrap_stage') == 'history_recovery':
+                        if checkpoint_ready.exists():
                             observed = True
                             break
                     except (OSError,ValueError):
@@ -946,7 +964,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                 killed.kill()
                 killed.wait(timeout=15)
                 probe_stream.close()
-                self.assertTrue(observed,'worker recovery phase was not observed: '+probe_log.read_text(errors='replace'))
+                self.assertTrue(observed,'committed recovery checkpoint was not observed: '+probe_log.read_text(errors='replace'))
                 self.assertEqual(store.get_model(agent['id']),previous_model)
                 self.assertEqual(store.get_agent_config(agent['id'])['training_cursor_ts'],previous_agent['training_cursor_ts'])
                 # A new job generation is the restart contract; incomplete files
@@ -1022,6 +1040,8 @@ class ActualWorkerSmoke(unittest.TestCase):
                 )
             result = json.loads(Path(job["result_path"]).read_text())
             self.assertTrue(result["ok"])
+            if kill_and_restart:
+                self.assertTrue((result.get('history_recovery') or {}).get('resumed'),result)
             if corruption_recovery:
                 from history_recovery import publish_generation
                 publish_generation(store,result['generation_path'],agent['id'],job['agent_fingerprint'],agent_config_fingerprint)
