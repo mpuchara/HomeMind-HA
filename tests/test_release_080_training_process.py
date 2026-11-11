@@ -681,7 +681,8 @@ class ActualWorkerSmoke(unittest.TestCase):
     def run_worker_fixture(self, samples=24, corrupt_archive_indexes=False, *,
                            qualify=False, concurrent_writes=False,
                            corruption_recovery=False, corrupt_table_page=False,
-                           two_agents=False, http_gap=False):
+                           two_agents=False, http_gap=False, kill_and_restart=False,
+                           expect_unavailable=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -827,6 +828,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 job['checksum'] = descriptor_checksum(job)
                 job_path.write_text(json.dumps(job), encoding='utf-8')
 
+            if expect_unavailable:
+                store.save_model(agent['id'],dict(version=11, marker='previous-approved'))
+                previous_model = store.get_model(agent['id'])
+                previous_agent = store.get_agent_config(agent['id'])
+
             if corrupt_table_page:
                 with sqlite3.connect(db) as conn:
                     conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
@@ -877,6 +883,37 @@ class ActualWorkerSmoke(unittest.TestCase):
                 ]
                 env["PYTHONHASHSEED"] = "0"
             started = time.perf_counter()
+            if kill_and_restart:
+                # Keep an actual usable previous model, not just a UI status.
+                store.save_model(agent['id'],healthy_model)
+                previous_model = store.get_model(agent['id'])
+                previous_agent = store.get_agent_config(agent['id'])
+                probe_log = Path(root)/'kill-probe.log'
+                probe_stream = probe_log.open('w',encoding='utf-8')
+                killed = subprocess.Popen(command,env=env,cwd=str(Path(training_process.__file__).parent),
+                    stdout=probe_stream,stderr=subprocess.STDOUT)
+                deadline = time.monotonic()+30
+                observed = False
+                while killed.poll() is None and time.monotonic()<deadline:
+                    try:
+                        status = json.loads(Path(job['status_path']).read_text())
+                        if status.get('bootstrap_stage') == 'history_recovery':
+                            observed = True
+                            break
+                    except (OSError,ValueError):
+                        pass
+                    time.sleep(.005)
+                killed.kill()
+                killed.wait(timeout=15)
+                probe_stream.close()
+                self.assertTrue(observed,'worker recovery phase was not observed: '+probe_log.read_text(errors='replace'))
+                self.assertEqual(store.get_model(agent['id']),previous_model)
+                self.assertEqual(store.get_agent_config(agent['id'])['training_cursor_ts'],previous_agent['training_cursor_ts'])
+                # A new job generation is the restart contract; incomplete files
+                # from the killed job cannot be mistaken for a completed result.
+                job['result_path'] = str(Path(root)/'restart.result.json')
+                job['checksum'] = descriptor_checksum(job)
+                job_path.write_text(json.dumps(job),encoding='utf-8')
             writer_stop = threading.Event()
             writes = []
             writer_errors = []
@@ -915,6 +952,13 @@ class ActualWorkerSmoke(unittest.TestCase):
                     self.assertFalse(writer.is_alive())
             self.assertEqual(writer_errors, [])
             elapsed = time.perf_counter() - started
+            if expect_unavailable:
+                self.assertNotEqual(completed.returncode,0,completed.stdout)
+                failed = json.loads(Path(job['result_path']).read_text())
+                self.assertFalse(failed['ok'])
+                self.assertEqual(store.get_model(agent['id']),previous_model)
+                self.assertEqual(store.get_agent_config(agent['id'])['training_cursor_ts'],previous_agent['training_cursor_ts'])
+                return dict(status='INSUFFICIENT',previous_model_retained=True,error=failed.get('error'))
             if completed.returncode:
                 log = Path(job["log_path"])
                 self.fail(

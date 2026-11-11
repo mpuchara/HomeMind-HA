@@ -8,7 +8,7 @@ Status: kandydat do ręcznej walidacji na Raspberry Pi 5. Brak potwierdzenia na 
 
 ## FILES CHANGED
 
-`history_recovery.py`: czysta generacja, odzyskiwanie, jawne luki, publikacja transakcyjna. `training_process.py`: staging całej sesji, weryfikacja jakości i publikacja przez rodzica. `history.py`: reset wyłącznie generacji workera, budżet i cache niedostępnych fragmentów Recorder. `replay.py`: diagnostyka encji i jawny stan indeksu RAM. `settings.py`, `config.yaml`, `BUILD_INFO.json`, Dockerfile: wersja i limity. Testy, skrypt walidacyjny i workflow CI.
+`history_recovery.py`: czysta generacja, odzyskiwanie, jawne luki, publikacja transakcyjna. `training_process.py`: staging całej sesji, weryfikacja jakości i publikacja przez rodzica. `history.py`: reset wyłącznie generacji workera, budżet i cache niedostępnych fragmentów Recorder. `storage.py`: limit wielkości każdej zapisywalnej generacji. `replay.py`: diagnostyka encji i jawny stan indeksu RAM. `settings.py`, `config.yaml`, `BUILD_INFO.json`, Dockerfile: wersja i limity. Testy, skrypt walidacyjny i workflow CI.
 
 ## RECOVERY STRATEGY
 
@@ -22,7 +22,7 @@ Klasyfikacja przez natywny kod SQLite; BUSY/LOCKED, FULL i I/O nie stają się l
 
 RAMReplayIndex, temporal replay, statystyki kontekstu i pozostałe odczyty workera używają jednej czystej bazy. Oryginalne id, event_time, received_time i źródła pozostają zachowane. Replay dzieli się na odcinki bez luk; kontekst, checkpointy domu, dziennik obserwacji, otwarty dwell i continuation nie przechodzą przez granicę luki. Odcinek zaczyna się dopiero po rzeczywistych punktach synchronizacji encji. Końcowy otwarty dwell pozostaje cenzurowany. Braki nie są zerowym rewardem ani brakiem zdarzeń.
 
-Rodzic publikuje model, doświadczenia, watermark, benchmark, kursor i neural w jednej transakcji WAL po walidacji konfiguracji/topologii/opcji. Dotychczasowy model i metadane są zachowane w `training_generation_backup`. Nowe id doświadczeń otrzymują spójny watermark. Correct, konfiguracja, kandydaci i inni agenci nie są zastępowani kopią workera. Zmiana danych Correct podczas treningu blokuje publikację. Kill/restart przed publikacją pozostawia poprzedni stan modelu i kursora.
+Rodzic publikuje model, doświadczenia, watermark, benchmark, kursor i neural w jednej transakcji WAL po walidacji konfiguracji/topologii/opcji. Dotychczasowy model i metadane są zachowane w `training_generation_backup`. Nowe id doświadczeń otrzymują spójny watermark. Correct, konfiguracja, kandydaci i inni agenci nie są zastępowani kopią workera. Zmiana danych Correct lub modelu Live podczas treningu blokuje publikację. Kill/restart przed publikacją pozostawia poprzedni stan modelu i kursora.
 
 ## TRAINING COMPLETION TEST
 
@@ -30,7 +30,7 @@ Rodzic publikuje model, doświadczenia, watermark, benchmark, kursor i neural w 
 
 ## SHADOW TRANSITION TEST
 
-Wszystkie cztery scenariusze hosta zakończyły się mode=shadow i progress=1.0. Test dwóch agentów sprawdza również identyczność zapisanego modelu pierwszego agenta po publikacji drugiego. Zdrowy i uszkodzony indeks mają identyczny hash parametrów. Uszkodzona tabela daje inny model, ponieważ niedostępne doświadczenia nie są zastępowane fikcyjnymi.
+Wszystkie pięć scenariuszy hosta zakończyły się mode=shadow i progress=1.0. Test dwóch agentów sprawdza również identyczność zapisanego modelu pierwszego agenta po publikacji drugiego. Zdrowy i uszkodzony indeks mają identyczny hash parametrów. Uszkodzona tabela daje inny model, ponieważ niedostępne doświadczenia nie są zastępowane fikcyjnymi.
 
 ## PERFORMANCE IMPACT
 
@@ -38,13 +38,13 @@ Dodatkowy etap przygotowuje dyskową generację i indeksy, zachowując izolację
 
 ## REGRESSION TEST RESULTS
 
-Ukierunkowane testy prawdziwej korupcji plików: 8/8 PASS na Windows. Testy produkcyjnego workera: cztery scenariusze PASS. Pełna regresja Windows zatrzymała się w istniejącym teście identyfikacji procesu; część wcześniejszych testów zgłaszała błędy platformowe. Rozstrzygającą pełną regresję Python 3.11/3.13 oraz Docker/ARM64 wykonuje GitHub Actions. Wyniki CI wymagają uzupełnienia po zakończeniu.
+Ukierunkowane testy prawdziwej korupcji plików, atomowości, Correct i cache: 11/11 PASS na Windows. Testy produkcyjnego workera: pięć scenariuszy treningu PASS, w tym kill/restart podczas recovery; niewystarczająca historia zachowuje poprzedni model (PASS). Pełna regresja Windows zatrzymała się w istniejącym teście identyfikacji procesu; część wcześniejszych testów zgłaszała błędy platformowe. Rozstrzygającą pełną regresję Python 3.11/3.13 oraz Docker/ARM64 wykonuje GitHub Actions. Wyniki CI wymagają uzupełnienia po zakończeniu.
 
 ## KNOWN LIMITATIONS
 
 Brak dostępu do rzeczywistej uszkodzonej bazy użytkownika i brak fizycznego testu Pi/HA. Niedostępny katalog SQLite lub korupcja metadanych modeli/Correct blokują bezpieczne przygotowanie — wymagają osobnej migracji; nie naprawiamy ich automatycznie. Brak niezależnego dowodu czasu utraconych rekordów skutkuje UNKNOWN. Budżet przerwany podczas odzyskiwania nie publikuje niekompletnego modelu. Wiele rozproszonych luk może pozostawić za mało wspólnych, zsynchronizowanych odcinków lub próbek benchmarku. Nie stosujemy arbitralnego progu procentowego pokrycia.
 
-Rzadkie sensory mogą ograniczać synchronizację po luce. Dla częściowej historii sparse long-memory jest wyłączone; nagrody i algorytm uczenia pozostają niezmienione. Opcjonalny neural challenger korzysta z ostatniego bezpiecznego odcinka; Ridge jest akumulowany między odcinkami. Kwarantanna Recorder jest konserwatywna; ponowne pozyskanie historii wymaga udanego Rescan lub świadomego resetu metadanych kwarantanny. Retencja zadań ogranicza liczbę zachowanych generacji; istniejące limity storage nadal obowiązują.
+Rzadkie sensory mogą ograniczać synchronizację po luce. Dla częściowej historii sparse long-memory jest wyłączone; nagrody i algorytm uczenia pozostają niezmienione. Opcjonalny neural challenger korzysta z ostatniego bezpiecznego odcinka; Ridge jest akumulowany między odcinkami. Kwarantanna Recorder jest konserwatywna; zdrowe otoczenie znanych luk jest nadal pobierane. Udany Rescan odejmuje odzyskane zakresy od kwarantanny. Supervisor usuwa własną generację po zakończeniu/ubiciu workera. Pozostałości po awarii samego rodzica podlegają retencji zadań; istniejące limity storage nadal obowiązują.
 
 ## INSTALLATION PACKAGE
 

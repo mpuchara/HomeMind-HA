@@ -65,7 +65,7 @@ class RecoveryBudget:
 
 
 def prepare_generation(source, destination, entities, start, end, *, options=None,
-                       cancelled=lambda: False, progress=lambda **kw: None, http_gaps=()):
+                       cancelled=lambda: False, progress=lambda **kw: None, http_gaps=(), agent_id=None):
     """Copy readable metadata and selected history, fail closed on unknown loss.
 
     destination must be a fresh per-job path. Interrupted files are never accepted:
@@ -77,14 +77,16 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
     budget = RecoveryBudget(options, cancelled, progress)
     entities = set(entities)
     report = dict(contract=CONTRACT, status="BUILDING", source=str(source),
-                  agent_id=None, recovered_records=0, skipped_records=None,
+                  agent_id=agent_id, recovered_records=0, skipped_records=None,
                   gaps=[], attempts=0, archive_status="HISTORY_OK")
     def source_signature():
         signature = []
         for suffix in ('', '-wal'):
             path = Path(str(source)+suffix)
             stat = path.stat() if path.exists() else None
-            signature.append([stat.st_size, stat.st_mtime_ns] if stat else None)
+            # Opening a WAL-mode read transaction may create an empty WAL; it
+            # contains no committed frames and is equivalent to an absent file.
+            signature.append([stat.st_size, stat.st_mtime_ns] if stat and (not suffix or stat.st_size > 32) else None)
         return signature
     signature = source_signature()
     cache_key = hashlib.sha256(str(Path(source).resolve()).encode()).hexdigest()[:16]
@@ -102,9 +104,17 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
         dst.execute("PRAGMA journal_mode=DELETE")
         dst.execute(f"PRAGMA cache_size=-{budget.memory // 1024}")
         dst.execute(f"PRAGMA max_page_count={budget.disk // 4096}")
+        # Enforce cancellation/wall time even inside SQLite sorting, index build
+        # and quick_check, before control returns to the Python batch loop.
+        def interrupted():
+            return int(cancelled() or time.monotonic()-budget.started > budget.seconds)
+        src.set_progress_handler(interrupted,10000)
+        dst.set_progress_handler(interrupted,10000)
         src.execute("BEGIN")
         schema = src.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL").fetchall()
         report['correct_fingerprint'] = correct_fingerprint(src)
+        original_model = src.execute('SELECT model_json FROM rl_models WHERE agent_id=?', (agent_id,)).fetchone() if agent_id else None
+        report['model_fingerprint'] = hashlib.sha256(original_model[0].encode()).hexdigest() if original_model else None
         for item in schema:
             if item['type'] == 'table' and not item['name'].startswith('sqlite_'):
                 dst.execute(item['sql'])
@@ -143,6 +153,11 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
                 raise
             report.update(archive_status="ARCHIVE_CORRUPTED", sqlite_errorcode=getattr(error, 'sqlite_errorcode', None),
                           sqlite_errorname=getattr(error, 'sqlite_errorname', None), recovery_strategy="rowid_bisection")
+            print('[history] training_corruption_detected '+json.dumps(dict(agent_id=agent_id,
+                entity_id='unknown_until_covering_witness',training_phase='history_recovery',
+                archive_query_type='selected_history',query_start_ts=start,query_end_ts=end,
+                sqlite_errorcode=getattr(error,'sqlite_errorcode',None),sqlite_errorname=getattr(error,'sqlite_errorname',None),
+                recovery_strategy='bounded_rowid_bisection',recovery_result='started')),flush=True)
             progress(message="History corruption detected; recovering physical key ranges", phase_detail="Bounded read-only SQLite recovery")
             # Materialize the independent covering witness on disk, never in a Python
             # history list. Index-only corruption is harmless if the table is readable.
@@ -203,7 +218,7 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
                 progress(message=f"Recovering history: physical keys {min(maximum,lo+8191)}/{maximum}",
                          work_done=min(maximum,lo+8191), work_total=maximum, work_unit="archive keys")
             if source_signature() == signature:
-                temp = cache_path.with_suffix('.tmp')
+                temp = cache_path.with_suffix('.'+destination.name+'.tmp')
                 temp.write_text(json.dumps(dict(signature=signature,ranges=skipped)),encoding='utf-8')
                 os.replace(temp, cache_path)
             report['quarantine_cache_hit'] = bool(cached_ranges)
@@ -229,6 +244,7 @@ def prepare_generation(source, destination, entities, start, end, *, options=Non
                     failure_reason="HISTORY_GAP_HTTP500", recovery_attempts=0))
         report['recovered_records'] = dst.execute("SELECT COUNT(*) FROM entity_history").fetchone()[0]
         report['attempts'] = budget.attempts
+        report['recovery_wall_seconds'] = round(time.monotonic()-budget.started,6)
         report['availability'] = ('PARTIAL' if report['gaps'] else 'HISTORY_OK')
         # Recovered rows are immutable for the duration of this generation. For a
         # partial archive, each clean segment gets a fresh history projection below.
@@ -308,6 +324,9 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint)
         if correct_fingerprint(conn) != manifest.get('correct_fingerprint'):
             raise RecoveryUnavailable('Correct changed during training; previous model retained, retry with new labels')
         previous_model = conn.execute('SELECT model_json FROM rl_models WHERE agent_id=?', (agent_id,)).fetchone()
+        current_digest = hashlib.sha256(previous_model[0].encode()).hexdigest() if previous_model else None
+        if manifest.get('agent_id') and current_digest != manifest.get('model_fingerprint'):
+            raise RecoveryUnavailable('Live model changed during training; previous state retained, retry required')
         previous_neural = conn.execute('SELECT * FROM tiny_mlp_shadow_models WHERE agent_id=?', (agent_id,)).fetchone()
         conn.execute('INSERT OR REPLACE INTO training_generation_backup VALUES(?,?,?,?)', (agent_id,json.dumps(current),
             previous_model[0] if previous_model else None,json.dumps(dict(previous_neural)) if previous_neural else None))

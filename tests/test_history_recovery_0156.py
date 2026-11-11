@@ -140,19 +140,76 @@ class RealRecoveryTests(unittest.TestCase):
             return False
         report = self.recover(cancelled=cancelled)
         self.assertEqual(report['status'], 'READY')
-        # Writer committed before BEGIN's first schema read in this callback, so
-        # this row belongs to the captured generation. Later writes cannot leak.
+        # The callback runs after the schema read fixed the source WAL snapshot.
         self.store.archive_batch([('switch.target', 76501.,'off',{},None,'ha_history_full')])
         with closing(sqlite3.connect(self.destination)) as conn:
+            self.assertIsNone(conn.execute('SELECT id FROM entity_history WHERE ts=76500').fetchone())
             self.assertIsNone(conn.execute('SELECT id FROM entity_history WHERE ts=76501').fetchone())
 
     def test_I_correct_metadata_is_preserved_exactly(self):
+        self.store.add_feedback('test',1,1.,-1.,'Correct',{0:1.},user_id='resident',source='manual_feedback')
+        with self.store.conn() as conn:
+            original_correct = [tuple(row) for row in conn.execute('SELECT * FROM rl_feedback')]
         with self.store.conn() as conn:
             conn.execute("CREATE TABLE correct_fixture(id INTEGER PRIMARY KEY, payload TEXT)")
             conn.execute("INSERT INTO correct_fixture VALUES(1,?)", ('{"label":"user-correct","received_time":1234}',))
         self.recover()
         with closing(sqlite3.connect(self.destination)) as conn:
+            self.assertEqual(conn.execute('SELECT * FROM rl_feedback').fetchall(), original_correct)
             self.assertEqual(conn.execute('SELECT * FROM correct_fixture').fetchall(), [(1,'{"label":"user-correct","received_time":1234}')])
+
+    def _trained_generation(self):
+        agent = self.store.create_agent(support.agent(target_entity=self.entities[0]))
+        self.store.add_historical_experience(agent['id'],1,0,0.,1.,30.,{0:1.})
+        self.store.save_model(agent['id'],dict(version=11,marker='previous-approved'))
+        before = self.store.get_model(agent['id'])
+        self.recover()
+        with patch.dict('os.environ', ADAPTIVE_AI_TRAINING_WORKER='1'):
+            staged = Store(self.destination)
+        staged.add_historical_experience(agent['id'],4000,1,1.,1.,30.,{0:1.})
+        staged.save_model(agent['id'],dict(version=11,marker='trained'))
+        staged.set_training_state(agent['id'],'paused',samples=20,shadow_after_completion=True)
+        with staged.conn() as conn:
+            manifest = json.loads(conn.execute('SELECT payload FROM recovery_manifest').fetchone()[0])
+            manifest['status'] = 'TRAINED'
+            conn.execute('UPDATE recovery_manifest SET payload=?',(json.dumps(manifest),))
+        return agent,before
+
+    def test_publication_is_atomic_when_lifecycle_update_fails(self):
+        agent,before = self._trained_generation()
+        with self.store.conn() as conn:
+            conn.execute("CREATE TRIGGER fail_publication BEFORE UPDATE ON agents BEGIN SELECT RAISE(ABORT,'test failure'); END")
+        with self.assertRaises(sqlite3.IntegrityError):
+            publish_generation(self.store,self.destination,agent['id'],agent_config_fingerprint(agent),agent_config_fingerprint)
+        self.assertEqual(self.store.get_model(agent['id']),before)
+        self.assertEqual([r['target_history_id'] for r in self.store.list_historical_experiences(agent['id'])],[1])
+        with self.store.conn() as conn:
+            conn.execute('DROP TRIGGER fail_publication')
+        publish_generation(self.store,self.destination,agent['id'],agent_config_fingerprint(agent),agent_config_fingerprint)
+        self.assertEqual(self.store.get_model(agent['id'])['marker'],'trained')
+        self.assertEqual(self.store.get_agent_config(agent['id'])['mode'],'shadow')
+        with self.store.conn() as conn:
+            self.assertEqual(json.loads(conn.execute('SELECT model_json FROM training_generation_backup').fetchone()[0]),before)
+
+    def test_new_correct_during_training_rejects_publication_without_losing_label(self):
+        agent,before = self._trained_generation()
+        self.store.add_feedback(agent['id'],1,1.,-1.,'Correct',{0:1.},user_id='resident',source='manual_feedback')
+        with self.assertRaisesRegex(RecoveryUnavailable,'Correct changed'):
+            publish_generation(self.store,self.destination,agent['id'],agent_config_fingerprint(agent),agent_config_fingerprint)
+        self.assertEqual(self.store.get_model(agent['id']),before)
+        self.assertEqual(len(self.store.list_feedback(agent['id'])),1)
+
+    def test_quarantine_cache_reuses_diagnosis_and_invalidates_after_source_change(self):
+        self.damage(self.pages[3][0])
+        first = self.recover()
+        self.destination = self.root/'second.db'
+        second = self.recover()
+        self.assertTrue(second['quarantine_cache_hit'])
+        self.assertLess(second['attempts'],first['attempts'])
+        with self.store.conn() as conn:
+            conn.execute("INSERT INTO app_meta VALUES('cache_invalidation','changed')")
+        self.destination = self.root/'third.db'
+        self.assertFalse(self.recover()['quarantine_cache_hit'])
 
 
 if __name__ == '__main__':

@@ -116,6 +116,7 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.assertLessEqual(len(self.requests), 16)
 
     def test_affected_agent_cannot_prepare_replay_across_known_gap(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         self.discover()
         self.obj._training_recorder_import = Mock()
         self.obj._eligible_rebuild_context = lambda: []
@@ -130,6 +131,7 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.obj._require_agent_history({BAD}, START + 3600, END)
 
     def test_fatal_preparation_errors_stop_rebuild_before_learning_reset(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         config = self.store.create_agent(agent(target_entity=GOOD))
         agent_id = config["id"]
         self.store.save_model(agent_id, {"marker": "existing model"})
@@ -158,6 +160,7 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.assertIs(raised.exception.__cause__, error)
 
     def test_import_write_corruption_continues_to_replay_from_committed_archive(self):
+        self.enterContext(patch.dict(history.OPTIONS, training_process_isolation=False))
         config = self.store.create_agent(agent(target_entity=GOOD))
         self.obj.training_job_agent_id = config["id"]
         self.obj.session_mode = True

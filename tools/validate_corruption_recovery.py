@@ -15,8 +15,9 @@ def main():
     for name, kwargs in (
         ('healthy', {}),
         ('index', dict(corrupt_archive_indexes=True)),
-        ('table_two_agents', dict(corrupt_table_page=True,two_agents=True)),
+        ('table_two_agents', dict(corrupt_table_page=True,two_agents=True,concurrent_writes=True)),
         ('http_and_table', dict(corrupt_table_page=True,http_gap=True)),
+        ('kill_and_restart', dict(corrupt_table_page=True,two_agents=True,kill_and_restart=True)),
     ):
         started = time.monotonic()
         results[name] = fixture.run_worker_fixture(samples=480,corruption_recovery=True,qualify=True,**kwargs)
@@ -26,6 +27,7 @@ def main():
         print(name, results[name]['learning_hash'],flush=True)
     assert results['healthy']['learning_hash']==results['index']['learning_hash']
     assert results['table_two_agents']['history_recovery']['gaps']
+    results['insufficient'] = fixture.run_worker_fixture(samples=2,corruption_recovery=True,qualify=True,expect_unavailable=True)
     path = ROOT/'docs/benchmarks/corruption-recovery-0156.json'
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(results,indent=2),encoding='utf-8')

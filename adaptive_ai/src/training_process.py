@@ -315,7 +315,16 @@ def _same_process_alive(pid, start_token=None):
 def _atomic_json(path, payload):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_text(path, _canonical(payload))
+    for attempt in range(6):
+        try:
+            atomic_text(path, _canonical(payload))
+            break
+        except PermissionError as exc:
+            # Windows may briefly deny replacement while the supervisor reads a
+            # heartbeat. This is transport contention, not a training/data failure.
+            if os.name != 'nt' or getattr(exc,'winerror',None) not in (5,32) or attempt == 5:
+                raise
+            time.sleep(.01)
 
 
 def _read_json(path, default=None):
@@ -980,6 +989,11 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
     env["MKL_NUM_THREADS"] = "1"
     env["NUMEXPR_NUM_THREADS"] = "1"
 
+    if job.get('training_generation'):
+        STORE.event(agent_id,'info','training_history_recovery_started',
+                    'Preparing an isolated consistent history generation',
+                    dict(agent_id=agent_id,training_phase='history_recovery',query_start_ts=start_ts,query_end_ts=end_ts))
+
     process = subprocess.Popen(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(job_path)],
         cwd=str(Path(__file__).resolve().parent),
@@ -1229,8 +1243,20 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
             from history_recovery import publish_generation
             publish_generation(STORE, result['generation_path'], agent_id,
                                job['agent_fingerprint'], agent_config_fingerprint)
+            neural_service = getattr(history.engine,'tiny_mlp_shadow',None)
+            if neural_service is not None and callable(getattr(neural_service,'invalidate',None)):
+                neural_service.invalidate(agent_id)
             history.training_process_status['history_recovery'] = result.get('history_recovery')
             recovery = result.get('history_recovery') or {}
+            if recovery.get('gaps'):
+                STORE.event(agent_id,'warning','training_partial_history',
+                    'Training used synchronized trustworthy intervals; missing record count is unknown', recovery.get('quality'))
+            if recovery.get('sqlite_errorcode') is not None:
+                STORE.event(agent_id,'warning','training_corruption_detected',
+                    'Local archive corruption isolated in the training generation', recovery)
+            for gap in list(recovery.get('gaps') or ())[:16]:
+                STORE.event(agent_id,'warning','training_history_range_skipped',
+                    'Untrusted history excluded from replay', gap)
             STORE.event(agent_id, 'warning' if recovery.get('gaps') else 'info',
                         'training_completed_with_gaps' if recovery.get('gaps') else 'training_history_recovered',
                         'Training generation committed atomically', recovery)
@@ -1334,6 +1360,9 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
+        if job.get('training_generation'):
+            STORE.event(agent_id,'warning','training_recovery_failed',
+                        str(exc),dict(agent_id=agent_id,previous_model_retained=True))
         rollback_agent = agent_before
         rollback_model = model_before
         rollback_neural = neural_before
@@ -1377,9 +1406,20 @@ def run_isolated_training_chunk(history, start_ts, end_ts, **kwargs):
         }
         raise
     finally:
+        if process.poll() is None:
+            _terminate(process, grace)
         if log_writer is not None and process.poll() is not None:
             log_writer.join(1)
         history.active_training_process = None
+        if job.get('training_generation') and process.poll() is not None:
+            generation = Path(job['result_path']).with_suffix('.generation.db').resolve()
+            # Only this job's disposable generation is removed, never source DB/WAL.
+            if generation.parent == Path(job['result_path']).resolve().parent:
+                for suffix in ('','-wal','-shm','-journal'):
+                    try:
+                        Path(str(generation)+suffix).unlink(missing_ok=True)
+                    except OSError:
+                        pass
 
 
 class TrainingWorkerEngine:
@@ -1556,6 +1596,7 @@ def worker_main(job_path):
                 STORE.path, generation_path, entities,
                 float(job.get('sequence_start_ts', job['start_ts'])),
                 float(job.get('sequence_target_end_ts', job['end_ts'])), options=OPTIONS,
+                agent_id=str(job['agent_id']),
                 cancelled=lambda: bool(parent and not _same_process_alive(parent, job.get('parent_start_token'))),
                 progress=recovery_progress,
                 http_gaps=json.loads(STORE.meta_get('training_history_gaps_v1', '[]'))
@@ -1569,6 +1610,7 @@ def worker_main(job_path):
         # This is a fresh child: all subsequent Store, context, RAM index, temporal
         # and long-memory readers/writers share the SAME clean generation path.
         STORE.path = generation_path
+        STORE.recovery_generation = True
         from storage_budget import StorageBudget
         STORE.storage_budget = StorageBudget(generation_path, OPTIONS)
         STORE._meta_cache.clear()

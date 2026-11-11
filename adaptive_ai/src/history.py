@@ -1335,6 +1335,10 @@ class HistoryManager(threading.Thread):
             target = agent["target_entity"]
             # The isolated generation validates and salvages target rows before any
             # reset. A direct read here would hit the same damaged table again.
+            if not OPTIONS.get('training_process_isolation', True):
+                with closing(STORE.archive_iter(start_ts, target_end, [target], chunk_size=100)) as rows:
+                    if next(rows,None) is None or next(rows,None) is None:
+                        raise TrainingImportWriteCorruption(f'{exc}; insufficient readable local target history') from exc
             self.training_job_timings["recorder_import_fallback"] = "local_archive"
             STORE.event(
                 agent_id, "warning", "agent_training_local_archive",
@@ -2276,6 +2280,18 @@ class HistoryManager(threading.Thread):
         # The archive commit already succeeded. Resolve gaps before writing the
         # optional resume hint so a restart cannot hide an unresolved gap behind it.
         self._clear_recovered_discovery_gaps(source, entities, start, end)
+        training_gaps = self._read_discovery_metadata('training_history_gaps_v1', [])
+        remaining = []
+        for gap in training_gaps:
+            if gap['entity_id'] not in entities or gap['source'] != source or gap['start'] >= end or gap['end'] <= start:
+                remaining.append(gap)
+                continue
+            if gap['start'] < start:
+                remaining.append(dict(gap, end=start))
+            if gap['end'] > end:
+                remaining.append(dict(gap, start=end))
+        if remaining != training_gaps:
+            STORE.meta_set('training_history_gaps_v1', json.dumps(remaining))
         coverage = self.discovery_recorder_coverage
         for eid in entities:
             key = (str(source), str(eid))
@@ -2332,9 +2348,25 @@ class HistoryManager(threading.Thread):
                        and g['start'] < end_ts and g['end'] > start_ts]
             if blocked:
                 self.recorder_skipped_slices = int(getattr(self, 'recorder_skipped_slices', 0)) + 1
-                # Exclude the complete unrequested slice, not just the old failure.
-                self._record_training_gap(entity_ids, start_ts, end_ts, source, 'CACHED_HTTP500')
-                return 0
+                # Fetch the complement, keeping healthy neighbours and independent
+                # entities. Known gaps must not expand to the whole request window.
+                if len(entity_ids) > 1:
+                    return sum(self._fetch_history_resilient([eid], start_ts, end_ts,
+                        minimal=minimal,no_attributes=no_attributes,source=source,
+                        depth=depth+1,on_successful_leaf=on_successful_leaf,
+                        skip_initial_state=True) for eid in entity_ids)
+                cursor, recovered = start_ts, 0
+                for lo, hi in self._merge_discovery_intervals([(g['start'],g['end']) for g in blocked]):
+                    if lo > cursor:
+                        recovered += self._fetch_history_resilient(entity_ids, cursor, min(lo,end_ts),
+                            minimal=minimal,no_attributes=no_attributes,source=source,
+                            depth=depth+1,on_successful_leaf=on_successful_leaf,skip_initial_state=True)
+                    cursor = max(cursor, hi)
+                if cursor < end_ts:
+                    recovered += self._fetch_history_resilient(entity_ids,cursor,end_ts,
+                        minimal=minimal,no_attributes=no_attributes,source=source,
+                        depth=depth+1,on_successful_leaf=on_successful_leaf,skip_initial_state=True)
+                return recovered
             if int(getattr(self, '_training_recorder_http500_total', 0)) >= TRAINING_HTTP_500_LIMIT:
                 self._record_training_gap(entity_ids, start_ts, end_ts, source, 'HTTP500_BUDGET')
                 self.recorder_skipped_slices = int(getattr(self, 'recorder_skipped_slices', 0)) + 1
