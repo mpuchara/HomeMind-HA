@@ -299,7 +299,7 @@ class Preparation:
                 fence.commit()
                 fence.execute('BEGIN IMMEDIATE')
                 try:
-                    self.state['boundary']=capture(fence)
+                    self.state['boundary']=capture(fence,self.end)
                     fence.commit()
                 except Exception:
                     fence.rollback()
@@ -362,6 +362,7 @@ class Preparation:
             if not self.state.get('bootstrap_complete'):
                 self.checkpoint()
                 begin=time.monotonic()
+                snapshot_started=time.perf_counter()
                 self.bootstrap=True
                 initial={}
                 buffered_bytes=0
@@ -391,7 +392,7 @@ class Preparation:
                 finally:
                     self.src.rollback()
                     self.bootstrap=False
-                    self.snapshot_max_seconds=max(self.snapshot_max_seconds,time.monotonic()-begin)
+                    self.snapshot_max_seconds=max(self.snapshot_max_seconds,time.perf_counter()-snapshot_started)
                 # All throttling, local disk writes and progress callbacks happen
                 # AFTER the source reader is released, including configuration.
                 for name,(rows,strategy) in initial.items():

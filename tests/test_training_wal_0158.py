@@ -267,6 +267,18 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
             self.assertTrue(process.resume_deferred_training(history,self.fixture.agent['id']))
         self.assertEqual(store.get_model(self.fixture.agent['id']),previous)
 
+    def test_09_future_prefix_enrichment_is_outside_input_but_time_move_invalidates(self):
+        self.store.archive_batch([('switch.target',1000000.,'off',{},None,'live')])
+        report=self.fixture.prepare()
+        boundary=report['snapshot_lifecycle']['boundary']
+        with self.store.conn() as conn:
+            conn.execute("UPDATE entity_history SET state='enriched' WHERE ts=1000000")
+            validate(conn,boundary)
+        with self.store.conn() as conn:
+            conn.execute('UPDATE entity_history SET ts=70001 WHERE ts=1000000')
+        with self.store.conn() as conn,self.assertRaisesRegex(RuntimeError,'prefix changed'):
+            validate(conn,boundary)
+
 
 if __name__=='__main__':
     unittest.main()

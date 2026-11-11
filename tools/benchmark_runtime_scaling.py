@@ -153,6 +153,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             engine.agent_candidates.invalidate_candidate_shadow_cache()
         # An isolated real policy fit plus normal durable model writes overlaps
         # Root inference. This is not a HistoryManager 14-day import benchmark.
+        ui_http_ms, ingress_write_ms = [], []
         preparation_stats=dict(runs=0,errors=[],elapsed_seconds=[],wal_peak_bytes=0,snapshot_max_seconds=0.)
         if history_preparation:
             if not training or not trained:
@@ -168,7 +169,20 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             checkpoint.POLL_SECONDS=.05
             checkpoint.THRESHOLD_PAGES=1
             checkpoint.MAX_IDLE_SECONDS=1.
-            prep_root=Path(data)/'history_generations'
+            from http.server import ThreadingHTTPServer
+            from urllib.request import urlopen
+            shipped.set_startup('ready',7,'Host WAL fixture ready',ready=True)
+            ui_server=ThreadingHTTPServer(('127.0.0.1',0),shipped.Handler)
+            ui_server.daemon_threads=True
+            ui_server_thread=threading.Thread(target=ui_server.serve_forever,daemon=True)
+            ui_server_thread.start()
+            def close_ui():
+                ui_server.shutdown()
+                ui_server.server_close()
+                ui_server_thread.join(5)
+            stack.callback(close_ui)
+            ui_url='http://127.0.0.1:'+str(ui_server.server_port)+'/api/agents'
+            prep_root=Path(data)/'history_generations' 
             prep_root.mkdir()
             def prepare_history():
                 from history_recovery import prepare_generation
@@ -176,7 +190,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                 destination=prep_root/('probe-'+str(preparation_stats['runs'])+'.db')
                 with patch('storage_files.worker_storage_budget',return_value=store.storage_budget):
                     report=prepare_generation(store.path,destination,[selected['target_entity'],sensors[0]],
-                        1700000000.,time.time(),agent_id=selected['id'])
+                        1700000000.,1700010000.,agent_id=selected['id'])
                 preparation_stats['runs']+=1
                 preparation_stats['elapsed_seconds'].append(time.perf_counter()-began)
                 lifecycle=report.get('snapshot_lifecycle') or {}
@@ -338,6 +352,17 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     time.sleep(.01)
                 if batches is not None:
                     batch['inference_observed_ns'] = time.perf_counter_ns() - matched_offset_ns
+                if history_preparation and step%10==0:
+                    probe_start=time.perf_counter()
+                    store.archive_batch([('sensor.ingress_probe',time.time(),str(step),{},None,'live')])
+                    ingress_write_ms.append((time.perf_counter()-probe_start)*1000)
+                    probe_start=time.perf_counter()
+                    with urlopen(ui_url,timeout=5) as response:
+                        assert response.status==200
+                        json.loads(response.read())
+                    ui_http_ms.append((time.perf_counter()-probe_start)*1000)
+                    wal_path=Path(store.path+'-wal')
+                    preparation_stats['wal_peak_bytes']=max(preparation_stats['wal_peak_bytes'],wal_path.stat().st_size if wal_path.exists() else 0)
                 if correct and trained and step % correct_every == 0:
                     stamp = time.time()
                     manager = engine.agent_candidates
@@ -432,6 +457,9 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             concurrent_policy_training=training, correct_reads_enabled=correct,
             collector_enabled=collector,collector=(historical.diagnostics() if historical is not None else None),
             background_work=background_stats, history_preparation=preparation_stats, candidate_count=len(candidate_ids),
+            ui_http=dict(endpoint='/api/agents',environment='loopback shipped Handler; not Supervisor ingress',
+                         samples=len(ui_http_ms),max_ms=max(ui_http_ms,default=0.),**quantiles(ui_http_ms)),
+            ingress_archive_write=dict(samples=len(ingress_write_ms),max_ms=max(ingress_write_ms,default=0.),**quantiles(ingress_write_ms)),
             matched_workload=(dict(updates_per_step=matched_updates, model_writes_per_step=matched_writes,
                                    queue_capacity=1, correct_every=correct_every, batches=matched_timeline)
                               if matched_updates else None),
