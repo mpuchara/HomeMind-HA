@@ -295,6 +295,15 @@ class Preparation:
             initial[name]=(rows,strategy)
         model=connection.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id else None
         self.state['model_fingerprint']=hashlib.sha256(model[0].encode()).hexdigest() if model else None
+        neural=connection.execute('SELECT * FROM tiny_mlp_shadow_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id and 'tiny_mlp_shadow_models' in tables else None
+        self.state['neural_fingerprint']=hashlib.sha256(json.dumps(tuple(neural),default=str).encode()).hexdigest() if neural else None
+        # These rows were buffered atomically, never copied across transactions.
+        # Publication checks the selected model hashes; another agent's model
+        # update must not invalidate this job's historical input.
+        for name in ('rl_models','tiny_mlp_shadow_models'):
+            self.state['boundary']['tables'].pop(name,None)
+        if self.rebuild:
+            self.state['boundary']['tables'].pop('historical_experiences',None)
         return initial
 
     def run(self, http_gaps):
@@ -468,6 +477,8 @@ class Preparation:
                 row_counter_semantics='payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded',
                 sqlite_wait_estimated=True)
             report['model_fingerprint'] = self.state['model_fingerprint']
+            if self.agent_id:
+                report['neural_fingerprint'] = self.state.get('neural_fingerprint')
             failed = []
             for entity in self.entities:
                 try:

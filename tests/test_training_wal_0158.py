@@ -332,6 +332,34 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
         with sqlite3.connect(self.fixture.fixture.destination) as connection:
             self.assertEqual(json.loads(connection.execute("SELECT value FROM app_meta WHERE key='shared_home_model_v1'").fetchone()[0]),dict(version=1))
 
+    def test_12_unrelated_model_updates_do_not_invalidate_buffered_models(self):
+        self.store.save_model(self.fixture.agent['id'],dict(marker='selected'))
+        changed=[]
+        def progress(**fields):
+            if fields.get('preparation',{}).get('table_name')=='entity_history' and not changed:
+                self.store.save_model(self.fixture.other['id'],dict(marker='other-updated'))
+                changed.append(True)
+        report=self.fixture.prepare(progress=progress)
+        self.assertEqual(report['status'],'READY')
+        self.assertNotIn('rl_models',report['snapshot_lifecycle']['boundary']['tables'])
+        self.assertEqual(self.store.get_model(self.fixture.other['id'])['marker'],'other-updated')
+
+    def test_13_selected_neural_change_is_guarded_at_publication(self):
+        from tiny_mlp_shadow import ensure_tables
+        from history_recovery import publish_generation,RecoveryUnavailable
+        from training_process import agent_config_fingerprint
+        ensure_tables(self.store)
+        self.fixture.prepare()
+        with sqlite3.connect(self.fixture.fixture.destination) as generation:
+            manifest=json.loads(generation.execute('SELECT payload FROM recovery_manifest').fetchone()[0])
+            manifest['status']='TRAINED'
+            generation.execute('UPDATE recovery_manifest SET payload=?',(json.dumps(manifest),))
+        with self.store.conn() as connection:
+            connection.execute("INSERT INTO tiny_mlp_shadow_models(agent_id,backend,backend_version,feature_schema_id,feature_mask_id,model_json,created_ts,updated_ts) VALUES(?,'fixture',1,'fixture','fixture','{}',1,1)",(self.fixture.agent['id'],))
+        with self.assertRaisesRegex(RecoveryUnavailable,'neural model changed'):
+            publish_generation(self.store,self.fixture.fixture.destination,self.fixture.agent['id'],
+                               agent_config_fingerprint(self.fixture.agent),agent_config_fingerprint)
+
 
 if __name__=='__main__':
     unittest.main()

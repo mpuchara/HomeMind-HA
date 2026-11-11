@@ -24,7 +24,7 @@ Correct jest kopiowany według dotychczasowych relacji. Fingerprint powstaje z s
 
 Niezmienny katalog wejścia jest zapisywany w generacji jednokrotnie; checkpoint partii zawiera tylko zmienny stan i wersje. Bufor konfiguracji jest zwalniany przed kopiowaniem historii. Zapytania keyset stosują porównanie pary (czas,id), umożliwiające seek indeksu zamiast wielokrotnego sprawdzania wcześniej skopiowanego prefiksu. Callback VM korzysta z istniejącego 50 ms okresu odświeżania budżetu; granice partii nadal wykonują świeży pomiar. Nie dodano statystyki dysku dla każdego wywołania VM.
 
-Wersjonowanie jest konserwatywne na poziomie tabel: mutacja starego prefiksu innego agenta może unieważnić przygotowanie. Nie pomijamy takiej zmiany. Nie jest to historyczna baza MVCC przechowująca stare wartości po UPDATE/DELETE; w takim przypadku potrzebne jest nowe wejście, z jawną przyczyną.
+Modele Ridge/Tiny MLP zostały atomowo zbuforowane, więc chronią je fingerprinty wybranego agenta przy publikacji, zamiast globalnego epoch modeli innych agentów. Rebuild nie wersjonuje również starych doświadczeń, których nie kopiuje. Wersjonowanie pozostałych strumieni jest konserwatywne na poziomie tabel: mutacja starego prefiksu innego agenta może unieważnić przygotowanie. Nie pomijamy takiej zmiany. Nie jest to historyczna baza MVCC przechowująca stare wartości po UPDATE/DELETE; w takim przypadku potrzebne jest nowe wejście, z jawną przyczyną.
 
 ## StorageBudget i utrzymanie WAL
 

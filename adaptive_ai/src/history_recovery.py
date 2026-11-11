@@ -134,6 +134,10 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint)
         if manifest.get('agent_id') and current_digest != manifest.get('model_fingerprint'):
             raise RecoveryUnavailable('Live model changed during training; previous state retained, retry required')
         previous_neural = conn.execute('SELECT * FROM tiny_mlp_shadow_models WHERE agent_id=?', (agent_id,)).fetchone()
+        if 'neural_fingerprint' in manifest:
+            digest=hashlib.sha256(json.dumps(tuple(previous_neural),default=str).encode()).hexdigest() if previous_neural else None
+            if digest!=manifest['neural_fingerprint']:
+                raise RecoveryUnavailable('Live neural model changed during training; previous state retained')
         conn.execute('INSERT OR REPLACE INTO training_generation_backup VALUES(?,?,?,?)', (agent_id,json.dumps(current),
             previous_model[0] if previous_model else None,json.dumps(dict(previous_neural)) if previous_neural else None))
         row = conn.execute("SELECT model_json FROM trained.rl_models WHERE agent_id=?", (agent_id,)).fetchone()
