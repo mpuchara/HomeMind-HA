@@ -43,6 +43,7 @@ from long_memory import (
 HISTORY_IMPORT_BATCH_ROWS = 128
 DISCOVERY_HTTP_500_LIMIT = 32
 DISCOVERY_HTTP_500_ENTITY_LIMIT = 16
+TRAINING_HTTP_500_LIMIT = 32
 
 
 class DiscoveryRecorderIncomplete(RuntimeError):
@@ -55,6 +56,10 @@ class DiscoveryRecorderUnavailable(DiscoveryRecorderIncomplete):
 
 class DiscoveryRecorderHTTP500(DiscoveryRecorderIncomplete):
     """HTTP 500 persisted to the minimum slice or exhausted the split budget."""
+
+
+class TrainingRecorderUnavailable(RuntimeError):
+    """The training import exhausted its consecutive Recorder failure budget."""
 
 
 def _apply_stateful_continuation_seed_row(row, target_map, values, seeds):
@@ -1239,6 +1244,7 @@ class HistoryManager(threading.Thread):
             ))
             done += weight
         try:
+            self._training_recorder_failures = 0
             self._training_recorder_import(
                 [target], start_ts, end_ts,
                 batch_size=1, minimal=False, no_attributes=False,
@@ -1265,7 +1271,7 @@ class HistoryManager(threading.Thread):
                         progress_lo=ranges[2][0], progress_hi=ranges[2][1],
                     )
             self.refresh_archive_cache()
-        except StoragePressure:
+        except (StoragePressure, TrainingRecorderUnavailable, InterruptedError):
             raise
         except Exception as exc:
             # A failed Recorder request can leave a usable local archive. A
@@ -2283,6 +2289,7 @@ class HistoryManager(threading.Thread):
         if not entity_ids or end_ts <= start_ts:
             return 0
         discovery = HEAVY_JOBS.owner == "discovery"
+        skip_initial_state = discovery or explicit or skip_initial_state
         cycle = getattr(self, "_discovery_recorder_cycle", None) if discovery else None
         filtered = False
         if cycle is not None and cycle["exhausted"]:
@@ -2300,15 +2307,9 @@ class HistoryManager(threading.Thread):
             http_500_budget = [DISCOVERY_HTTP_500_LIMIT]
         try:
             history_options = {}
-            if discovery:
-                # Discovery classifies *recorded transitions*, not the synthetic
-                # state carried over from before each scan window.  HA's default
-                # include-start-state path performs an additional historical SQL
-                # lookback even for a one-entity / 30-minute request.  Avoid that
-                # query for every discovery slice (not only split right halves).
-                # Keep the one-microsecond overlap for exact boundary events;
-                # the archive de-duplicates identical (entity_id, ts) rows.
-                skip_initial_state = True
+            if skip_initial_state:
+                # Import recorded changes without the additional Recorder SQL
+                # lookup for a synthetic start state. Keep exact boundary events.
                 start = datetime.fromtimestamp(start_ts, timezone.utc)
                 start -= start.resolution
                 history_options["skip_initial_state"] = True
@@ -2327,6 +2328,8 @@ class HistoryManager(threading.Thread):
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
             written = self._archive_history_payload(data, source)
+            if explicit:
+                self._training_recorder_failures = 0
             if HEAVY_JOBS.owner == "discovery":
                 # Count consecutive 5xx/429 requests, not failures separated by
                 # successful Recorder reads in a long-running discovery.
@@ -2346,6 +2349,13 @@ class HistoryManager(threading.Thread):
         except HTTPError as exc:
             # Authentication / malformed-request errors will not improve by splitting.
             status = getattr(exc, "code", 500)
+            if explicit and status == 500:
+                failures = getattr(self, "_training_recorder_failures", 0) + 1
+                self._training_recorder_failures = failures
+                if failures >= TRAINING_HTTP_500_LIMIT:
+                    raise TrainingRecorderUnavailable(
+                        f"Recorder returned {failures} consecutive HTTP 500 errors during training preparation"
+                    ) from None
             if status in (400, 401, 403, 404):
                 if HEAVY_JOBS.owner == "discovery":
                     # HTTPError.__str__ can include a full URL/query. The guard
@@ -2416,7 +2426,7 @@ class HistoryManager(threading.Thread):
                 self._fetch_history_resilient(entity_ids, start_ts, mid_ts,
                                               skip_initial_state=skip_initial_state, **split_options)
                 + self._fetch_history_resilient(entity_ids, mid_ts, end_ts,
-                                                skip_initial_state=discovery, **split_options)
+                                                skip_initial_state=skip_initial_state, **split_options)
             )
 
         if discovery and isinstance(err, HTTPError) and err.code == 500:

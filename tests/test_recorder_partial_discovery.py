@@ -129,20 +129,22 @@ class PartialRecorderDiscoveryTests(unittest.TestCase):
         self.obj._require_agent_history({GOOD}, START, END)
         self.obj._require_agent_history({BAD}, START + 3600, END)
 
-    def test_local_archive_corruption_stops_rebuild_before_learning_reset(self):
+    def test_fatal_preparation_errors_stop_rebuild_before_learning_reset(self):
         config = self.store.create_agent(agent(target_entity=GOOD))
         agent_id = config["id"]
         self.store.save_model(agent_id, {"marker": "existing model"})
         self.obj._training_bounds = lambda: (START, END)
         self.obj.training_schema_seed = lambda *args: None
         self.obj._eligible_rebuild_context = lambda: []
-        self.obj._training_recorder_import = Mock(
-            side_effect=sqlite3.DatabaseError("database disk image is malformed")
-        )
-        with patch.object(self.store, "clear_learning", wraps=self.store.clear_learning) as clear:
-            with self.assertRaisesRegex(sqlite3.DatabaseError, "malformed"):
-                self.obj._run_agent_indexing(agent_id, rebuild=True)
-            clear.assert_not_called()
+        for error in (sqlite3.DatabaseError("database disk image is malformed"),
+                      history.TrainingRecorderUnavailable("Recorder failure budget exhausted"),
+                      InterruptedError("History import cancelled")):
+            with self.subTest(error=error):
+                self.obj._training_recorder_import = Mock(side_effect=error)
+                with patch.object(self.store, "clear_learning", wraps=self.store.clear_learning) as clear:
+                    with self.assertRaises(type(error)):
+                        self.obj._run_agent_indexing(agent_id, rebuild=True)
+                    clear.assert_not_called()
         self.assertEqual(self.store.get_model(agent_id)["marker"], "existing model")
 
     def test_corrupt_recorder_coverage_write_propagates(self):
