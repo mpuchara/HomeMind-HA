@@ -222,6 +222,22 @@ class StorageBudget:
         error.reason = reason
         return error
 
+    def check_operation(self, operation, *, refresh=True):
+        """Admission by affected file, without weakening source write protection.
+
+        Reads cannot grow the DB. Isolated writes have their own page/directory
+        cap, but share the free-space reserve. A WAL pause is returned so the
+        supervisor can release all source readers and defer the same descriptor.
+        """
+        if operation not in ('source_read', 'generation_write', 'checkpoint'):
+            raise ValueError('Unknown storage operation')
+        data=self.sample() if refresh else self.snapshot()
+        if (data.get('sample_error') or (data.get('free_bytes') or 0)<self.reserve):
+            raise self.pressure(data.get('reason') or 'disk_reserve')
+        if operation=='checkpoint':
+            return data['level']
+        return data['level'] if data.get('reason')=='wal_budget' else 'normal'
+
     def check(self, parameters=(), *, refresh=True):
         payload_bytes = _payload_bytes(parameters)
         if payload_bytes > MAX_WRITE_BYTES:

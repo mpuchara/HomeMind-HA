@@ -1,6 +1,7 @@
 """Selective, restartable preparation of one immutable training generation.
 
-The source is read-only. All source tables retain their schema in the worker,
+Payload reads are read-only; a bounded source mutation ledger fences prefixes.
+All source tables retain their schema in the worker,
 but only documented training dependencies receive rows. Copy checkpoints are
 committed with their rows; they can be reused only for the same source version.
 """
@@ -17,7 +18,7 @@ from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct
 from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
 
-CONTRACT = 'training-history-generation-v2'
+CONTRACT = 'training-history-generation-v3'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
     'rl_models', 'historical_experiences', 'tiny_mlp_shadow_models',
     'agent_candidate_generations', 'automatic_reward_experiences',
@@ -61,9 +62,9 @@ class Preparation:
         self.disk = max(16,min(2048,int(self.options.get('max_recovery_disk_mb',512))))*1048576
         self.source_signature = signature(self.source)
         self.identity = dict(contract=CONTRACT,source=str(self.source),entities=self.entities,
-                             start=start,end=end,agent_id=agent_id,signature=self.source_signature,rebuild=self.rebuild)
-        # At most one unfinished preparation per source/agent. A new source
-        # version invalidates it; retries of the same version reuse exact cursors.
+                             start=start,end=end,agent_id=agent_id,rebuild=self.rebuild)
+        # At most one unfinished preparation per source/agent. Durable prefix
+        # versions allow live append/WAL maintenance without invalidating cursors.
         key = hashlib.sha256((str(self.source)+'|'+str(agent_id)+'|'+CONTRACT).encode()).hexdigest()[:24]
         self.working = self.destination.parent/('.preparing-'+key+'.db')
         self.state = dict(identity=self.identity,queries={},tables={})
@@ -71,17 +72,24 @@ class Preparation:
         self.last_report = 0.
         self.last_disk_check = 0.
         self.pressure = None
+        self.bootstrap = False
+        self.snapshot_max_seconds = 0.
+        self.source_sql_max_seconds = 0.
+        self.wal_peak_bytes = 0
 
     def checkpoint(self):
         if self.cancelled():
             raise InterruptedError('Training history preparation cancelled; copy checkpoint retained')
         before = TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)
-        TRAINING_BUDGET.checkpoint('training_history_preparation')
+        if not self.bootstrap:
+            TRAINING_BUDGET.checkpoint('training_history_preparation')
         self.throttle += max(0.,TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)-before)
         from storage_files import worker_storage_budget
         guard=worker_storage_budget()
-        if guard.check(refresh=False)!='normal':
+        if guard.check_operation('source_read',refresh=True)!='normal':
             raise guard.pressure()
+        wal=Path(str(self.source)+'-wal')
+        self.wal_peak_bytes=max(self.wal_peak_bytes,wal.stat().st_size if wal.exists() else 0)
         if time.monotonic()-self.last_disk_check>1.:
             self.last_disk_check=time.monotonic()
             used=sum(p.stat().st_size for p in self.destination.parent.iterdir()
@@ -120,6 +128,11 @@ class Preparation:
             duration, work = time.monotonic()-before, time.process_time()-cpu
             self.sqlite_elapsed += max(0.,duration-(self.throttle-throttle_before))
             self.sqlite_cpu += work
+            if connection is getattr(self,'src',None):
+                self.source_query_started=before
+                self.source_sql_max_seconds=max(self.source_sql_max_seconds,duration)
+            elif getattr(connection,'connection',None) is getattr(self,'src',None):
+                self.source_sql_max_seconds=max(self.source_sql_max_seconds,time.monotonic()-getattr(self,'source_query_started',before))
 
     def emit(self, table, strategy, force=False):
         now = time.monotonic()
@@ -131,7 +144,10 @@ class Preparation:
             elapsed_seconds=round(now-self.started,6),cpu_seconds=round(time.process_time()-self.cpu_started,6),
             sqlite_wait_seconds=round(max(0.,self.sqlite_elapsed-self.sqlite_cpu-self.lock_wait),6),
             sqlite_seconds=round(self.sqlite_elapsed,6),lock_wait_seconds=round(self.lock_wait,6),
-            throttle_seconds=round(self.throttle,6),recovery_attempts=self.attempts)
+            throttle_seconds=round(self.throttle,6),recovery_attempts=self.attempts,
+            wal_peak_bytes=self.wal_peak_bytes,source_owned_connections=1,
+            explicit_source_transaction_active=bool(self.src.in_transaction),
+            snapshot_max_seconds=self.snapshot_max_seconds)
         self.progress(message=f"{'Recovering historical data' if self.in_recovery else 'Preparing training history'}: {table}, {metric.get('rows_copied',0):,} records copied",
             phase_detail='Recovering historical data' if self.in_recovery else 'Copying required metadata / selected history',
             preparation=metric,work_done=metric.get('rows_copied',0),work_total=0,
@@ -153,7 +169,12 @@ class Preparation:
         while True:
             self.checkpoint()
             where = [predicate] if predicate else []
-            values = list(params)
+            if table in self.state.get('boundary',{}).get('tables',{}):
+                where.append('rowid<=?')
+                values_boundary=[self.state['boundary']['tables'][table]['upper']]
+            else:
+                values_boundary=[]
+            values = list(params)+values_boundary
             if last is not None:
                 if key in ('ts,id','event_time,rowid'):
                     stamp, identity = key.split(',')
@@ -249,13 +270,41 @@ class Preparation:
             try:
                 with closing(sqlite3.connect(self.working)) as old:
                     record=old.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()
-                    reusable=bool(record and json.loads(record[0]).get('identity')==self.identity)
+                    reusable=bool(record and json.loads(record[0]).get('identity')==self.identity and json.loads(record[0]).get('bootstrap_complete'))
             except (sqlite3.Error,ValueError):
                 reusable=False
             if not reusable:
                 # This is our disposable work file, never the original DB/WAL.
                 for suffix in ('','-journal','-wal','-shm'):
                     Path(str(self.working)+suffix).unlink(missing_ok=True)
+        from training_snapshot import install, capture, validate
+        self.checkpoint()
+        if self.working.exists():
+            with closing(sqlite3.connect(self.working)) as old:
+                saved=json.loads(old.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()[0])
+            with closing(sqlite3.connect(self.source.as_uri()+'?mode=ro',uri=True,timeout=.2)) as fence:
+                validate(fence,saved['boundary'])
+            self.state['boundary']=saved['boundary']
+        else:
+            # Registering the bounded fence IS a source metadata write. It uses
+            # ordinary source admission/page limits; read-only resume does not.
+            from storage_files import worker_storage_budget
+            guard=worker_storage_budget()
+            if guard.check(refresh=True)!='normal':
+                raise guard.pressure()
+            with closing(sqlite3.connect(self.source,timeout=.2)) as fence:
+                page_size=fence.execute('PRAGMA page_size').fetchone()[0]
+                fence.execute(f'PRAGMA max_page_count={max(1,guard.db_limit//page_size)}')
+                install(fence)
+                fence.commit()
+                fence.execute('BEGIN IMMEDIATE')
+                try:
+                    self.state['boundary']=capture(fence)
+                    fence.commit()
+                except Exception:
+                    fence.rollback()
+                    raise
+        self.source_signature=signature(self.source)
         with closing(sqlite3.connect(self.source.as_uri()+'?mode=ro',uri=True,timeout=5)) as self.src, \
                 closing(sqlite3.connect(self.working,timeout=5)) as self.dst:
             self.src.row_factory = sqlite3.Row
@@ -263,26 +312,26 @@ class Preparation:
             self.src.execute(f'PRAGMA cache_size=-{self.memory//1024}')
             self.dst.execute(f'PRAGMA cache_size=-{self.memory//1024}')
             self.dst.execute(f'PRAGMA max_page_count={self.disk//4096}')
-            def interrupt():
+            def interrupt(throttle=True):
                 from storage_files import worker_storage_budget
                 from storage_budget import StoragePressure
                 try:
                     before=TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)
-                    TRAINING_BUDGET.checkpoint('training_history_sql_vm')
+                    if throttle and not self.bootstrap:
+                        TRAINING_BUDGET.checkpoint('training_history_sql_vm')
                     self.throttle+=max(0.,TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)-before)
                     guard=worker_storage_budget()
-                    if guard.check(refresh=False)!='normal':
+                    if guard.check_operation('source_read',refresh=True)!='normal':
                         self.pressure=guard.pressure()
                         return 1
                 except StoragePressure as exc:
                     self.pressure=exc
                     return 1
-                return int(self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds))
-            self.src.set_progress_handler(interrupt,10000)
+                return int((self.bootstrap and time.monotonic()-begin>1.) or self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds))
+            self.src.set_progress_handler(lambda: interrupt(False),10000)
             self.dst.set_progress_handler(interrupt,10000)
-            self.src.execute('BEGIN')
             self.schema = self.src.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL").fetchall()
-            tables = {x['name']:x for x in self.schema if x['type']=='table' and not x['name'].startswith('sqlite_')}
+            tables = {x['name']:x for x in self.schema if x['type']=='table' and not x['name'].startswith(('sqlite_','__training_'))}
             self.agent_ids = []
             if self.agent_id:
                 self.agent_ids = [r[0] for r in self.src.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))]
@@ -307,10 +356,65 @@ class Preparation:
                     self.dst.execute(item['sql'])
                 self.dst.execute('CREATE TABLE __training_copy_state(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
                 self.save()
+            from training_snapshot import validate
+            # A bounded initial transaction captures mutable controller/context
+            # metadata together. Large immutable prefixes use persisted fences.
+            if not self.state.get('bootstrap_complete'):
+                self.checkpoint()
+                begin=time.monotonic()
+                self.bootstrap=True
+                initial={}
+                buffered_bytes=0
+                self.src.execute('BEGIN')
+                try:
+                    validate(self.src,self.state['boundary'])
+                    for name in ('agents','app_meta','entity_history_revision','rl_models','tiny_mlp_shadow_models'):
+                        if name not in tables:
+                            continue
+                        plan=self.table_plan(tables[name])
+                        if not plan:
+                            self.state['tables'][name]=dict(source_rows_scanned=0,rows_copied=0,bytes_copied=0,copy_strategy='schema_only_rebuild')
+                            continue
+                        predicate,params,strategy=plan
+                        rows=[]
+                        with closing(self.sql(self.src,'execute','SELECT * FROM '+quote(name)+(' WHERE '+predicate if predicate else ''),params)) as cursor:
+                            while True:
+                                batch=self.sql(cursor,'fetchmany',128)
+                                if not batch: break
+                                buffered_bytes+=sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
+                                if buffered_bytes>self.memory:
+                                    raise RecoveryUnavailable('Initial controller/context snapshot exceeds memory budget')
+                                rows.extend(batch)
+                        initial[name]=(rows,strategy)
+                    model=self.src.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id else None
+                    self.state['model_fingerprint']=hashlib.sha256(model[0].encode()).hexdigest() if model else None
+                finally:
+                    self.src.rollback()
+                    self.bootstrap=False
+                    self.snapshot_max_seconds=max(self.snapshot_max_seconds,time.monotonic()-begin)
+                # All throttling, local disk writes and progress callbacks happen
+                # AFTER the source reader is released, including configuration.
+                for name,(rows,strategy) in initial.items():
+                    metric=self.state['tables'].setdefault(name,dict(source_rows_scanned=0,rows_copied=0,bytes_copied=0,copy_strategy=strategy))
+                    for offset in range(0,len(rows),128):
+                        self.checkpoint()
+                        batch=rows[offset:offset+128]
+                        columns=batch[0].keys()
+                        self.sql(self.dst,'executemany','INSERT OR IGNORE INTO '+quote(name)+' ('+','.join(map(quote,columns))+') VALUES('+','.join('?' for _ in columns)+')',[tuple(row) for row in batch])
+                        metric['source_rows_scanned']+=len(batch)
+                        metric['rows_copied']+=len(batch)
+                        metric['bytes_copied']+=sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
+                    self.state['queries'][name]=dict(done=True)
+                    self.save()
+                    self.emit(name,strategy,True)
+                self.state['bootstrap_complete']=True
+                self.save()
+            if self.agent_id:
+                self.agent_ids=[r[0] for r in self.dst.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))]
             # Normal metadata copying has no corruption time budget; all work still
             # uses cooperative CPU throttling, bounded batches, disk quota and cancel.
             for name,item in tables.items():
-                if name=='entity_history':
+                if name in ('entity_history','agents','app_meta','entity_history_revision','rl_models','tiny_mlp_shadow_models'):
                     continue
                 plan = self.table_plan(item)
                 if plan is None:
@@ -334,11 +438,10 @@ class Preparation:
                 metric['version_guard_rows_scanned']=0
             report = dict(contract=CONTRACT,status='BUILDING',source=str(self.source),agent_id=self.agent_id,
                 gaps=[],skipped_records=None,archive_status='HISTORY_OK',source_signature=self.source_signature,
-                correct_agent_ids=self.agent_ids or None,correct_fingerprint=correct_fingerprint(self.src,self.agent_ids or None,guard_row),
+                correct_agent_ids=self.agent_ids or None,correct_fingerprint=correct_fingerprint(self.dst,self.agent_ids or None,guard_row),
                 row_counter_semantics='payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded',
                 sqlite_wait_estimated=True)
-            model = self.src.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(self.agent_id,)).fetchone() if self.agent_id else None
-            report['model_fingerprint'] = hashlib.sha256(model[0].encode()).hexdigest() if model else None
+            report['model_fingerprint'] = self.state['model_fingerprint']
             failed = []
             for entity in self.entities:
                 try:
@@ -376,6 +479,13 @@ class Preparation:
                     self.dst.execute('CREATE VIEW feature_observation_events AS SELECT * FROM recovery_observation_rows WHERE (SELECT lo FROM recovery_projection) IS NULL OR (event_time>=(SELECT lo FROM recovery_projection) AND event_time<=(SELECT hi FROM recovery_projection) AND received_time<=(SELECT hi FROM recovery_projection))')
             else:
                 self.dst.execute('CREATE VIEW recovery_rows AS SELECT * FROM entity_history')
+            validate(self.src,self.state['boundary'])
+            report['snapshot_lifecycle']=dict(max_explicit_transaction_seconds=self.snapshot_max_seconds,
+                max_source_execute_seconds=self.source_sql_max_seconds,wal_peak_bytes=self.wal_peak_bytes,
+                owned_source_connections=1,owned_generation_connections=1,
+                source_readers_between_batches=0,reader_count_scope='owned preparation only; SQLite exposes no global reader count',
+                consistency='durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred',
+                boundary=self.state['boundary'])
             report['status']='READY'
             self.dst.execute('CREATE TABLE recovery_manifest(payload TEXT NOT NULL)')
             self.dst.execute('INSERT INTO recovery_manifest VALUES(?)',(json.dumps(report),))
@@ -407,13 +517,18 @@ class Preparation:
             self.dst.execute('DELETE FROM recovery_witness')
             try:
                 for entity in failed:
-                    with closing(self.sql(self.src,'execute',f'SELECT id,entity_id,ts FROM entity_history INDEXED BY {quote(index)} WHERE entity_id=? AND ts<=? ORDER BY ts,id',(entity,self.end))) as cursor:
-                        while True:
-                            self.checkpoint()
-                            batch=self.sql(cursor,'fetchmany',128)
-                            if not batch:
-                                break
-                            self.dst.executemany('INSERT OR IGNORE INTO recovery_witness VALUES(?,?,?)',[tuple(r) for r in batch])
+                    last=None
+                    while True:
+                        self.checkpoint()
+                        predicate=' AND (ts>? OR (ts=? AND id>?))' if last else ''
+                        params=(entity,self.end,self.state['boundary']['tables']['entity_history']['upper'])+tuple((last[0],last[0],last[1]) if last else ())
+                        with closing(self.sql(self.src,'execute',f'SELECT id,entity_id,ts FROM entity_history INDEXED BY {quote(index)} WHERE entity_id=? AND ts<=? AND rowid<=?'+predicate+' ORDER BY ts,id LIMIT 128',params)) as cursor:
+                            batch=self.sql(cursor,'fetchall')
+                        if not batch:
+                            break
+                        self.dst.executemany('INSERT OR IGNORE INTO recovery_witness VALUES(?,?,?)',[tuple(r) for r in batch])
+                        self.dst.commit()
+                        last=(batch[-1]['ts'],batch[-1]['id'])
                 mapping=True
                 break
             except sqlite3.DatabaseError as exc:
@@ -473,8 +588,7 @@ class Preparation:
             # With every entity index unreadable there is no trustworthy id map.
             # Retain 0.15.6's bounded PK-range fallback, filtering in SQLite, never
             # decoding/copying another device's history into Python or the generation.
-            maximum=self.src.execute('SELECT id FROM entity_history NOT INDEXED ORDER BY id DESC LIMIT 1').fetchone()
-            maximum=int(maximum[0]) if maximum else 0
+            maximum=self.state['boundary']['tables']['entity_history']['upper']
             marks=','.join('?' for _ in failed)
             def physical(lo,hi,depth=0):
                 self.checkpoint();self.attempts+=1
@@ -482,17 +596,15 @@ class Preparation:
                     raise RecoveryUnavailable('History recovery attempt budget exhausted; previous model retained')
                 try:
                     with closing(self.sql(self.src,'execute',f'SELECT * FROM entity_history NOT INDEXED WHERE id BETWEEN ? AND ? AND entity_id IN ({marks}) AND ts<=? ORDER BY id',(lo,hi,*failed,self.end))) as cursor:
-                        while True:
-                            rows=self.sql(cursor,'fetchmany',128)
-                            if not rows:
-                                break
-                            size=self.validate_history(rows)
-                            before=self.dst.total_changes
-                            self.dst.executemany('INSERT OR IGNORE INTO entity_history VALUES('+','.join('?' for _ in rows[0].keys())+')',[tuple(r) for r in rows])
-                            metric=self.state['tables']['entity_history']
-                            metric['source_rows_scanned']+=len(rows)
-                            metric['rows_copied']+=self.dst.total_changes-before
-                            metric['bytes_copied']+=size
+                        rows=self.sql(cursor,'fetchall')
+                    if rows:
+                        size=self.validate_history(rows)
+                        before=self.dst.total_changes
+                        self.dst.executemany('INSERT OR IGNORE INTO entity_history VALUES('+','.join('?' for _ in rows[0].keys())+')',[tuple(r) for r in rows])
+                        metric=self.state['tables']['entity_history']
+                        metric['source_rows_scanned']+=len(rows)
+                        metric['rows_copied']+=self.dst.total_changes-before
+                        metric['bytes_copied']+=size
                     self.dst.commit()
                 except sqlite3.DatabaseError as exc:
                     if not is_sqlite_corruption(exc):
@@ -501,8 +613,8 @@ class Preparation:
                         report['gaps'].append(dict(entity_id='*',start_ts=self.start,end_ts=self.end,source='local_archive',failure_reason='HISTORY_UNKNOWN',recovery_attempts=self.attempts))
                         return
                     mid=(lo+hi)//2;physical(lo,mid,depth+1);physical(mid+1,hi,depth+1)
-            for lo in range(1,maximum+1,8192):
-                physical(lo,min(maximum,lo+8191))
+            for lo in range(1,maximum+1,128):
+                physical(lo,min(maximum,lo+127))
             report['recovery_strategy']='bounded_pk_ranges_sql_filtered_no_readable_entity_index'
         if signature(self.source)==self.source_signature:
             temp=cache_path.with_suffix('.'+self.destination.name+'.tmp')

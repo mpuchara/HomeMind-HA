@@ -123,6 +123,10 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint)
         manifest = json.loads(conn.execute("SELECT payload FROM trained.recovery_manifest").fetchone()[0])
         if manifest['status'] != 'TRAINED':
             raise RecoveryUnavailable("Incomplete training generation")
+        boundary=(manifest.get('snapshot_lifecycle') or {}).get('boundary')
+        if boundary:
+            from training_snapshot import validate
+            validate(conn,boundary)
         if correct_fingerprint(conn, manifest.get('correct_agent_ids')) != manifest.get('correct_fingerprint'):
             raise RecoveryUnavailable('Correct changed during training; previous model retained, retry with new labels')
         previous_model = conn.execute('SELECT model_json FROM rl_models WHERE agent_id=?', (agent_id,)).fetchone()

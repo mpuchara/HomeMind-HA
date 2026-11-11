@@ -302,7 +302,16 @@ def install_context_events(service):
 
     service.store.event = event_with_numeric_contract
 
-    def ensure_started_event(agent, tournament, entity_id):
+    started_event_lock=threading.RLock()
+
+    def ensure_started_event(agent,tournament,entity_id):
+        # A started event belongs to (agent, challenger, evaluation), not a
+        # training process. Keep distinct challengers, serialize only this rare
+        # state transition to avoid duplicate starts from concurrent observers.
+        with started_event_lock:
+            return _ensure_started_event(agent,tournament,entity_id)
+
+    def _ensure_started_event(agent, tournament, entity_id):
         aid = str(agent["id"])
         actions = [float(x) for x in action_values(agent)]
         if not actions:
@@ -311,7 +320,10 @@ def install_context_events(service):
         started = _finite(model.get("evaluation_started_ts"))
         if started is None:
             return
-        row = read_event_state(aid, entity_id)
+        # Bypass an observation frame captured before another thread committed.
+        with service.store.lock,service.store.conn() as connection:
+            persisted=connection.execute('SELECT * FROM context_tournament_event_state WHERE agent_id=? AND entity_id=?',(aid,str(entity_id))).fetchone()
+        row=decode_event_state(persisted)
         if row.get("evaluation_started_ts") == started:
             return
         cfg = tournament_config()

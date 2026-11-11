@@ -28,7 +28,7 @@ def main():
     assert results['healthy']['learning_hash']==results['index']['learning_hash']
     assert results['table_two_agents']['history_recovery']['gaps']
     results['insufficient'] = fixture.run_worker_fixture(samples=2,corruption_recovery=True,qualify=True,expect_unavailable=True)
-    path = ROOT/'docs/benchmarks/corruption-recovery-0157.json'
+    path = ROOT/'docs/benchmarks/corruption-recovery-0158.json'
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(results,indent=2),encoding='utf-8')
     print(path)

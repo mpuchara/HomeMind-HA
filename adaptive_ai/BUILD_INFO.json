@@ -1,9 +1,9 @@
 {
-  "version": "0.15.7",
+  "version": "0.15.8",
   "release_date": "2026-11-11",
-  "base_version": "0.15.6",
-  "base_commit": "1dcaf02be52c9a17d41ca9351b5cd8c5b4da4bec",
-  "release_status": "pi5-manual-validation-candidate-selective-training-preparation",
+  "base_version": "0.15.7",
+  "base_commit": "01c3bd76c3d4e14f0c39aefe533bbf57844a9a6a",
+  "release_status": "pi5-manual-validation-candidate-wal-snapshot-lifecycle",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4063,5 +4063,11 @@
     "source_baseline": "9bd5a61b9cdf7758aef0b2e94c0b7ec5a578e1a1",
     "pi_hardware_acceptance": "NOT RUN",
     "gate_d": "BLOCKER"
+  },
+  "release_0158": {
+    "scope": "WAL-safe ingestion prefix fences, bounded source reads, durable WAL deferral and same-job resume",
+    "source_baseline": "01c3bd76c3d4e14f0c39aefe533bbf57844a9a6a",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_8_PL.md"
   }
 }

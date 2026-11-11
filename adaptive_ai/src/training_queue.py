@@ -120,6 +120,12 @@ class TrainingQueue(threading.Thread):
         self._training_priority = threading.Event()
         self._discovery_preempted = False
         self._install_discovery_priority_bridge()
+        # Durable descriptors survive a parent kill while copying/waiting. Queue
+        # ownership/deduplication is still the ordinary per-agent admission path.
+        if isinstance(getattr(store,'path',None),str):
+            from training_process import pending_training_agents
+            for agent_id in pending_training_agents(store):
+                self.enqueue(agent_id,rebuild=False,reason='resume_training')
 
     def _record_transition_locked(self, state, job=None, **detail):
         job = job or {}
@@ -860,7 +866,8 @@ class TrainingQueue(threading.Thread):
         storage_interrupted = bool(
             ((agent or {}).get('benchmark_detail') or {}).get('storage_pressure')
         )
-        if storage_interrupted and not cancelled and job.get('reason') != 'teach_rl':
+        if (storage_interrupted and not cancelled and job.get('reason') != 'teach_rl'
+                and ((agent or {}).get('benchmark_detail') or {}).get('storage_reason') not in ('wal_retry_exhausted','wal_wait_timeout')):
             pressure_detail = (agent or {}).get('benchmark_detail') or {}
             if (pressure_detail.get('storage_reason') == 'database_budget'
                     or 'database_budget' in str(pressure_detail.get('reason') or '')):

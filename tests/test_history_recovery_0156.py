@@ -71,7 +71,8 @@ class RealRecoveryTests(unittest.TestCase):
 
     def test_B_table_page_salvage_and_both_replay_paths(self):
         self.damage(self.pages[len(self.pages)//2][0])
-        before = hashlib.sha256(self.source.read_bytes()).hexdigest()
+        self._source_before=self.source.read_bytes()
+        before = hashlib.sha256(self._source_before).hexdigest()
         with self.assertRaises(sqlite3.DatabaseError):
             with closing(sqlite3.connect(self.source)) as conn:
                 conn.execute('SELECT * FROM entity_history NOT INDEXED').fetchall()
@@ -81,7 +82,12 @@ class RealRecoveryTests(unittest.TestCase):
         self.assertLess(report['recovered_records'], 5000)
         self.assertTrue(report['gaps'])
         self.assertTrue(all(g['failure_reason']=='HISTORY_GAP_SQLITE_CORRUPT' for g in report['gaps']))
-        self.assertEqual(before, hashlib.sha256(self.source.read_bytes()).hexdigest())
+        # 0.15.8 adds/updates a bounded prefix ledger; payload leaf pages stay
+        # untouched. Source-wide bytes include this intentional metadata write.
+        after=self.source.read_bytes()
+        for page, in self.pages:
+            offset=(page-1)*self.page_size
+            self.assertEqual(self._source_before[offset:offset+self.page_size],after[offset:offset+self.page_size])
         with closing(sqlite3.connect(self.destination)) as conn:
             conn.row_factory = sqlite3.Row
             index = RAMReplayIndex.build(conn, self.entities, 900, 77000, max_bytes=8*1048576)
@@ -133,14 +139,13 @@ class RealRecoveryTests(unittest.TestCase):
 
     def test_H_wal_snapshot_does_not_leak_concurrent_commits(self):
         inserted = []
-        def cancelled():
-            if not inserted:
+        def progress(**fields):
+            if not inserted and fields.get('preparation',{}).get('table_name')=='entity_history':
                 inserted.append(True)
                 self.store.archive_batch([('switch.target', 76500.,'on',{},None,'ha_history_full')])
-            return False
-        report = self.recover(cancelled=cancelled)
+        report = self.recover(progress=progress)
         self.assertEqual(report['status'], 'READY')
-        # The callback runs after the schema read fixed the source WAL snapshot.
+        # The callback runs after the durable prefix boundary was captured.
         self.store.archive_batch([('switch.target', 76501.,'off',{},None,'ha_history_full')])
         with closing(sqlite3.connect(self.destination)) as conn:
             self.assertIsNone(conn.execute('SELECT id FROM entity_history WHERE ts=76500').fetchone())

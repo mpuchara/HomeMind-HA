@@ -25,7 +25,7 @@ from runtime_scaling_probe import Probe, thread_cpu_snapshot, thread_cpu_delta
 def run(source, count, events, independent=False, entities=780, debug=False,
         warmup=0, probe=False, legacy_storage_startup=False, legacy_lineage=False,
         candidates=False, training=False, correct=False, legacy_thread_settings=False, collector=False, sensor_count=None,
-        event_timeout=30., matched_updates=0, matched_writes=1, correct_every=25, candidate_limit=None):
+        event_timeout=30., matched_updates=0, matched_writes=1, correct_every=25, candidate_limit=None, history_preparation=False):
     if not 30. <= event_timeout <= 120.:
         raise ValueError('event observation timeout must be 30..120 seconds')
     if not 0 <= matched_updates <= 256 or not 0 <= matched_writes <= max(1, matched_updates):
@@ -153,6 +153,36 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             engine.agent_candidates.invalidate_candidate_shadow_cache()
         # An isolated real policy fit plus normal durable model writes overlaps
         # Root inference. This is not a HistoryManager 14-day import benchmark.
+        preparation_stats=dict(runs=0,errors=[],elapsed_seconds=[],wal_peak_bytes=0,snapshot_max_seconds=0.)
+        if history_preparation:
+            if not training or not trained:
+                raise ValueError('History preparation requires concurrent policy training')
+            # Same archived target/context records in both compared implementations.
+            selected,sensors=trained[0]
+            rows=[]
+            for tick in range(10000):
+                for entity in (selected['target_entity'],sensors[0]):
+                    rows.append((entity,1700000000.+tick,'on' if tick%2 else 'off',{},None,'ha_history_full'))
+            store.archive_batch(rows)
+            checkpoint=store._wal_checkpoint_worker
+            checkpoint.POLL_SECONDS=.05
+            checkpoint.THRESHOLD_PAGES=1
+            checkpoint.MAX_IDLE_SECONDS=1.
+            prep_root=Path(data)/'history_generations'
+            prep_root.mkdir()
+            def prepare_history():
+                from history_recovery import prepare_generation
+                began=time.perf_counter()
+                destination=prep_root/('probe-'+str(preparation_stats['runs'])+'.db')
+                with patch('storage_files.worker_storage_budget',return_value=store.storage_budget):
+                    report=prepare_generation(store.path,destination,[selected['target_entity'],sensors[0]],
+                        1700000000.,time.time(),agent_id=selected['id'])
+                preparation_stats['runs']+=1
+                preparation_stats['elapsed_seconds'].append(time.perf_counter()-began)
+                lifecycle=report.get('snapshot_lifecycle') or {}
+                preparation_stats['snapshot_max_seconds']=max(preparation_stats['snapshot_max_seconds'],lifecycle.get('max_explicit_transaction_seconds',0.))
+                destination.unlink()
+                checkpoint.request_recovery()
         background_stop = threading.Event()
         background_stats = dict(updates=0, model_writes=0, correct_reads=0, correct_writes=0,
                                 correct_gaps=0, errors=[])
@@ -174,6 +204,8 @@ def run(source, count, events, independent=False, entities=780, debug=False,
                     frame[eid] = support.state(eid, 'on' if value else 'off', device_class='motion')
                 vectors.append(learning.features(frame, None, at_ts=time.time())[0])
             def update(tick, write):
+                if history_preparation and tick%32==0:
+                    prepare_history()
                 TRAINING_BUDGET.checkpoint('scaling_policy_fit')
                 learning.update(min(learning.horizons), tick%2, vectors[tick%2], 1., sample_ts=time.time())
                 background_stats['updates'] += 1
@@ -399,7 +431,7 @@ def run(source, count, events, independent=False, entities=780, debug=False,
             production_thread_settings=not legacy_thread_settings,
             concurrent_policy_training=training, correct_reads_enabled=correct,
             collector_enabled=collector,collector=(historical.diagnostics() if historical is not None else None),
-            background_work=background_stats, candidate_count=len(candidate_ids),
+            background_work=background_stats, history_preparation=preparation_stats, candidate_count=len(candidate_ids),
             matched_workload=(dict(updates_per_step=matched_updates, model_writes_per_step=matched_writes,
                                    queue_capacity=1, correct_every=correct_every, batches=matched_timeline)
                               if matched_updates else None),
@@ -464,6 +496,7 @@ if __name__ == '__main__':
     p.add_argument('--legacy-storage-startup', action='store_true', help='Reproduce old fixture omission')
     p.add_argument('--legacy-lineage', action='store_true', help='Reproduce unregistered fixture agents')
     p.add_argument('--candidates', action='store_true')
+    p.add_argument('--history-preparation', action='store_true', help='Real history generation during policy training, on the same WAL source')
     p.add_argument('--training', action='store_true', help='Concurrent isolated real policy fit/model writes')
     p.add_argument('--correct', action='store_true', help='Read Correct history while inference/training run')
     p.add_argument('--legacy-thread-settings', action='store_true', help='Ablate omitted production BLAS/timeslice setup')
@@ -486,5 +519,5 @@ if __name__ == '__main__':
     result = (scheduler(a.source_root,a.agents,a.events,a.entities) if a.scheduler else
               run(a.source_root,a.agents,a.events,a.independent,a.entities,a.debug,a.warmup,a.probe,a.legacy_storage_startup,a.legacy_lineage,
                   a.candidates,a.training,a.correct,a.legacy_thread_settings,a.collector,a.sensor_count,a.event_timeout,
-                  a.matched_updates,a.matched_writes,a.correct_every,a.candidate_limit))
+                  a.matched_updates,a.matched_writes,a.correct_every,a.candidate_limit,a.history_preparation))
     print('SCALING_JSON='+json.dumps(result,sort_keys=True))

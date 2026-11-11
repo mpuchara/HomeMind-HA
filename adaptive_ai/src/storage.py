@@ -87,6 +87,9 @@ class Store:
                 started = time.perf_counter()
                 operation()
                 self.startup_timings[name] = round(time.perf_counter()-started, 4)
+            from training_snapshot import install
+            with self.lock, self.conn() as connection:
+                install(connection)
 
     def touch_agent_index(self):
         # Lightweight in-process invalidation for the realtime routing cache.
