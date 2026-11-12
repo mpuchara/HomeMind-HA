@@ -68,11 +68,10 @@ def main():
         reference=results['reference']
         assert candidate['learning_hash']==reference['learning_hash'], 'healthy model parity failure'
         results['comparison']=dict(
-            reference_source_rows=sum(reference['source_table_rows'].values()),
+            fixture_total_source_rows=sum(reference['source_table_rows'].values()),
+            reference_source_rows=sum(row['source_rows_scanned'] for row in reference['history_recovery']['copy_tables'].values()),
             candidate_source_rows=sum(row['source_rows_scanned'] for row in tables.values()),
-            reference_correct_guard_rows=sum(reference['source_table_rows'].get(name,0) for name in (
-                'rl_feedback','teaching_labels','teaching_rl_labels','manual_context_feedback','manual_feedback_journal',
-                'manual_feedback_effects','agent_correct_operations','tiny_mlp_correct_batches','tiny_mlp_correct_samples')),
+            reference_correct_guard_rows=sum(row.get('version_guard_rows_scanned',0) for row in reference['history_recovery']['copy_tables'].values()),
             candidate_correct_guard_rows=sum(row.get('version_guard_rows_scanned',0) for row in tables.values()),
             reference_worker_wall_seconds=reference['worker_wall_seconds'],
             candidate_worker_wall_seconds=candidate['worker_wall_seconds'],
