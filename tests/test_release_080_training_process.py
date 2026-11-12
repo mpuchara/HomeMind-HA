@@ -792,6 +792,11 @@ class ActualWorkerSmoke(unittest.TestCase):
                 "binary_sensor.motion": {"area_id": "room"},
                 "switch.target": {"area_id": "room"},
             }
+            if rich_checkpoints:
+                for n in range(243):
+                    eid=f'sensor.context_{n}'
+                    state_map[eid]={'entity_id':eid,'state':'1','attributes':{'device_class':'temperature','unit_of_measurement':'C'}}
+                    registry[eid]={'area_id':'room' if n%8==0 else 'adjacent_'+str(n%8)}
             options = dict(DEFAULT_OPTIONS)
             options.update({
                 "training_cpu_duty_cycle": .70,
@@ -867,7 +872,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                     if inherit_storage_budget:
                         env.update(store.storage_budget.worker_environment())
                     proc = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1]/'adaptive_ai/src/training_process.py'), '--worker',str(first_path)],
-                        env=env, capture_output=True,text=True,timeout=180)
+                        env=env, capture_output=True,text=True,timeout=900 if rich_checkpoints else 180)
                     self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr)
                     first_result = json.loads(Path(first_job['result_path']).read_text())
                     self.assertTrue(first_result['ok'],first_result)
@@ -1042,7 +1047,7 @@ runpy.run_path(args[0],run_name='__main__')
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=45 if samples == 24 else 600,
+                    timeout=900 if rich_checkpoints else (45 if samples == 24 else 600),
                 )
             finally:
                 writer_stop.set()
@@ -1103,6 +1108,11 @@ runpy.run_path(args[0],run_name='__main__')
                 self.assertEqual(store.get_model(other['id']),other_model_before)
                 self.assertEqual(len(store.list_feedback(agent['id'])),1)
             return {
+                "fixture_agents": len(store.list_agents()),
+                "fixture_state_entities": len(state_map),
+                "sequence_chunks_completed": result.get('sequence_chunks_completed'),
+                "stateful_replay": result.get('stateful_replay'),
+                "training_session_profile": result.get('training_session_profile'),
                 "agent_mode": trained_agent["mode"],
                 "agent_progress": trained_agent["training_progress"],
                 "concurrent_writes": len(writes),

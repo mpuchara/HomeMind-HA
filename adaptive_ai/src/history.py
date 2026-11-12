@@ -1166,6 +1166,8 @@ class HistoryManager(threading.Thread):
             previous_bounds = {eid: self.training_recorder_coverage.get((str(source), eid))
                                for eid in plan_ids}
             from recorder_metrics import scope
+            if not hasattr(self,'training_job_timings'):
+                self.training_job_timings={}
             metrics=self.training_job_timings.setdefault('recorder_costs',{})
             with scope(metrics):
                 imported = self._timed_recorder_section(

@@ -200,8 +200,9 @@ class Preparation:
         if saved.get('done'):
             return
         metric = self.state['tables'].setdefault(table,dict(source_rows_scanned=0,rows_copied=0,bytes_copied=0,copy_strategy=strategy))
-        self.emit(table,strategy,True)
         last = saved.get('last')
+        metric.update(query_key=query_key,previous_cursor=last,current_cursor=last)
+        self.emit(table,strategy,True)
         while True:
             self.checkpoint()
             where = [f'({predicate})'] if predicate else []
