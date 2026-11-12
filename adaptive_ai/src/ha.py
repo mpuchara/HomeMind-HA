@@ -30,17 +30,24 @@ class HAClient:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         req = Request(url, data=data, headers=headers, method=method)
+        from recorder_metrics import add, timed
+        request_started = time.perf_counter()
         try:
             with urlopen(req, timeout=timeout) as resp:
+                add('http_response_headers_wait_seconds',time.perf_counter()-request_started)
+                body_started = time.perf_counter()
                 # Recorder JSON inflates in Python; split oversized history requests
                 # before decoding. Together with one worker this bounds peak RSS.
                 limit = 8 * 1024 * 1024 if path.startswith('history/') else 32 * 1024 * 1024
                 raw = resp.read(limit + 1)
+                add('http_body_read_seconds',time.perf_counter()-body_started)
+                add('response_bytes',len(raw))
                 if len(raw) > limit:
                     raise OSError('HA response too large; split the request')
                 self.last_ok = now_ts()
                 self.last_error = None
-                return json.loads(raw.decode("utf-8")) if raw else None
+                with timed('json_parse_seconds'):
+                    return json.loads(raw.decode("utf-8")) if raw else None
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
             self.last_error = str(exc)
             raise

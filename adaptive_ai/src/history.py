@@ -1,3 +1,4 @@
+from training_stages import stage_for
 from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
@@ -355,10 +356,13 @@ class HistoryManager(threading.Thread):
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
                 "training_stage_eta_seconds": self.stage_eta_seconds,
+                "training_stage": stage_for(self.phase,self.message,self.phase_detail,
+                    process=getattr(self,'training_process_status',{})),
                 "training_rebuild_reason": self.training_rebuild_reason,
                 "training_preparation_active": (
                     self.training_job_agent_id is not None
-                    and getattr(self, "training_replay_progress_mapped", None) is False
+                    and (getattr(self, "training_replay_progress_mapped", None) is False
+                         or self.phase == "worker_bootstrap")
                 ),
                 "stateful_replay": dict(self.training_stateful_replay_status or {}),
                 "temporal_replay": dict(self.temporal_replay_stats),
@@ -398,8 +402,11 @@ class HistoryManager(threading.Thread):
                             "training_rebuild_reason",
                         )
                     }
+                    live_status["training_stage"] = stage_for(session.phase,session.message,
+                        session.phase_detail,process=session.training_process_status)
                     live_status["training_preparation_active"] = (
                         getattr(session, "training_replay_progress_mapped", None) is False
+                        or session.phase == "worker_bootstrap"
                     )
                 rows.append({
                     "agent_id": aid,
@@ -1144,7 +1151,9 @@ class HistoryManager(threading.Thread):
                         min(float(previous[0]), chunk_start), max(float(previous[1]), chunk_end))
                 else:
                     self.training_recorder_coverage[key] = (chunk_start, chunk_end)
-            self._persist_training_recorder_coverage()
+            from recorder_metrics import timed
+            with timed('coverage_persistence_seconds'):
+                self._persist_training_recorder_coverage()
         plan_weights = [
             max(1, math.ceil((end - start) / (max(1, int(max_hours)) * 3600)))
             * max(1, math.ceil(len(plan_ids) / batch_size))
@@ -1161,14 +1170,20 @@ class HistoryManager(threading.Thread):
             skipped_before = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             previous_bounds = {eid: self.training_recorder_coverage.get((str(source), eid))
                                for eid in plan_ids}
-            inserted += self._import_section(
-                plan_ids, plan_start, plan_end,
+            from recorder_metrics import scope
+            if not hasattr(self,'training_job_timings'):
+                self.training_job_timings={}
+            metrics=self.training_job_timings.setdefault('recorder_costs',{})
+            with scope(metrics):
+                imported = self._timed_recorder_section(
+                    plan_ids, plan_start, plan_end,
                 batch_size=batch_size, minimal=minimal, no_attributes=no_attributes,
                 source=source, progress_lo=lo, progress_hi=hi,
                 label=f"{label} · {plan_kind}", max_hours=max_hours, parallel_requests=1,
                 inter_chunk_pause_ms=int(OPTIONS.get("agent_training_pause_ms", 0)),
-                on_successful_chunk=committed_chunk,
-            )
+                    on_successful_chunk=committed_chunk,
+                )
+            inserted += imported
             weight_done += weight
             skipped_after = int(getattr(self, "recorder_skipped_slices", 0) or 0)
             if (skipped_after == skipped_before and not self.stop_event.is_set()
@@ -1188,6 +1203,11 @@ class HistoryManager(threading.Thread):
         if coverage_changed:
             self._persist_training_recorder_coverage()
         return inserted
+
+    def _timed_recorder_section(self, *args, **kwargs):
+        from recorder_metrics import timed
+        with timed('section_wall_seconds'):
+            return self._import_section(*args, **kwargs)
 
     def _refresh_agent_history(self, agent, start_ts, end_ts, rebuild=False, replay_start=None):
         """Explicit jobs backfill only what they need from Recorder.
@@ -2415,7 +2435,9 @@ class HistoryManager(threading.Thread):
                 significant=(source != "ha_history_full"), timeout=20,
             ) or []
             recorder_response_received = True
-            written = self._archive_history_payload(data, source)
+            from recorder_metrics import timed
+            with timed('archive_normalization_and_write_seconds'):
+                written = self._archive_history_payload(data, source)
             if explicit:
                 self._training_recorder_failures = 0
             if HEAVY_JOBS.owner == "discovery":
@@ -2694,7 +2716,9 @@ class HistoryManager(threading.Thread):
                 if workers == 1 and inter_chunk_pause_ms and not self.stop_event.is_set():
                     # Yield CPU/IO to Home Assistant between background Recorder chunks.
                     # This deliberately trades background completion time for a responsive HA UI.
-                    self.stop_event.wait(max(0.0, float(inter_chunk_pause_ms)) / 1000.0)
+                    from recorder_metrics import timed
+                    with timed('inter_chunk_pause_seconds'):
+                        self.stop_event.wait(max(0.0, float(inter_chunk_pause_ms)) / 1000.0)
         finally:
             if pool is not None:
                 pool.shutdown(wait=False, cancel_futures=True)

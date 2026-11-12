@@ -790,6 +790,8 @@ def _apply_status(history, payload):
     kwargs = {key: payload[key] for key in allowed if key in payload}
     if kwargs:
         history.set_status(**kwargs)
+    if payload.get('training_stage'):
+        history.training_process_status['stage']=payload['training_stage']
     if isinstance(payload.get('preparation'),dict):
         history.training_process_status['preparation'] = dict(payload['preparation'])
     # Worker status is an observation, not authority to change the parent job's
@@ -810,6 +812,8 @@ def _apply_status(history, payload):
         ):
             if isinstance(payload.get(field), dict):
                 setattr(history, attribute, dict(payload[field]))
+        if payload.get('training_preparation_active'):
+            history.eta_seconds = history.stage_eta_seconds = history.training_overall_eta_seconds = None
         if payload.get('updated_at') is not None:
             history.training_process_status['status_updated_at'] = float(payload['updated_at'])
 
@@ -1000,6 +1004,40 @@ def pending_training_agents(store):
             yield str(item['job']['agent_id'])
 
 
+def _retire_legacy_preparation(item):
+    """Remove only a verified v5 scratch file after its recorded child is dead.
+
+    Unknown/live owners are retained. Versioned filenames already prevent reuse.
+    No archive, coverage, candidate, model or Correct path is accepted here.
+    """
+    import sqlite3
+    from contextlib import closing
+    job=item['job']
+    status=_read_json(job.get('status_path',''),{}) or {}
+    pid=status.get('worker_pid')
+    if not pid or _same_process_alive(int(pid)):
+        return False
+    source=str(Path(item['source']).resolve())
+    key=hashlib.sha256((source+'|'+str(job['agent_id'])+'|training-history-generation-v5').encode()).hexdigest()[:24]
+    path=_generation_path(job).parent/('.preparing-'+key+'.db')
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as conn:
+            payload=json.loads(conn.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()[0])
+        identity=payload['identity']
+        if identity.get('source')!=source or identity.get('agent_id')!=job['agent_id'] or identity.get('contract')!='training-history-generation-v5':
+            return False
+    except (sqlite3.Error,ValueError,TypeError,KeyError):
+        return False
+    try:
+        for suffix in ('','-journal','-wal','-shm'):
+            Path(str(path)+suffix).unlink(missing_ok=True)
+    except OSError:
+        return False  # An unproven/open owner is retained, never blocks fresh v6.
+    return True
+
+
 def resume_deferred_training(history, agent_id):
     from storage import STORE
     item=_read_json(_resume_path(agent_id),{}) or {}
@@ -1009,7 +1047,12 @@ def resume_deferred_training(history, agent_id):
     if item.get('state')=='running':
         item['attempts']=int(item.get('attempts',0))+1
     if job.get('app_version')!=APP_VERSION or job.get('agent_fingerprint')!=agent_config_fingerprint(STORE.get_agent_config(agent_id)):
+        # Retire the stale descriptor. The caller builds a fresh job from the
+        # durable archive and coverage cache; it must not execute old SQL contracts.
         _resume_path(agent_id).unlink(missing_ok=True)
+        if job.get('app_version') != APP_VERSION:
+            _retire_legacy_preparation(item)
+            return False
         raise StaleTrainingJob('Deferred training descriptor no longer matches agent/version',preserve_lifecycle=True)
     job['parent_pid']=os.getpid()
     job['parent_start_token']=_process_start_token(os.getpid())
@@ -1149,6 +1192,9 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     latest_metrics = {}
     last_cpu_seconds = None
     last_cpu_wall = None
+    preparation_token = None
+    preparation_active = False
+    preparation_advanced = time.monotonic()
     cancelled = False
     memory_exceeded = False
     history.training_process_status = {
@@ -1180,9 +1226,20 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
             except OSError:
                 mtime = None
             if mtime is not None and mtime != last_status_mtime:
-                _apply_status(history, _read_json(status_path, {}))
+                worker_status = _read_json(status_path, {}) or {}
+                _apply_status(history, worker_status)
+                preparation = worker_status.get('preparation') or {}
+                token = (preparation.get('query_key'), preparation.get('current_cursor'), preparation.get('copy_strategy'))
+                preparation_active = bool(worker_status.get('training_preparation_active'))
+                if not preparation_active or token != preparation_token:
+                    preparation_advanced = time.monotonic()
+                    preparation_token = token
                 last_status_mtime = mtime
 
+            if preparation_active and time.monotonic()-preparation_advanced > 600.:
+                _terminate(process, grace)
+                from training_generation import TrainingPreparationNoProgress
+                raise TrainingPreparationNoProgress('Preparation watchdog: no cursor advance for 600s; job='+str(job['job_id'])+'; cursor='+repr(preparation_token))
             latest_metrics = _proc_metrics(process.pid)
             sample_wall = time.monotonic()
             sample_cpu = latest_metrics.get("cpu_seconds")
@@ -1640,18 +1697,37 @@ def _worker_boot_status(job, message, *, stage, progress=None, **details):
         "worker_pid": os.getpid(),
         "updated_at": now_ts(),
         "bootstrap_stage": str(stage),
+        "training_preparation_active": bool(job.get('training_generation') and not job.get('_preparation_complete')),
+        "eta_seconds": None,
+        "stage_eta_seconds": None,
+        "training_overall_eta_seconds": None,
     }
     if job.get('_preparation_complete'):
         payload['progress']=min(.99,.1+.9*float(payload['progress']))
     payload.update(details)
+    from training_stages import stage_for
+    payload['training_stage']=stage_for(payload['phase'],message,payload.get('phase_detail'),details.get('preparation'))
+    now=time.monotonic()
+    token=(stage,payload['training_stage'],bool(job.get('_preparation_complete')))
+    previous=job.get('_last_boot_status')
+    if previous and previous[1]==token and now-previous[0]<1.:
+        return
+    job['_last_boot_status']=(now,token)
     _atomic_json(job["status_path"], payload)
 
 
 def _worker_status_writer(history, status_path, *, preparation_fraction=0.):
     original = history.set_status
+    last_write = [0., None]
 
     def set_status(*args, **kwargs):
         result = original(*args, **kwargs)
+        from training_stages import stage_for
+        phase = (getattr(history,'phase',None),stage_for(getattr(history,'phase',''),getattr(history,'message',''),getattr(history,'phase_detail','')))
+        now = time.monotonic()
+        if phase == last_write[1] and now-last_write[0] < 1. and float(getattr(history,'progress',0.) or 0.) < 1.:
+            return result
+        last_write[:] = [now, phase]
         payload = history.status()
         if preparation_fraction:
             payload['progress']=min(.99,preparation_fraction+(1-preparation_fraction)*float(payload.get('progress') or 0.))

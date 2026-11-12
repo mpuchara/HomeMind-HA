@@ -20,6 +20,12 @@ jobs:
       - name: Install vector-training dependency
         run: python -m pip install --disable-pip-version-check numpy==2.3.3
       - run: python -m unittest discover -s tests -v
+      - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
+        run: python tools/validate_training_0159.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: training-pagination-0159-py${{ matrix.python }}
+          path: docs/benchmarks/training-0159-*.json
       - name: Real damaged table full training and two-agent Shadow validation
         run: python tools/validate_corruption_recovery.py
       - uses: actions/upload-artifact@v4
@@ -33,7 +39,7 @@ jobs:
         if: matrix.python == '3.11'
         with:
           name: generation-preparation-million-row
-          path: docs/benchmarks/generation-preparation-0158.json
+          path: docs/benchmarks/generation-preparation-0159.json
       - name: Real WAL starvation, pressure resume and concurrent ingress evidence
         if: matrix.python == '3.11'
         run: python tools/validate_training_wal.py
@@ -48,6 +54,7 @@ jobs:
       - name: Stage 1 active Candidate, training and Correct smoke (host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_scaling.py --agents 3 --events 30 --warmup 4 --candidates --training --correct
+      - run: node tools/verify_training_eta_0159.js
       - run: node tools/verify_debug_export_ui.js
       - name: Recorder archive parity and bounded WAL writes
         if: matrix.python == '3.11'
@@ -332,7 +339,7 @@ jobs:
           PY
   pi_canary_package:
     name: Pi aarch64 canary / test ZIP (NOT RELEASE)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/wal-training-0.15.8'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/training-0.15.9'
     needs: [tests, image]
     runs-on: ubuntu-latest
     permissions:
@@ -352,10 +359,10 @@ jobs:
           config=Path("adaptive_ai/config.yaml").read_text()
           settings=Path("adaptive_ai/src/settings.py").read_text()
           dockerfile=Path("adaptive_ai/Dockerfile").read_text()
-          assert re.search(r'^version: "0\.15\.8"$', config, re.MULTILINE)
-          assert re.search(r'^APP_VERSION = "0\.15\.8"$', settings, re.MULTILINE)
-          assert "ARG BUILD_VERSION=0.15.8" in dockerfile
-          assert info["version"] == "0.15.8"
+          assert re.search(r'^version: "0\.15\.9"$', config, re.MULTILINE)
+          assert re.search(r'^APP_VERSION = "0\.15\.9"$', settings, re.MULTILINE)
+          assert "ARG BUILD_VERSION=0.15.9" in dockerfile
+          assert info["version"] == "0.15.9"
           assert info["release_status"].startswith("pi5-manual-validation-candidate")
           for name in ("universal_observer_enabled", "universal_action_observer_enabled", "universal_training_collector_enabled"):
               assert ("  "+name+": false") in config, name
@@ -368,25 +375,25 @@ jobs:
       - name: Build aarch64 image under QEMU (hardware Pi test still required)
         run: |
           docker buildx build --platform linux/arm64 --load \
-            --build-arg BUILD_VERSION=0.15.8 --build-arg BUILD_ARCH=aarch64 \
-            -t homemind-pi-canary:0.15.8 adaptive_ai
-          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.15.8 \
-            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.15.8"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
-          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.15.8)" = "arm64/aarch64/0.15.8"
-          python tools/smoke_image.py homemind-pi-canary:0.15.8
+            --build-arg BUILD_VERSION=0.15.9 --build-arg BUILD_ARCH=aarch64 \
+            -t homemind-pi-canary:0.15.9 adaptive_ai
+          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.15.9 \
+            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.15.9"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
+          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.15.9)" = "arm64/aarch64/0.15.9"
+          python tools/smoke_image.py homemind-pi-canary:0.15.9
       - name: Package exact committed source and check all ZIP manifests
         run: |
           python tools/package_install_release.py
-          python tools/verify_pi_test_artifacts.py --expected-version 0.15.8
+          python tools/verify_pi_test_artifacts.py --expected-version 0.15.9
       - name: Upload manual-install candidate (no GitHub Release)
         uses: actions/upload-artifact@v4
         with:
-          name: HomeMind-HA-0.15.8-Pi-TEST-${{ github.sha }}
+          name: HomeMind-HA-0.15.9-Pi-TEST-${{ github.sha }}
           path: |
-            dist/HomeMind-HA-0.15.8-addon.zip
-            dist/HomeMind-HA-0.15.8-addon.zip.sha256
-            dist/HomeMind-HA-0.15.8-repository.zip
-            dist/HomeMind-HA-0.15.8-repository.zip.sha256
+            dist/HomeMind-HA-0.15.9-addon.zip
+            dist/HomeMind-HA-0.15.9-addon.zip.sha256
+            dist/HomeMind-HA-0.15.9-repository.zip
+            dist/HomeMind-HA-0.15.9-repository.zip.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

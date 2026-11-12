@@ -1,0 +1,530 @@
+{
+  "fixture_agents": 26,
+  "fixture_state_entities": 245,
+  "sequence_chunks_completed": 2,
+  "training_session_profile": {
+    "chunk_elapsed_seconds": 133.985,
+    "chunks": 2,
+    "contract": "persistent_training_session_profile_v1",
+    "counters": {
+      "continuation_cached_rows": 96,
+      "experience_dedup_cache_hits": 1,
+      "experience_dedup_cached_ids": 48,
+      "experience_dedup_db_loads": 1,
+      "feature_snapshot_builds": 240,
+      "feature_snapshot_cache_hits": 0,
+      "feature_snapshot_cache_misses": 240,
+      "feature_snapshot_duplicate_hits": 0,
+      "feature_snapshot_unique_timestamps": 239,
+      "provenance_cache_hits": 0,
+      "provenance_cached_rows": 0,
+      "provenance_db_loads": 0,
+      "provenance_loaded_rows": 0,
+      "ram_replay_lookups": 864,
+      "ram_replay_rows": 222149,
+      "replay_driver_rows_planned": 97,
+      "replay_driver_rows_processed": 97,
+      "rewarded_dwells": 95,
+      "screening_rows": 0,
+      "sqlite_fallback_lookups": 0,
+      "transition_edge_index_hits": 192,
+      "transition_edge_index_lookups": 192,
+      "transition_edge_source_rows": 145
+    },
+    "feature_snapshot_session": {
+      "build_seconds": 0.415669,
+      "builds": 240,
+      "entries": 64,
+      "evictions": 176,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 240,
+      "persistent": true,
+      "units": 8166
+    },
+    "neural_finalization": {
+      "contract": "final_chunk_neural_finalize_v1",
+      "deferred_chunks": 1,
+      "executed_chunks": 1,
+      "final_buffered_train_rows": 1
+    },
+    "note": "phase timers can be nested; do not sum them as exclusive CPU time",
+    "phase_seconds": {
+      "benchmark_persist_seconds": 0.028819,
+      "causal_home_statistics_build_seconds": 0.015315,
+      "causal_home_statistics_validation_seconds": 9e-06,
+      "context_assessment_seconds": 0.0,
+      "experience_dedup_load_seconds": 0.002275,
+      "feature_snapshot_build_seconds": 0.415669,
+      "finalization_seconds": 0.3917,
+      "heldout_fold_seconds": 8e-06,
+      "policy_serialize_persist_seconds": 0.10141,
+      "provenance_load_seconds": 3e-06,
+      "qualification_seconds": 0.043484,
+      "ram_index_construction_seconds": 3.5484,
+      "ram_replay_lookup_seconds": 0.8869,
+      "replay_seconds": 129.8413,
+      "screening_seconds": 0.0,
+      "sqlite_fallback_seconds": 0.0,
+      "tiny_mlp_finalization_seconds": 0.009223,
+      "total_seconds": 133.9417,
+      "tracker_init_seconds": 0.025784,
+      "transition_edge_index_construction_seconds": 0.0072
+    },
+    "slowest_chunks": [
+      {
+        "elapsed_seconds": 67.094,
+        "finalization_seconds": 0.2335,
+        "index": 1,
+        "replay_seconds": 64.7771
+      },
+      {
+        "elapsed_seconds": 66.891,
+        "finalization_seconds": 0.1582,
+        "index": 0,
+        "replay_seconds": 65.0642
+      }
+    ]
+  },
+  "agent_mode": "shadow",
+  "agent_progress": 1.0,
+  "concurrent_writes": 8721,
+  "version": "0.15.9",
+  "inherited_storage_budget": true,
+  "input_history_rows": 192,
+  "worker_wall_seconds": 147.85159049999857,
+  "worker_phases": {
+    "benchmark_persist_seconds": 0.012625,
+    "causal_home_statistics": {
+      "compressed_bytes": 2990,
+      "contract": "causal_home_statistics_v1",
+      "cursor_bytes": 26811,
+      "cursor_entries": 2,
+      "cursor_hits": 108,
+      "cursor_restores": 35,
+      "direct_sources": 1,
+      "max_bytes": 8388608,
+      "query_calls": 143,
+      "query_rows": 215,
+      "snapshots": 6,
+      "source_rows": 57
+    },
+    "causal_home_statistics_build_seconds": 0.00815,
+    "causal_home_statistics_reused": false,
+    "causal_home_statistics_validation_seconds": 8e-06,
+    "context_assessment_seconds": 0.0,
+    "context_entities_reconstructed_by_trackers": 1,
+    "context_screening_scope": "persisted_schema",
+    "continuation_cached_rows": 48,
+    "contract": "single_agent_training_phase_timing_v1",
+    "end_ts": 1700002880.0,
+    "experience_dedup_cache_hits": 1,
+    "experience_dedup_cached_ids": 48,
+    "experience_dedup_db_loads": 0,
+    "experience_dedup_load_seconds": 7e-06,
+    "feature_snapshot_build_seconds": 0.218342,
+    "feature_snapshot_builds": 119,
+    "feature_snapshot_cache_hits": 0,
+    "feature_snapshot_cache_misses": 119,
+    "feature_snapshot_duplicate_hits": 0,
+    "feature_snapshot_session_builds_total": 240,
+    "feature_snapshot_session_hits_total": 0,
+    "feature_snapshot_session_reused": true,
+    "feature_snapshot_unique_timestamps": 118,
+    "finalization_seconds": 0.2335,
+    "full_archive_count_skipped": true,
+    "heldout_fold_seconds": 4e-06,
+    "legacy_outer_stream_entity_count": 2,
+    "neural_finalize_requested": true,
+    "neural_train_samples_buffered": 1,
+    "policy_serialize_persist_seconds": 0.056368,
+    "provenance_cache_hits": 0,
+    "provenance_cached_rows": 0,
+    "provenance_db_loads": 0,
+    "provenance_load_seconds": 1e-06,
+    "provenance_loaded_rows": 0,
+    "qualification_seconds": 0.043483,
+    "ram_index_construction_seconds": 1.9875,
+    "ram_replay_actual_bytes": 7013124,
+    "ram_replay_entities": 245,
+    "ram_replay_estimated_bytes": 7482244,
+    "ram_replay_fallback": false,
+    "ram_replay_fallback_entities": 0,
+    "ram_replay_index_reused": false,
+    "ram_replay_lookup_seconds": 0.449136,
+    "ram_replay_lookups": 429,
+    "ram_replay_rows": 116832,
+    "replay_driver_rows_planned": 48,
+    "replay_driver_rows_processed": 48,
+    "replay_seconds": 64.7771,
+    "replay_stream_contract": "target_only_driver_v1",
+    "rewarded_dwells": 47,
+    "screening_rows": 0,
+    "screening_seconds": 0.0,
+    "sqlite_fallback_lookups": 0,
+    "sqlite_fallback_seconds": 0.0,
+    "start_ts": 1700001440.0,
+    "target_entities": 1,
+    "tiny_mlp_finalization_deferred": false,
+    "tiny_mlp_finalization_seconds": 0.009208,
+    "total_seconds": 67.0747,
+    "tracker_init_seconds": 0.010799,
+    "transition_edge_cursor_rewinds": 0,
+    "transition_edge_entities": 1,
+    "transition_edge_estimated_bytes": 15360,
+    "transition_edge_fallback_entities": 0,
+    "transition_edge_index_construction_seconds": 0.0047,
+    "transition_edge_index_fallbacks": 0,
+    "transition_edge_index_hits": 95,
+    "transition_edge_index_lookups": 95,
+    "transition_edge_index_reused": false,
+    "transition_edge_rows_applied": 96,
+    "transition_edge_scan_rows_avoided_estimate": 6911,
+    "transition_edge_source_rows": 96
+  },
+  "worker_budget": {
+    "effective_training_duty_cycle": 0.7078,
+    "effective_training_wall_duty_cycle": 0.7078,
+    "interactive_cooldown_seconds": 0.1,
+    "interactive_epoch_escalations": 0,
+    "interactive_max_burst_seconds": 1.25,
+    "interactive_preemptions": 0,
+    "interactive_priority_epochs": 0,
+    "interactive_requests_suppressed": 0,
+    "interactive_sleep_seconds": 0.0,
+    "interactive_yield_quantum_ms": 35.0,
+    "last_checkpoint": "finalization_complete",
+    "max_continuous_work_ms": 35.0,
+    "max_observed_slice_ms": 3167.2,
+    "max_throttle_sleep_seconds": 0.05,
+    "realtime_cooldown_seconds": 0.2,
+    "realtime_max_burst_seconds": 0.45,
+    "slice_checkpoints": 2765,
+    "slice_overruns": 2762,
+    "throttle_active_seconds": 103.436,
+    "throttle_batches": 2765,
+    "throttle_sleep_seconds": 42.711,
+    "training_cpu_duty_cycle": 0.7,
+    "training_wall_duty_cycle_target": 0.7
+  },
+  "learning_hash": "c44a89492293697948d188e82cfe0282b32c157c01bfb593ed0a777c6f940246",
+  "benchmark_counts": {
+    "samples": 94,
+    "correct": 93,
+    "per_action": {
+      "0": {
+        "samples": 47,
+        "correct": 47
+      },
+      "1": {
+        "samples": 47,
+        "correct": 46
+      }
+    },
+    "automation_rules": 0,
+    "origin_counts": {
+      "anonymous_external": 94
+    }
+  },
+  "frozen_holdout_counts": {
+    "samples": 94,
+    "correct": 70,
+    "per_action": {
+      "0": {
+        "samples": 47,
+        "correct": 47
+      },
+      "1": {
+        "samples": 47,
+        "correct": 23
+      }
+    }
+  },
+  "history_recovery": {
+    "agent_id": "6a70fdba",
+    "archive_status": "HISTORY_OK",
+    "attempts": 0,
+    "availability": "HISTORY_OK",
+    "contract": "training-history-generation-v6",
+    "copy_tables": {
+      "adaptive_presence_checkpoints": {
+        "bytes_copied": 1210,
+        "committed_batches": 1,
+        "copy_strategy": "causal_checkpoint_window_and_seed",
+        "current_cursor": 5,
+        "duplicate_rows": 0,
+        "inserted_payload_bytes": 1210,
+        "inserted_payload_bytes_exact": true,
+        "last_cursor_advance_at": 1794527246.5711894,
+        "last_new_row_at": 1794527246.5731976,
+        "payload_bytes_fetched": 1210,
+        "payload_rows_fetched": 5,
+        "previous_cursor": null,
+        "query_key": "adaptive_presence_checkpoints",
+        "rows_copied": 5,
+        "source_rows_scanned": 5,
+        "unique_rows_copied": 5,
+        "version_guard_rows_scanned": 0
+      },
+      "agents": {
+        "bytes_copied": 23082,
+        "committed_batches": 0,
+        "copy_strategy": "all_controller_configuration",
+        "rows_copied": 26,
+        "source_rows_scanned": 26,
+        "version_guard_rows_scanned": 0
+      },
+      "app_meta": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "shared_training_context_keys",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "entity_history": {
+        "bytes_copied": 12216768,
+        "committed_batches": 974,
+        "copy_strategy": "entity_time_keyset",
+        "current_cursor": [
+          1700002850.0,
+          192
+        ],
+        "duplicate_rows": 0,
+        "inserted_payload_bytes": 12216768,
+        "inserted_payload_bytes_exact": true,
+        "last_cursor_advance_at": 1794527253.039583,
+        "last_new_row_at": 1794527253.0431182,
+        "payload_bytes_fetched": 12216768,
+        "payload_rows_fetched": 116832,
+        "previous_cursor": null,
+        "query_key": "history:switch.target",
+        "rows_copied": 116832,
+        "source_rows_scanned": 116832,
+        "unique_rows_copied": 116832
+      },
+      "entity_history_revision": {
+        "bytes_copied": 32,
+        "committed_batches": 0,
+        "copy_strategy": "single_archive_revision",
+        "rows_copied": 1,
+        "source_rows_scanned": 1,
+        "version_guard_rows_scanned": 0
+      },
+      "events": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "schema_only_not_a_training_dependency",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "feature_observation_events": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "entity_time_keyset",
+        "current_cursor": null,
+        "previous_cursor": null,
+        "query_key": "feature_observation_events:switch.target",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "historical_experiences": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "schema_only_not_a_training_dependency",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "home_checkpoints": {
+        "bytes_copied": 2555,
+        "committed_batches": 1,
+        "copy_strategy": "causal_checkpoint_window_and_seed",
+        "current_cursor": 5,
+        "duplicate_rows": 0,
+        "inserted_payload_bytes": 2555,
+        "inserted_payload_bytes_exact": true,
+        "last_cursor_advance_at": 1794527246.580975,
+        "last_new_row_at": 1794527246.5820549,
+        "payload_bytes_fetched": 2555,
+        "payload_rows_fetched": 5,
+        "previous_cursor": null,
+        "query_key": "home_checkpoints",
+        "rows_copied": 5,
+        "source_rows_scanned": 5,
+        "unique_rows_copied": 5,
+        "version_guard_rows_scanned": 0
+      },
+      "model_backups": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "schema_only_not_a_training_dependency",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "rl_feedback": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "correct_dependency",
+        "current_cursor": null,
+        "previous_cursor": null,
+        "query_key": "rl_feedback",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "rl_models": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "schema_only_rebuild",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "tiny_mlp_shadow_models": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "selected_agent",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      },
+      "training_generation_backup": {
+        "bytes_copied": 0,
+        "committed_batches": 0,
+        "copy_strategy": "schema_only_not_a_training_dependency",
+        "rows_copied": 0,
+        "source_rows_scanned": 0,
+        "version_guard_rows_scanned": 0
+      }
+    },
+    "correct_agent_ids": [
+      "6a70fdba"
+    ],
+    "correct_fingerprint": "8e5dd9bab731b714f65106e99b7381900430bb7ecb5b966eb68df08b7c213164",
+    "gaps": [],
+    "lock_wait_seconds": 0.0,
+    "model_fingerprint": null,
+    "neural_fingerprint": null,
+    "preparation_cpu_seconds": 5.09375,
+    "quality": {
+      "benchmark_samples": 94,
+      "experiences": 95,
+      "segments": 2,
+      "skipped_records": null,
+      "status": "SUFFICIENT"
+    },
+    "recovered_records": 116832,
+    "recovery_active_cpu_seconds": 0.0,
+    "recovery_wall_seconds": 13.0470000000023,
+    "resumed": false,
+    "row_counter_semantics": "payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded",
+    "skipped_records": null,
+    "snapshot_lifecycle": {
+      "boundary": {
+        "end_ts": 1700002880.0,
+        "schema": {
+          "__training_fence_adaptive_presence_checkpoints_delete": "ded45a713c89d7482714d19425c68c88da1f3547ac226683d7771f5bf0136cb2",
+          "__training_fence_adaptive_presence_checkpoints_insert": "da02c9fe54048fb2214c9b068cfd71a0e86c4443bddf5670197c0d199e9d1c42",
+          "__training_fence_adaptive_presence_checkpoints_update": "5c18cb975c2dad44406a7a8cbb3ec8b19cddb3f1124a4ee4e6e6b6b800574c79",
+          "__training_fence_entity_history_delete": "f4748f34f35cc7fb6c91c63bee845e92e268d4263515f09362431ce3cf8b47cb",
+          "__training_fence_entity_history_insert": "7ad2e824249b0bd406cd5c7b0701e148ec582a2a3a4c80a5a8fbdd652639df80",
+          "__training_fence_entity_history_update": "38d7932210ebf745f1695182bc64de15cfbed62c10fe9da22a5f1661a7e0cea4",
+          "__training_fence_feature_observation_events_delete": "be8e0913ea53a2b41c0a660a7cd8a911cb3069101b6e1538382a008fbd684621",
+          "__training_fence_feature_observation_events_insert": "3a80cda035bce1c0c0c12b74b68a37a38c900717d1a404f3da310166a445d24b",
+          "__training_fence_feature_observation_events_update": "08c79b3aa06f5a4ba9ecd42c298b591ea9a50bfd619c60a7796624a7974ef08f",
+          "__training_fence_historical_experiences_delete": "4eb9d975d1eca231b2850738a723cf5f73835a17e069f160235630b61e675398",
+          "__training_fence_historical_experiences_insert": "48bcc57f88597c56e964ed31b468792d44fb553c39f91c30b61aa56adf66ac79",
+          "__training_fence_historical_experiences_update": "de19388064f127af4b21fc3d4d5c2c3221e48859115c1f08d24c28255814cfa8",
+          "__training_fence_home_checkpoints_delete": "82dd8c79d200e48d36359e796fce2ba87218b1a36e7db951f6eb3c4c712c5bed",
+          "__training_fence_home_checkpoints_insert": "cfd4f79ebc4943bc34dcf25b47f55afdb5bf594c551a3178b3a1836ad8ec7e68",
+          "__training_fence_home_checkpoints_update": "9fc7fbfa5281642d3c9fb3c090fc95f1543db4a27cdfbd5b5d28788acc34ebc4",
+          "__training_fence_rl_feedback_delete": "d76be90f7adc4dec1a1e92dba04b28e65461c8f850be14e2ddafc292926eb6a6",
+          "__training_fence_rl_feedback_insert": "bfb6be007ad4fb72475b1db3e4e70ada827055c9afb8cba1ae682bb59021f16b",
+          "__training_fence_rl_feedback_update": "8c5693d1b8ec153c5bbb3b55881c27bfad002f86bd2a9263204150232a0c6c7c",
+          "__training_fence_rl_models_delete": "51167442914bbc2d3c43cc460a212fbd58dcc62ffa1f6caba873794957ad0983",
+          "__training_fence_rl_models_insert": "33fa9d952719550d610655f46c9fb150c3fb3fc7c967793a87bf4dbb0f05e7d9",
+          "__training_fence_rl_models_update": "b69fc6cbe479ce143830a866ea544a92cb66bf6d44f6b4fa71ded1b387586a57",
+          "__training_fence_tiny_mlp_shadow_models_delete": "f8f25d3e6de3d73af7efc413538de72426fde37eee31e35180f5c83e8c52163b",
+          "__training_fence_tiny_mlp_shadow_models_insert": "bc9ac236f97ebaefb71b0524d95d08229bfcc885937b1ff6c23f82f7c82b7e01",
+          "__training_fence_tiny_mlp_shadow_models_update": "8cd9f7f8e5950001e6b2264d88a32d02fc95a814e1db6d90430638247accfddc",
+          "__training_prefix_versions": "c287f7813a7a6cf32cb877a75551b9a1560046a72af88c45926de2e5b7c418da",
+          "__training_source_identity": "9d76e1681ceffd93ef1cb58389eb60587ea8da839c159083751600fe1aff3477",
+          "adaptive_presence_checkpoints": "727a5b3ed04bb0a9c668b0033e02bcc83471d387aad5d2ddcc06f74d8cdcdbbe",
+          "agents": "b198f9db65236a8e8befd1274815e82f44c27ef89a22a75a234dadf0af3230f4",
+          "app_meta": "bd29442d9c2311006b6e3de928fe6e16cca05611f94c2bf9e87168f6f9bf125d",
+          "entity_history": "cd83d17d093b0ed1b24d417a8f73516dd46310662b18589a07943b8d5160be4b",
+          "entity_history_revision": "d7a597db4bad2a255e8278a42c7a9ac7a9393246e2f2ae6a69c96a7577c03e1b",
+          "feature_observation_events": "18bf3701c30770f197e5dc908faf8644ce4204f86c9e3e7aba0f9aa4c383a21e",
+          "historical_experiences": "f138d799c98daaee97a07afe89a561a7166b4371642cc4fd52ba352b6df5f12d",
+          "home_checkpoints": "515f78ae8aff889029f3d059f525497fa269c737220b456dde32bd9d017c1a54",
+          "rl_feedback": "a3fefd6a357af7b1455236aae1dade6ca1a93a3ec2ac7c927075adcaa7ccba1f",
+          "rl_models": "90c7e783331a507494d69cd25d46e95aa2f0478a28f8be0b747ce27720c76fa0",
+          "tiny_mlp_shadow_models": "7be5d0ea0bd1f1221f4bb70b52f801a3b9d0de6e972ca0ad82b0f35ac1f4043d"
+        },
+        "tables": {
+          "adaptive_presence_checkpoints": {
+            "epoch": 0,
+            "upper": 5
+          },
+          "entity_history": {
+            "epoch": 0,
+            "upper": 116948
+          },
+          "feature_observation_events": {
+            "epoch": 0,
+            "upper": 0
+          },
+          "home_checkpoints": {
+            "epoch": 0,
+            "upper": 5
+          },
+          "rl_feedback": {
+            "epoch": 0,
+            "upper": 0
+          }
+        },
+        "token": "121aa0d48891403a929f3d1b72fdf7a6"
+      },
+      "consistency": "durable rowid prefix fences; updates/deletes/reused ids invalidate; new appends deferred",
+      "max_explicit_transaction_seconds": 0.24466580000080285,
+      "max_source_execute_seconds": 0.01600000000325963,
+      "owned_generation_connections": 1,
+      "owned_source_connections": 1,
+      "reader_count_scope": "owned preparation only; SQLite exposes no global reader count",
+      "source_readers_between_batches": 0,
+      "wal_peak_bytes": 4144752
+    },
+    "source": "C:\\Users\\mpuch\\AppData\\Local\\Temp\\hm-worker-smoke-5e8d9rla\\adaptive_ai.db",
+    "source_signature": [
+      [
+        16945152,
+        1794527239762388100
+      ],
+      [
+        865232,
+        1794527241153369800
+      ]
+    ],
+    "sqlite_wait_estimated": true,
+    "sqlite_wait_seconds": 0.8637500000077125,
+    "status": "TRAINED",
+    "throttle_seconds": 0.0
+  },
+  "worker_resource_metrics": {
+    "cpu_seconds": null,
+    "peak_rss_mb": null
+  },
+  "source_table_rows": {},
+  "realtime_simulation": {
+    "ha_rows_written": 8721,
+    "ui_reads": 8721,
+    "ui_read_max_seconds": 0.00991499999872758,
+    "writer_max_seconds": 0.7457151000016893,
+    "loss": 0,
+    "environment": "host SQLite ingress/read simulation; not physical Pi"
+  }
+}

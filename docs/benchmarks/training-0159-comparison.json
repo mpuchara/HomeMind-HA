@@ -1,0 +1,108 @@
+{
+  "environment": "Host SQLite on local filesystem; NOT Pi/SD-card acceptance",
+  "reference_commit": "bc60087a2085165ecd6d273a31c1ee25f907d8b6",
+  "five_checkpoint_regression": {
+    "reference": {
+      "outcome": "bounded_infinite_loop",
+      "wall_seconds": 0.4477392000007967,
+      "cpu_seconds": 0.359375,
+      "process_write_bytes": null,
+      "commits": 100,
+      "metrics": {
+        "source_rows_scanned": 500,
+        "rows_copied": 5,
+        "bytes_copied": 466000,
+        "copy_strategy": "causal_checkpoint_window_and_seed"
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": false,
+          "last": 5
+        }
+      }
+    },
+    "candidate": {
+      "outcome": "completed",
+      "wall_seconds": 0.005006499999581138,
+      "cpu_seconds": 0.0,
+      "process_write_bytes": null,
+      "commits": 1,
+      "metrics": {
+        "source_rows_scanned": 5,
+        "rows_copied": 5,
+        "bytes_copied": 4660,
+        "copy_strategy": "causal_checkpoint_window_and_seed",
+        "query_key": "adaptive_presence_checkpoints",
+        "previous_cursor": null,
+        "current_cursor": 5,
+        "last_cursor_advance_at": 1794527090.231954,
+        "payload_rows_fetched": 5,
+        "unique_rows_copied": 5,
+        "duplicate_rows": 0,
+        "payload_bytes_fetched": 4660,
+        "inserted_payload_bytes": 4660,
+        "inserted_payload_bytes_exact": true,
+        "last_new_row_at": 1794527090.232951,
+        "committed_batches": 1
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 5
+        }
+      }
+    }
+  },
+  "normal_commit_cost": {
+    "reference": {
+      "outcome": "completed",
+      "wall_seconds": 0.4335618000004615,
+      "cpu_seconds": 0.3125,
+      "process_write_bytes": null,
+      "commits": 65,
+      "metrics": {
+        "source_rows_scanned": 8192,
+        "rows_copied": 8192,
+        "bytes_copied": 7634944,
+        "copy_strategy": "normal_keyset_cost"
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 8192
+        }
+      }
+    },
+    "candidate": {
+      "outcome": "completed",
+      "wall_seconds": 0.16398790000312147,
+      "cpu_seconds": 0.109375,
+      "process_write_bytes": null,
+      "commits": 9,
+      "metrics": {
+        "source_rows_scanned": 8192,
+        "rows_copied": 8192,
+        "bytes_copied": 7634944,
+        "copy_strategy": "normal_keyset_cost",
+        "query_key": "adaptive_presence_checkpoints",
+        "previous_cursor": 8064,
+        "current_cursor": 8192,
+        "last_cursor_advance_at": 1794527090.9634838,
+        "payload_rows_fetched": 8192,
+        "unique_rows_copied": 8192,
+        "duplicate_rows": 0,
+        "payload_bytes_fetched": 7634944,
+        "inserted_payload_bytes": 7634944,
+        "inserted_payload_bytes_exact": true,
+        "last_new_row_at": 1794527090.9644804,
+        "committed_batches": 64
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 8192
+        }
+      }
+    }
+  }
+}

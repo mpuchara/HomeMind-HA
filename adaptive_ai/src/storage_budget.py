@@ -580,7 +580,9 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
                         budget.recovery_event.set()
                     if on_wait is not None:
                         on_wait(data)
-                    stop_event.wait(1.0)
+                    from recorder_metrics import timed
+                    with timed('storage_pressure_wait_seconds'):
+                        stop_event.wait(1.0)
                     data = budget.sample()
                 continue
             if getattr(exc, 'reason', None) not in ('wal_budget', 'storage_pressure_changed_during_batch'):
@@ -593,7 +595,9 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
                 raise
             with budget.lock:
                 budget.stats['wal_recovery_waits'] = budget.stats.get('wal_recovery_waits', 0) + 1
-            stop_event.wait(1.0)
+            from recorder_metrics import timed
+            with timed('storage_pressure_wait_seconds'):
+                stop_event.wait(1.0)
 
 
 class StorageRetry:
