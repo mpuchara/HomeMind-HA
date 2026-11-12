@@ -18,7 +18,7 @@ from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct
 from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
 
-CONTRACT = 'training-history-generation-v5'
+CONTRACT = 'training-history-generation-v6'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
     'rl_models', 'historical_experiences', 'tiny_mlp_shadow_models',
     'agent_candidate_generations', 'automatic_reward_experiences',
@@ -40,6 +40,20 @@ def signature(source):
         stat = path.stat() if path.exists() else None
         result.append([stat.st_size, stat.st_mtime_ns] if stat and (not suffix or stat.st_size>32) else None)
     return result
+
+
+class TrainingPreparationNoProgress(RecoveryUnavailable):
+    """A nonempty keyset page must advance before any destination mutation."""
+
+
+def advancing_cursor(previous, current, *, table, strategy, rows, job_id, query_key):
+    left = tuple(previous) if isinstance(previous, (list, tuple)) else previous
+    right = tuple(current) if isinstance(current, (list, tuple)) else current
+    if left is not None and not right > left:
+        raise TrainingPreparationNoProgress(json.dumps(dict(
+            error='TrainingPreparationNoProgress', table_name=table,
+            copy_strategy=strategy, previous_cursor=previous, current_cursor=current,
+            payload_rows_fetched=rows, job_id=job_id, query_key=query_key)))
 
 
 class Preparation:
@@ -78,6 +92,11 @@ class Preparation:
         self.snapshot_max_seconds = 0.
         self.source_sql_max_seconds = 0.
         self.wal_peak_bytes = 0
+        self.pending_batches = 0
+        self.pending_bytes = 0
+        self.last_commit = time.monotonic()
+        self.commit_seconds = 0.
+        self.status_write_seconds = 0.
 
     def checkpoint(self):
         if self.cancelled():
@@ -149,15 +168,30 @@ class Preparation:
             throttle_seconds=round(self.throttle,6),recovery_attempts=self.attempts,
             wal_peak_bytes=self.wal_peak_bytes,source_owned_connections=1,
             explicit_source_transaction_active=bool(self.src.in_transaction),
-            snapshot_max_seconds=self.snapshot_max_seconds)
+            snapshot_max_seconds=self.snapshot_max_seconds,
+            job_id=self.destination.stem, commit_seconds=self.commit_seconds,
+            status_write_seconds=self.status_write_seconds)
+        status_started = time.monotonic()
         self.progress(message=f"{'Recovering historical data' if self.in_recovery else 'Preparing training history'}: {table}, {metric.get('rows_copied',0):,} records copied",
             phase_detail='Recovering historical data' if self.in_recovery else 'Copying required metadata / selected history',
             preparation=metric,work_done=metric.get('rows_copied',0),work_total=0,
             progress=min(.09,.01+.08*len([x for x in self.state['queries'].values() if x.get('done')])/(len(self.schema)+len(self.entities)+1)))
+        self.status_write_seconds += time.monotonic()-status_started
 
-    def save(self):
+    def save(self, force=True):
+        # Rows and the cursor always commit together. Bound uncommitted work by
+        # eight pages, the preparation memory budget, or one second of work.
+        if not force and self.pending_batches < 8 and self.pending_bytes < self.memory and time.monotonic()-self.last_commit < 1.:
+            return
+        started = time.monotonic()
+        for metric in self.state['tables'].values():
+            pending = metric.pop('pending_batches', 0)
+            metric['committed_batches'] = metric.get('committed_batches', 0)+pending
         self.dst.execute('INSERT OR REPLACE INTO __training_copy_state VALUES(1,?)',(json.dumps({k:v for k,v in self.state.items() if k!='source_schema'}),))
         self.dst.commit()
+        self.commit_seconds += time.monotonic()-started
+        self.last_commit = time.monotonic()
+        self.pending_batches = self.pending_bytes = 0
 
     def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql'):
         """Keyset paging uses the source's entity/time or agent index, before decoding."""
@@ -170,7 +204,7 @@ class Preparation:
         last = saved.get('last')
         while True:
             self.checkpoint()
-            where = [predicate] if predicate else []
+            where = [f'({predicate})'] if predicate else []
             if table in self.state.get('boundary',{}).get('tables',{}):
                 where.append('rowid<=?')
                 values_boundary=[self.state['boundary']['tables'][table]['upper']]
@@ -194,7 +228,17 @@ class Preparation:
                     self.state['queries'][query_key] = dict(done=True,last=last)
                     self.save()
                 break
+            if key in ('ts,id','event_time,rowid'):
+                stamp, identity = key.split(',')
+                new_cursor = [float(batch[-1][stamp]), int(batch[-1]['id' if identity=='id' else '__copy_rowid'])]
+            else:
+                new_cursor = int(batch[-1]['__copy_rowid'])
+            advancing_cursor(last, new_cursor, table=table, strategy=strategy,
+                             rows=len(batch), job_id=self.destination.stem, query_key=query_key)
+            metric.update(query_key=query_key, previous_cursor=last, current_cursor=new_cursor,
+                          last_cursor_advance_at=time.time())
             metric['source_rows_scanned'] += len(batch)
+            metric['payload_rows_fetched'] = metric['source_rows_scanned']
             size = sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
             if size>self.memory:
                 raise RecoveryUnavailable('Preparation row batch exceeds memory budget')
@@ -207,16 +251,24 @@ class Preparation:
             before = self.dst.total_changes
             self.sql(self.dst,'executemany',f'INSERT OR IGNORE INTO {quote(table)} ({",".join(map(quote,columns))}) VALUES ({",".join("?" for _ in columns)})',
                      [tuple(r[c] for c in columns) for r in batch])
-            metric['rows_copied'] += self.dst.total_changes-before
-            metric['bytes_copied'] += size
-            if key in ('ts,id','event_time,rowid'):
-                stamp,identity=key.split(',')
-                last=[float(batch[-1][stamp]),int(batch[-1]['id' if identity=='id' else '__copy_rowid'])]
-            else:
-                last=int(batch[-1]['__copy_rowid'])
+            inserted = self.dst.total_changes-before
+            metric['rows_copied'] += inserted
+            metric['unique_rows_copied'] = metric['rows_copied']
+            metric['duplicate_rows'] = metric.get('duplicate_rows',0)+len(batch)-inserted
+            metric['bytes_copied'] += size  # legacy: payload bytes fetched, not physical disk writes
+            metric['payload_bytes_fetched'] = metric['bytes_copied']
+            metric['inserted_payload_bytes'] = metric.get('inserted_payload_bytes',0)+(
+                size if inserted==len(batch) else 0)
+            metric['inserted_payload_bytes_exact'] = metric.get('inserted_payload_bytes_exact',True) and inserted in (0,len(batch))
+            if inserted:
+                metric['last_new_row_at'] = time.time()
+            metric['pending_batches'] = metric.get('pending_batches',0)+1
+            self.pending_batches += 1
+            self.pending_bytes += size
+            last = new_cursor
             if checkpoint:
                 self.state['queries'][query_key] = dict(done=False,last=last)
-                self.save()
+                self.save(force=False)
             self.emit(table,strategy)
         self.emit(table,strategy,True)
 
@@ -263,7 +315,10 @@ class Preparation:
                       float(self.options.get('fast_precursor_off_seconds',120)),
                       *[float(x.strip()) for x in horizons if x.strip()])
             lower=max(0.,min(self.start,self.end-days*86400.)-guard)
-            return '(ts>=? AND ts<=?) OR ts=(SELECT MAX(ts) FROM '+quote(name)+' WHERE ts<?)',(lower,self.end,lower),'causal_checkpoint_window_and_seed'
+            upper=self.state.get('boundary',{}).get('tables',{}).get(name,{}).get('upper')
+            seed_boundary=' AND rowid<=?' if upper is not None else ''
+            values=(lower,self.end,lower)+((upper,) if upper is not None else ())
+            return '(ts>=? AND ts<=?) OR ts=(SELECT MAX(ts) FROM '+quote(name)+' WHERE ts<?'+seed_boundary+')',values,'causal_checkpoint_window_and_seed'
         return None
 
     def read_initial_metadata(self, connection):
@@ -563,6 +618,7 @@ class Preparation:
                             batch=self.sql(cursor,'fetchall')
                         if not batch:
                             break
+                        advancing_cursor(last, (batch[-1]['ts'],batch[-1]['id']), table='entity_history', strategy='recovery_witness', rows=len(batch), job_id=self.destination.stem, query_key=entity)
                         self.dst.executemany('INSERT OR IGNORE INTO recovery_witness VALUES(?,?,?)',[tuple(r) for r in batch])
                         self.dst.commit()
                         last=(batch[-1]['ts'],batch[-1]['id'])

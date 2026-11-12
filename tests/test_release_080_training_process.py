@@ -689,7 +689,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                            qualify=False, concurrent_writes=False,
                            corruption_recovery=False, corrupt_table_page=False,
                            two_agents=False, http_gap=False, kill_and_restart=False,
-                             expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False):
+                             expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False, rich_checkpoints=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -736,6 +736,23 @@ class ActualWorkerSmoke(unittest.TestCase):
                     {}, None, "test",
                 ))
             store.archive_batch(rows)
+            if rich_checkpoints:
+                for n in range(24):
+                    store.create_agent(dict(name='Runtime '+str(n), target_entity='switch.runtime_'+str(n),
+                        target_property='power', min_value=0,max_value=1,deadband=.5,
+                        exploration_step=1,confidence_threshold=.78,action_interval=30,
+                        input_entities=['binary_sensor.motion']))
+                store.archive_batch([(f'sensor.context_{n}',base+i*30,str(i%7),{},None,'test')
+                    for n in range(243) for i in range(samples)])
+                from context_engine import ContextEngine
+                from home_state import RoomBeliefModel
+                context=ContextEngine({},store=store)
+                with store.conn() as c:
+                    c.execute('CREATE TABLE IF NOT EXISTS home_checkpoints(ts REAL PRIMARY KEY,model TEXT NOT NULL)')
+                    for i in range(5):
+                        stamp=base+i*30
+                        c.execute('INSERT INTO home_checkpoints VALUES(?,?)',(stamp,json.dumps(RoomBeliefModel().export())))
+                        c.execute('INSERT INTO adaptive_presence_checkpoints VALUES(?,?)',(stamp,json.dumps(context.adaptive_presence.export())))
             source_table_rows = {}
             other_model_before = None
             if large_noise_rows:
@@ -861,6 +878,18 @@ class ActualWorkerSmoke(unittest.TestCase):
                 job['checksum'] = descriptor_checksum(job)
                 job_path.write_text(json.dumps(job), encoding='utf-8')
 
+            if rich_checkpoints:
+                middle=base+samples*15
+                job['sequence_start_ts']=job['start_ts']
+                job['sequence_target_end_ts']=job['end_ts']
+                job['sequence_chunks']=[dict(index=i,start_ts=lo,end_ts=hi,
+                    checkpoint_cursor_ts=hi,checkpoint_meta={},train_kwargs=dict(job['train_kwargs'],
+                    qualify=i==1,finalize_neural=i==1,continuation_from_ts=None if i==0 else middle,
+                    progress_lo=i/2,progress_hi=(i+1)/2))
+                    for i,(lo,hi) in enumerate(((job['start_ts'],middle),(middle,job['end_ts'])))]
+                job['checksum']=descriptor_checksum(job)
+                job_path.write_text(json.dumps(job),encoding='utf-8')
+
             if expect_unavailable:
                 store.save_model(agent['id'],dict(version=11, marker='previous-approved'))
                 previous_model = store.get_model(agent['id'])
@@ -938,7 +967,7 @@ import policy,training_generation
 stamp=float(sys.argv[1]); ready=Path(sys.argv[2]); args=sys.argv[3:]
 policy.now_ts=lambda:stamp
 original=training_generation.Preparation.save
-def save(preparation):
+def save(preparation, *args, **kwargs):
     original(preparation)
     if any(key.startswith('history:') and value.get('last') and not value.get('done')
            for key,value in preparation.state['queries'].items()):

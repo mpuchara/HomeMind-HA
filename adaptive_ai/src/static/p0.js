@@ -13,9 +13,9 @@
     if (v == null || !Number.isFinite(Number(v)) || Number(v) < 0) return null;
     const s = Number(v);
     if (s < 90) return `≈ ${Math.max(1, Math.round(s))} s`;
-    if (s < 600) { const m=Math.floor(s/60), r=Math.round(s%60); return r ? `≈ ${m} min ${r} s` : `≈ ${m} min`; }
+    if (s < 600) { const rounded=Math.round(s), m=Math.floor(rounded/60), r=rounded%60; return r ? `≈ ${m} min ${r} s` : `≈ ${m} min`; }
     if (s < 3600) return `≈ ${Math.round(s/60)} min`;
-    const h=Math.floor(s/3600), m=Math.round((s-h*3600)/60); return m ? `≈ ${h} h ${m} min` : `≈ ${h} h`;
+    const minutes=Math.round(s/60), h=Math.floor(minutes/60), m=minutes%60; return m ? `≈ ${h} h ${m} min` : `≈ ${h} h`;
   };
 
   const startup = status => {
@@ -55,6 +55,11 @@
   const taskFor = (h,status) => {
     const s=status.startup||{};
     if (!s.ready) return {title:'Starting Adaptive AI', detail:s.message||'Preparing runtime', p:(s.step||0)/Math.max(1,s.steps||7), eta:null, work:null};
+    const prep=h.training_process?.preparation;
+    if(h.training_preparation_active && prep){
+      const age=prep.last_cursor_advance_at?Math.max(0,Date.now()/1000-prep.last_cursor_advance_at):null;
+      return {title:prep.recovery_attempts?'Recovering corruption':'Preparing generation',detail:`${prep.table_name||''} · ${num(prep.payload_rows_fetched||0)} fetched · ${num(prep.unique_rows_copied||0)} unique${age==null?'':` · last advance ${Math.floor(age)} s ago`}`,p:Number(h.progress||0),eta:null,work:`${num(prep.committed_batches||0)} batches committed`};
+    }
     const activeTrainingId=String(status.training_queue?.active?.agent_id||h.training_job_agent_id||'');
     const training=lastAgents.find(a=>String(a.id)===activeTrainingId)
       ||lastAgents.find(a=>(a.training_state||a.runtime?.training_state)==='training');
@@ -80,7 +85,7 @@
   renderHistory = (h,status={}) => {
     const t=taskFor(h,status), p=Math.max(0,Math.min(100,Math.round((t.p||0)*100))), eta=duration(t.eta);
     const task=$('#taskPanel');
-    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?'Measuring whole-training ETA…':''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Percent and ETA cover the complete selected-agent training pass; stage counters may restart between chunks.':''}</span></div>`;
+    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?(h.training_preparation_active?'Counting preparation work…':'Measuring whole-training ETA…'):''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Percent and ETA cover the complete selected-agent training pass; stage counters may restart between chunks.':''}</span></div>`;
     const ar=h.archive||{};
     $('#historyPanel').innerHTML=`<div class="history-head"><div><b>History / training diagnostics</b><span>${esc(h.message||h.phase||'idle')}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||'')}</small></div></div><div class="history-timing"><b>${h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${esc(h.work_unit||'items')}`:'No measurable background work'}</b><span>${esc(h.phase_detail||'')}</span></div><div class="history-grid"><div><b>${ar.stale&&!ar.measured_at?'Updating…':num(ar.n||0)}</b><span>archived changes${ar.stale?' · cached overview':''}</span></div><div><b>${ar.stale&&!ar.measured_at?'Updating…':Number(ar.days||0).toFixed(1)+' d'}</b><span>coverage</span></div><div><b>${num(h.context_candidates||ar.entities||0)}</b><span>context candidates</span></div><div><b>${Number(h.training_rows_per_second||0).toLocaleString(undefined,{maximumFractionDigits:2})}</b><span>training rows/s</span></div></div>`;
   };

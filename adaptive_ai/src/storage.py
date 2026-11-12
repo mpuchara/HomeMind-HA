@@ -1428,7 +1428,11 @@ class Store:
         """Internal pre-encoded Recorder buffer; identical guarded UPSERT/commit path."""
         if not packed:
             return 0
+        from recorder_metrics import add
+        admission_started=time.perf_counter()
         with self.lock, self.conn() as c, c.storage_batch():
+            add('sqlite_admission_seconds',time.perf_counter()-admission_started)
+            insert_started=time.perf_counter()
             revision = self._next_entity_history_revision(c)
             versioned = [(*item, revision) for item in packed]
             from sqlite_bulk_rows import insert_bounded_rows
@@ -1459,6 +1463,11 @@ class Store:
                            CASE WHEN excluded.source='live' THEN excluded.received_ts
                                 ELSE COALESCE(entity_history.received_ts, excluded.received_ts) END)""",
             )
+            add('sqlite_insert_and_dedup_seconds',time.perf_counter()-insert_started)
+            commit_started=time.perf_counter()
+        add('sqlite_commit_and_release_seconds',time.perf_counter()-commit_started)
+        add('archive_payload_rows',len(packed))
+        add('archive_commits',1)
         return len(packed)
 
     def archive_rows(self, start_ts=None, end_ts=None, entity_id=None, limit=20000):
@@ -1530,6 +1539,11 @@ class Store:
                 batch = archive_query(c, page_sql, page_vals, snapshot=True).fetchall()
             if not batch:
                 break
+            from training_generation import advancing_cursor
+            advancing_cursor(None if last_ts is None else (last_ts,last_id),
+                (float(batch[-1]['ts']),int(batch[-1]['id'])), table='entity_history',
+                strategy='checkpointed_archive_read', rows=len(batch), job_id=None,
+                query_key='archive_iter')
             for row in batch:
                 item = dict(row)
                 last_ts, last_id = float(item["ts"]), int(item["id"])

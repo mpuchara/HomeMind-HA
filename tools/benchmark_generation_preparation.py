@@ -1,4 +1,4 @@
-"""Same million-row, 100-entity full-worker fixture on 0.15.6 and candidate.
+"""Same million-row, 100-entity full-worker fixture on 0.15.8 and candidate.
 
 Reference source is extracted from its pinned commit into a disposable directory.
 RSS/CPU are child rusage on Linux; unsupported host counters remain null.
@@ -13,7 +13,7 @@ import tarfile
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-REFERENCE='1dcaf02be52c9a17d41ca9351b5cd8c5b4da4bec'
+REFERENCE='bc60087a2085165ecd6d273a31c1ee25f907d8b6'
 
 
 def run(source, rows):
@@ -47,7 +47,7 @@ def main():
         except subprocess.CalledProcessError:
             subprocess.run(['git','fetch','--depth=1','origin',REFERENCE],cwd=ROOT,check=True)
             raw=subprocess.check_output(['git','archive','--format=tar',REFERENCE,'adaptive_ai/src'],cwd=ROOT)
-        with tempfile.TemporaryDirectory(prefix='hm-reference-0156-') as directory:
+        with tempfile.TemporaryDirectory(prefix='hm-reference-0158-') as directory:
             with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
                 # Pinned git archive, regular files below the one requested tree.
                 for member in archive.getmembers():
@@ -80,7 +80,7 @@ def main():
             learning_hash_identical=True,
             reference_resources=reference['worker_resource_metrics'],
             candidate_resources=candidate['worker_resource_metrics'])
-    path=ROOT/'docs/benchmarks/generation-preparation-0158.json'
+    path=ROOT/'docs/benchmarks/generation-preparation-0159.json'
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(results,indent=2),encoding='utf-8')
     print(json.dumps(results.get('comparison',dict(candidate_rows=tables['entity_history']['source_rows_scanned'])),indent=2))

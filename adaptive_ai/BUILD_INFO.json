@@ -1,9 +1,9 @@
 {
-  "version": "0.15.8",
-  "release_date": "2026-11-11",
-  "base_version": "0.15.7",
-  "base_commit": "01c3bd76c3d4e14f0c39aefe533bbf57844a9a6a",
-  "release_status": "pi5-manual-validation-candidate-wal-snapshot-lifecycle",
+  "version": "0.15.9",
+  "release_date": "2026-11-13",
+  "base_version": "0.15.8",
+  "base_commit": "bc60087a2085165ecd6d273a31c1ee25f907d8b6",
+  "release_status": "pi5-manual-validation-candidate-pagination-hotfix",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4069,5 +4069,10 @@
     "source_baseline": "01c3bd76c3d4e14f0c39aefe533bbf57844a9a6a",
     "physical_pi_validation": "NOT RUN",
     "report": "docs/RELEASE_0_15_8_PL.md"
+  },
+  "release_0159": {
+    "scope": "Grouped SQL predicates, monotonic cursor invariant, v6 scratch contract and bounded durable preparation commits",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_9_PL.md"
   }
 }
