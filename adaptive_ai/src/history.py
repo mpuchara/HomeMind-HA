@@ -1,3 +1,4 @@
+from training_stages import stage_for
 from urllib.error import HTTPError
 from urllib.error import URLError
 from collections import deque
@@ -355,6 +356,8 @@ class HistoryManager(threading.Thread):
                     (self.work_done / self.work_total) if self.work_total else None
                 ),
                 "training_stage_eta_seconds": self.stage_eta_seconds,
+                "training_stage": stage_for(self.phase,self.message,self.phase_detail,
+                    process=getattr(self,'training_process_status',{})),
                 "training_rebuild_reason": self.training_rebuild_reason,
                 "training_preparation_active": (
                     self.training_job_agent_id is not None
@@ -399,6 +402,8 @@ class HistoryManager(threading.Thread):
                             "training_rebuild_reason",
                         )
                     }
+                    live_status["training_stage"] = stage_for(session.phase,session.message,
+                        session.phase_detail,process=session.training_process_status)
                     live_status["training_preparation_active"] = (
                         getattr(session, "training_replay_progress_mapped", None) is False
                         or session.phase == "worker_bootstrap"

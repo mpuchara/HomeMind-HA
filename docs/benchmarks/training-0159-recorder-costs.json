@@ -1,0 +1,19 @@
+{
+  "environment": "Host loopback HTTP and real SQLite, 200 rows; NOT HA/Pi Recorder acceptance",
+  "http_requests_across_two_agents_and_restart": 1,
+  "metrics": {
+    "http_response_headers_wait_seconds": 0.001880600000731647,
+    "http_body_read_seconds": 0.00015770000027259812,
+    "response_bytes": 23502.0,
+    "json_parse_seconds": 0.0002643000007083174,
+    "sqlite_admission_seconds": 0.000796799999079667,
+    "sqlite_insert_and_dedup_seconds": 0.004498500002227956,
+    "sqlite_commit_and_release_seconds": 0.0026596000025165267,
+    "archive_payload_rows": 200.0,
+    "archive_commits": 2.0,
+    "archive_normalization_and_write_seconds": 0.018514799998229137,
+    "coverage_persistence_seconds": 0.019378900000447175,
+    "section_wall_seconds": 0.04686470000160625
+  },
+  "installation_11066_seconds_dominant_cost": "UNKNOWN; collect recorder_costs on installation"
+}

@@ -54,6 +54,7 @@ jobs:
       - name: Stage 1 active Candidate, training and Correct smoke (host only)
         if: matrix.python == '3.11'
         run: python tools/benchmark_runtime_scaling.py --agents 3 --events 30 --warmup 4 --candidates --training --correct
+      - run: node tools/verify_training_eta_0159.js
       - run: node tools/verify_debug_export_ui.js
       - name: Recorder archive parity and bounded WAL writes
         if: matrix.python == '3.11'

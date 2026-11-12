@@ -162,6 +162,7 @@ class Preparation:
         self.last_report = now
         metric = dict(self.state['tables'].get(table) or {})
         metric.update(agent_id=self.agent_id,table_name=table,copy_strategy=strategy,
+            stage="Recovering corruption" if self.in_recovery else "Preparing generation",
             elapsed_seconds=round(now-self.started,6),cpu_seconds=round(time.process_time()-self.cpu_started,6),
             sqlite_wait_seconds=round(max(0.,self.sqlite_elapsed-self.sqlite_cpu-self.lock_wait),6),
             sqlite_seconds=round(self.sqlite_elapsed,6),lock_wait_seconds=round(self.lock_wait,6),

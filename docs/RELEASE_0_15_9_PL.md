@@ -39,7 +39,7 @@ exact; przy mieszanej deduplikacji licznik stanowi dolną granicę) oraz kursory
 czasy ostatniego postępu, commit_seconds i status_write_seconds.
 bytes_copied zachowuje historyczne znaczenie bajtów payloadu; nie jest pomiarem
 fizycznego I/O. Porównanie na Linuksie mierzy osobno `/proc/self/io.write_bytes`.
-Status treningu zapisuje plik maksymalnie raz na sekundę przy niezmienionej fazie,
+Status treningu i bootstrap zapisują plik maksymalnie raz na sekundę przy niezmienionym etapie,
 z natychmiastowym raportowaniem zmiany fazy i zakończenia. Supervisor kończy
 przygotowanie po 600 s bez zmiany kursora/query/strategii zamiast ufać heartbeat.
 Długie pojedyncze operacje indeksowania również podlegają temu konserwatywnemu
@@ -64,11 +64,26 @@ wierszy bez OR pozwala mierzyć normalny koszt commitów, bez mylenia go z pętl
 Ten sam skrypt uruchamia rzeczywiste subprocessy produkcyjnego workera na
 fixture: ponad 25 agentów, 243 dodatkowe encje / 116640 stanów kontekstu,
 oba typy checkpointów po pięć rekordów, obecność, dwóch trenowanych agentów,
-dwa kolejne chunki drugiego agenta i równoległe zdarzenia SQLite runtime.
+96 przejść targetu, dwa kolejne chunki drugiego agenta i równoległe zdarzenia SQLite runtime.
 Sprawdza zapis modelu, benchmark, Shadow i progress 100%. To test hosta;
 nie reprezentuje 14 dni / 40 mln stanów na fizycznym Pi.
 `benchmark_generation_preparation.py` porównuje pełny worker 0.15.8 i 0.15.9
 na identycznej milionowej bazie bez checkpointów wyzwalających pętlę.
+
+### Zmierzony wynik hosta
+
+Windows: 26 skonfigurowanych agentów, 245 encji widocznych dla workera,
+116640 stanów kontekstu, obie tabele checkpointów dokładnie 5/5 odczytów/zapisów.
+Drugi agent: 2 chunki, 147.85 s procesu, 8721 równoległych zapisów runtime;
+model zapisany, benchmark, Shadow/100%. Pierwszy agent również wytrenowany
+w osobnym dziecku i jego model pozostał niezmieniony. Użycie cache cech
+między chunkami oraz continuation_cached_rows potwierdzone.
+
+WSL /tmp ext4, identyczne 8192 rekordów po ~900 bajtów: 65 → 9 commitów,
+1.222 → 0.297 s, `/proc/self/io.write_bytes` 12648448 → 9142272 bajtów.
+Kontrola błędnego OR: 100 commitów / 500 odczytów / 5 unikalnych zapisów
+przed przerwaniem testu; hotfix: 1 commit / 5 odczytów / 5 zapisów / done.
+To lokalny nośnik hosta, nie pomiar SD karty ani instalacji Raspberry Pi.
 
 ## Recorder P2 i otwarte pomiary
 

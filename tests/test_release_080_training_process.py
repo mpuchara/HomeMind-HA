@@ -742,8 +742,8 @@ class ActualWorkerSmoke(unittest.TestCase):
                         target_property='power', min_value=0,max_value=1,deadband=.5,
                         exploration_step=1,confidence_threshold=.78,action_interval=30,
                         input_entities=['binary_sensor.motion']))
-                store.archive_batch([(f'sensor.context_{n}',base+i*30,str(i%7),{},None,'test')
-                    for n in range(243) for i in range(samples)])
+                store.archive_batch([(f'sensor.context_{n}',base+(i-max(480,samples)+samples)*30,str(i%7),{},None,'test')
+                    for n in range(243) for i in range(max(480,samples))])
                 from context_engine import ContextEngine
                 from home_state import RoomBeliefModel
                 context=ContextEngine({},store=store)
@@ -1111,7 +1111,7 @@ runpy.run_path(args[0],run_name='__main__')
                 "fixture_agents": len(store.list_agents()),
                 "fixture_state_entities": len(state_map),
                 "sequence_chunks_completed": result.get('sequence_chunks_completed'),
-                "stateful_replay": result.get('stateful_replay'),
+                "stateful_replay": (result.get('temporal_replay') or {}).get('continuation'),
                 "training_session_profile": result.get('training_session_profile'),
                 "agent_mode": trained_agent["mode"],
                 "agent_progress": trained_agent["training_progress"],

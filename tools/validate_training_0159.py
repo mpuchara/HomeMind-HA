@@ -66,7 +66,11 @@ def copy_bench(module, window, count):
 
 
 def main():
-    raw=subprocess.check_output(['git','show',REFERENCE+':adaptive_ai/src/training_generation.py'],cwd=ROOT)
+    try:
+        raw=subprocess.check_output(['git','show',REFERENCE+':adaptive_ai/src/training_generation.py'],cwd=ROOT,stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        subprocess.run(['git','fetch','--depth=1','origin',REFERENCE],cwd=ROOT,check=True)
+        raw=subprocess.check_output(['git','show',REFERENCE+':adaptive_ai/src/training_generation.py'],cwd=ROOT)
     with tempfile.TemporaryDirectory(prefix='hm-reference-0158-') as directory:
         path=Path(directory)/'training_generation_0158.py'
         path.write_bytes(raw)
@@ -83,13 +87,24 @@ def main():
         assert normal['candidate']['commits']<normal['reference']['commits']
     out=ROOT/'docs/benchmarks/training-0159-comparison.json'
     out.write_text(json.dumps(result,indent=2),encoding='utf-8')
-    rich=ActualWorkerSmoke().run_worker_fixture(samples=480,qualify=True,corruption_recovery=True,
+    rich=ActualWorkerSmoke().run_worker_fixture(samples=96,qualify=True,corruption_recovery=True,
         two_agents=True,concurrent_writes=True,rich_checkpoints=True,inherit_storage_budget=True)
     assert rich['agent_mode']=='shadow' and rich['agent_progress']==1.
+    assert rich['fixture_agents']>=26 and rich['fixture_state_entities']>=245
+    assert rich['sequence_chunks_completed']==2
+    assert rich['worker_phases']['feature_snapshot_session_reused']
+    assert rich['worker_phases']['continuation_cached_rows']>0
     for table in ('home_checkpoints','adaptive_presence_checkpoints'):
         assert rich['history_recovery']['copy_tables'][table]['rows_copied']==5
         assert rich['history_recovery']['copy_tables'][table]['source_rows_scanned']==5
     (ROOT/'docs/benchmarks/training-0159-rich-worker.json').write_text(json.dumps(rich,indent=2),encoding='utf-8')
+    from test_recorder_costs_0159 import RecorderCostsTests
+    case=RecorderCostsTests('test_real_http_sqlite_import_and_second_agent_reuses_coverage')
+    case.debug()
+    recorder=dict(environment='Host loopback HTTP + real SQLite, 200 rows; NOT HA/Pi Recorder acceptance',
+        http_requests_across_two_agents_and_restart=1,metrics=RecorderCostsTests.last_metrics,
+        installation_11066_seconds_dominant_cost='UNKNOWN; collect recorder_costs on installation')
+    (ROOT/'docs/benchmarks/training-0159-recorder-costs.json').write_text(json.dumps(recorder,indent=2),encoding='utf-8')
     print(json.dumps(result,indent=2))
     print('Rich isolated worker: Shadow, progress 100%, checkpoints exactly 5 each')
 

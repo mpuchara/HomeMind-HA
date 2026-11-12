@@ -790,6 +790,8 @@ def _apply_status(history, payload):
     kwargs = {key: payload[key] for key in allowed if key in payload}
     if kwargs:
         history.set_status(**kwargs)
+    if payload.get('training_stage'):
+        history.training_process_status['stage']=payload['training_stage']
     if isinstance(payload.get('preparation'),dict):
         history.training_process_status['preparation'] = dict(payload['preparation'])
     # Worker status is an observation, not authority to change the parent job's
@@ -1191,6 +1193,7 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     last_cpu_seconds = None
     last_cpu_wall = None
     preparation_token = None
+    preparation_active = False
     preparation_advanced = time.monotonic()
     cancelled = False
     memory_exceeded = False
@@ -1227,12 +1230,13 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
                 _apply_status(history, worker_status)
                 preparation = worker_status.get('preparation') or {}
                 token = (preparation.get('query_key'), preparation.get('current_cursor'), preparation.get('copy_strategy'))
-                if not worker_status.get('training_preparation_active') or token != preparation_token:
+                preparation_active = bool(worker_status.get('training_preparation_active'))
+                if not preparation_active or token != preparation_token:
                     preparation_advanced = time.monotonic()
                     preparation_token = token
                 last_status_mtime = mtime
 
-            if time.monotonic()-preparation_advanced > 600.:
+            if preparation_active and time.monotonic()-preparation_advanced > 600.:
                 _terminate(process, grace)
                 from training_generation import TrainingPreparationNoProgress
                 raise TrainingPreparationNoProgress('Preparation watchdog: no cursor advance for 600s; job='+str(job['job_id'])+'; cursor='+repr(preparation_token))
@@ -1701,6 +1705,14 @@ def _worker_boot_status(job, message, *, stage, progress=None, **details):
     if job.get('_preparation_complete'):
         payload['progress']=min(.99,.1+.9*float(payload['progress']))
     payload.update(details)
+    from training_stages import stage_for
+    payload['training_stage']=stage_for(payload['phase'],message,payload.get('phase_detail'),details.get('preparation'))
+    now=time.monotonic()
+    token=(stage,payload['training_stage'],bool(job.get('_preparation_complete')))
+    previous=job.get('_last_boot_status')
+    if previous and previous[1]==token and now-previous[0]<1.:
+        return
+    job['_last_boot_status']=(now,token)
     _atomic_json(job["status_path"], payload)
 
 
@@ -1710,7 +1722,8 @@ def _worker_status_writer(history, status_path, *, preparation_fraction=0.):
 
     def set_status(*args, **kwargs):
         result = original(*args, **kwargs)
-        phase = getattr(history, 'phase', None)
+        from training_stages import stage_for
+        phase = (getattr(history,'phase',None),stage_for(getattr(history,'phase',''),getattr(history,'message',''),getattr(history,'phase_detail','')))
         now = time.monotonic()
         if phase == last_write[1] and now-last_write[0] < 1. and float(getattr(history,'progress',0.) or 0.) < 1.:
             return result

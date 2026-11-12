@@ -1,0 +1,108 @@
+{
+  "environment": "WSL Linux /tmp ext4 SQLite; host physical block accounting, NOT Raspberry Pi or SD-card acceptance",
+  "reference_commit": "bc60087a2085165ecd6d273a31c1ee25f907d8b6",
+  "five_checkpoint_regression": {
+    "reference": {
+      "outcome": "bounded_infinite_loop",
+      "wall_seconds": 0.8121558249999907,
+      "cpu_seconds": 0.08819302600000001,
+      "process_write_bytes": 2482176,
+      "commits": 100,
+      "metrics": {
+        "source_rows_scanned": 500,
+        "rows_copied": 5,
+        "bytes_copied": 466000,
+        "copy_strategy": "causal_checkpoint_window_and_seed"
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": false,
+          "last": 5
+        }
+      }
+    },
+    "candidate": {
+      "outcome": "completed",
+      "wall_seconds": 0.00792424399992342,
+      "cpu_seconds": 0.002116685000000007,
+      "process_write_bytes": 49152,
+      "commits": 1,
+      "metrics": {
+        "source_rows_scanned": 5,
+        "rows_copied": 5,
+        "bytes_copied": 4660,
+        "copy_strategy": "causal_checkpoint_window_and_seed",
+        "query_key": "adaptive_presence_checkpoints",
+        "previous_cursor": null,
+        "current_cursor": 5,
+        "last_cursor_advance_at": 1794527362.1754508,
+        "payload_rows_fetched": 5,
+        "unique_rows_copied": 5,
+        "duplicate_rows": 0,
+        "payload_bytes_fetched": 4660,
+        "inserted_payload_bytes": 4660,
+        "inserted_payload_bytes_exact": true,
+        "last_new_row_at": 1794527362.1757073,
+        "committed_batches": 1
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 5
+        }
+      }
+    }
+  },
+  "normal_commit_cost": {
+    "reference": {
+      "outcome": "completed",
+      "wall_seconds": 1.2220416709999427,
+      "cpu_seconds": 0.144901803,
+      "process_write_bytes": 12648448,
+      "commits": 65,
+      "metrics": {
+        "source_rows_scanned": 8192,
+        "rows_copied": 8192,
+        "bytes_copied": 7634944,
+        "copy_strategy": "normal_keyset_cost"
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 8192
+        }
+      }
+    },
+    "candidate": {
+      "outcome": "completed",
+      "wall_seconds": 0.29652665499997966,
+      "cpu_seconds": 0.09393770199999996,
+      "process_write_bytes": 9142272,
+      "commits": 9,
+      "metrics": {
+        "source_rows_scanned": 8192,
+        "rows_copied": 8192,
+        "bytes_copied": 7634944,
+        "copy_strategy": "normal_keyset_cost",
+        "query_key": "adaptive_presence_checkpoints",
+        "previous_cursor": 8064,
+        "current_cursor": 8192,
+        "last_cursor_advance_at": 1794527363.9664662,
+        "payload_rows_fetched": 8192,
+        "unique_rows_copied": 8192,
+        "duplicate_rows": 0,
+        "payload_bytes_fetched": 7634944,
+        "inserted_payload_bytes": 7634944,
+        "inserted_payload_bytes_exact": true,
+        "last_new_row_at": 1794527363.9676635,
+        "committed_batches": 64
+      },
+      "queries": {
+        "adaptive_presence_checkpoints": {
+          "done": true,
+          "last": 8192
+        }
+      }
+    }
+  }
+}

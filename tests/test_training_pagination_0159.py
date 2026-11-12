@@ -131,6 +131,20 @@ class PaginationTests(unittest.TestCase):
         self.assertFalse(report['resumed'])
         self.assertEqual(frozen(),before)
 
+    def test_old_deferred_descriptor_is_retired_without_running_old_worker(self):
+        from types import SimpleNamespace
+        import storage
+        import training_process as process
+        p=self.make('home_checkpoints',[])
+        marker=p.destination.parent/'resume.json'
+        marker.write_text(json.dumps(dict(source=str(p.source),state='waiting_wal',job=dict(
+            agent_id='agent',app_version='0.15.8',status_path=str(p.destination.parent/'absent-status.json'),
+            result_path=str(p.destination.parent/'result.json')))),encoding='utf-8')
+        store=SimpleNamespace(path=str(p.source),get_agent_config=lambda aid:{'id':aid})
+        with patch.object(storage,'STORE',store),patch.object(process,'_resume_path',return_value=marker),patch.object(process,'_supervise_generation',side_effect=AssertionError('stale worker executed')):
+            self.assertFalse(process.resume_deferred_training(SimpleNamespace(),'agent'))
+        self.assertFalse(marker.exists())
+
     def test_deferred_cleanup_requires_verified_dead_owner(self):
         from training_process import _retire_legacy_preparation, _generation_path
         import hashlib
