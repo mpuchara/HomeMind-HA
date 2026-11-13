@@ -1834,7 +1834,7 @@ def worker_main(job_path):
         # and long-memory readers/writers share the SAME clean generation path.
         STORE.path = generation_path
         STORE.recovery_generation = True
-        generation_limit=max(16,min(2048,int(OPTIONS.get('max_recovery_disk_mb',512))))*1048576
+        generation_limit=int(generation_report['generation_limit_bytes'])
         STORE.storage_budget = STORE.storage_budget.generation_budget(generation_path,generation_limit)
         STORE._meta_cache.clear()
         STORE._load_meta_cache()

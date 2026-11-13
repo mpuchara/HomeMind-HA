@@ -1,9 +1,9 @@
 {
-  "version": "0.15.9",
+  "version": "0.15.10",
   "release_date": "2026-11-13",
-  "base_version": "0.15.8",
-  "base_commit": "bc60087a2085165ecd6d273a31c1ee25f907d8b6",
-  "release_status": "pi5-manual-validation-candidate-pagination-hotfix",
+  "base_version": "0.15.9",
+  "base_commit": "a55968432c297f3db0b03454a035be73ee7457e5",
+  "release_status": "pi5-manual-validation-candidate-generation-capacity-hotfix",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -1331,7 +1331,7 @@
     "semantics": "no reward/sample selection/feature contract/validation boundary/policy update order/Correct/Candidate/ActionIntent/Executor/physical control change",
     "validation": "1517 tests expected on Python 3.11 and 3.13; final CI confirmation required before merge"
   },
-  "release_validation_pending": false,
+  "release_validation_pending": true,
   "release_014121": {
     "scope": "persistent_selected_agent_transport_acceleration",
     "durable_experience_ids": "loaded once per selected-agent worker sequence; accepted ids join the session set only after successful batch persistence",
@@ -4074,5 +4074,10 @@
     "scope": "Grouped SQL predicates, monotonic cursor invariant, v6 scratch contract and bounded durable preparation commits",
     "physical_pi_validation": "NOT RUN",
     "report": "docs/RELEASE_0_15_9_PL.md"
+  },
+  "release_01510": {
+    "scope": "Separate normal generation quota from corruption recovery; filesystem-aware capacity; larger bounded archive pages",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_10_PL.md"
   }
 }

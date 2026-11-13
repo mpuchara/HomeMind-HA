@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import time
@@ -17,6 +18,7 @@ import time
 from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct_fingerprint, correct_predicate
 from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
+from storage_budget import StoragePressure
 
 CONTRACT = 'training-history-generation-v6'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
@@ -31,6 +33,47 @@ META_KEYS = (
     'training_history_gaps_v1', 'discovery_recorder_gaps_v1',
     'discovery_deep_history_complete',
 )
+
+
+MIB = 1024 * 1024
+
+def scratch_bytes(path):
+    total = 0
+    for suffix in ('', '-journal', '-wal', '-shm'):
+        try:
+            total += Path(str(path)+suffix).stat().st_size
+        except FileNotFoundError:
+            pass
+    return total
+
+
+def generation_capacity(source, working, guard):
+    """Normal copy capacity, not the corruption-salvage budget.
+
+    Keep room for a second generation-sized allocation (rollback journal,
+    indexes or subsequent writes) and the parent's frozen HA reserve.
+    Existing committed scratch is credited only to this job, never to peers.
+    """
+    free = shutil.disk_usage(Path(working).parent).free
+    existing = scratch_bytes(working)
+    headroom = max(0, free - guard.reserve)
+    estimate = max(512*MIB, 2*scratch_bytes(source) + 64*MIB)
+    return min(int(guard.db_limit), estimate, existing + headroom//2)
+
+
+def generation_pressure(reason, working, limit, reserve):
+    free = shutil.disk_usage(Path(working).parent).free
+    error = StoragePressure(
+        f'Training generation storage: {reason}; scratch={scratch_bytes(working)} bytes, '
+        f'generation_limit={limit} bytes, filesystem_free={free} bytes, '
+        f'HA_reserve={reserve} bytes; previous model and committed copy retained')
+    error.reason = reason
+    return error
+
+
+def sleep_total():
+    metrics = TRAINING_BUDGET.snapshot()
+    return metrics.get('throttle_sleep_seconds', 0.) + metrics.get('interactive_sleep_seconds', 0.)
 
 
 def signature(source):
@@ -73,7 +116,10 @@ class Preparation:
         self.depth = max(1,min(48,int(self.options.get('max_recovery_depth',32))))
         self.seconds = max(1,min(600,float(self.options.get('max_recovery_wall_seconds',120))))
         self.memory = max(1,min(32,int(self.options.get('max_recovery_memory_mb',8))))*1048576
-        self.disk = max(16,min(2048,int(self.options.get('max_recovery_disk_mb',512))))*1048576
+        self.recovery_disk = max(16,min(2048,int(self.options.get('max_recovery_disk_mb',512))))*MIB
+        self.disk = self.recovery_disk  # recalculated from the actual filesystem at admission
+        self.recovery_start_bytes = 0
+        self.reserve = 0
         self.source_signature = signature(self.source)
         self.identity = dict(contract=CONTRACT,source=str(self.source),entities=self.entities,
                              start=start,end=end,agent_id=agent_id,rebuild=self.rebuild)
@@ -101,10 +147,10 @@ class Preparation:
     def checkpoint(self):
         if self.cancelled():
             raise InterruptedError('Training history preparation cancelled; copy checkpoint retained')
-        before = TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)
+        before = sleep_total()
         if not self.bootstrap:
             TRAINING_BUDGET.checkpoint('training_history_preparation')
-        self.throttle += max(0.,TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)-before)
+        self.throttle += max(0.,sleep_total()-before)
         from storage_files import worker_storage_budget
         guard=worker_storage_budget()
         if guard.check_operation('source_read',refresh=True)!='normal':
@@ -113,10 +159,10 @@ class Preparation:
         self.wal_peak_bytes=max(self.wal_peak_bytes,wal.stat().st_size if wal.exists() else 0)
         if time.monotonic()-self.last_disk_check>1.:
             self.last_disk_check=time.monotonic()
-            used=sum(p.stat().st_size for p in self.destination.parent.iterdir()
-                     if p.is_file() and p.suffix in ('.db','.db-journal') and not p.is_symlink())
-            if used>2*self.disk:
-                raise RecoveryUnavailable('Preparation directory data quota exhausted; previous model retained')
+            if shutil.disk_usage(self.working.parent).free < self.reserve + 8*MIB:
+                raise generation_pressure('generation_disk_reserve', self.working, self.disk, self.reserve)
+        if self.in_recovery and scratch_bytes(self.working)-self.recovery_start_bytes > self.recovery_disk:
+            raise RecoveryUnavailable('Additional corruption recovery disk budget exhausted; previous model retained')
         if self.in_recovery and self.active_recovery_cpu() > self.seconds:
             raise RecoveryUnavailable('Active corruption recovery budget exhausted; previous model retained')
 
@@ -171,7 +217,8 @@ class Preparation:
             explicit_source_transaction_active=bool(self.src.in_transaction),
             snapshot_max_seconds=self.snapshot_max_seconds,
             job_id=self.destination.stem, commit_seconds=self.commit_seconds,
-            status_write_seconds=self.status_write_seconds)
+            status_write_seconds=self.status_write_seconds, generation_limit_bytes=self.disk,
+            generation_scratch_bytes=scratch_bytes(self.working), recovery_disk_limit_bytes=self.recovery_disk)
         status_started = time.monotonic()
         self.progress(message=f"{'Recovering historical data' if self.in_recovery else 'Preparing training history'}: {table}, {metric.get('rows_copied',0):,} records copied",
             phase_detail='Recovering historical data' if self.in_recovery else 'Copying required metadata / selected history',
@@ -204,6 +251,9 @@ class Preparation:
         last = saved.get('last')
         metric.update(query_key=query_key,previous_cursor=last,current_cursor=last)
         self.emit(table,strategy,True)
+        # Larger archive pages amortize source seeks, guards and durable cursor writes.
+        # Metadata retains its existing page size and transaction contract.
+        page_limit = 512 if history else 128
         while True:
             self.checkpoint()
             where = [f'({predicate})'] if predicate else []
@@ -222,7 +272,7 @@ class Preparation:
                 else:
                     where.append('rowid>?'); values.append(last)
             extra = '' if key == 'ts,id' else 'rowid AS __copy_rowid,'
-            sql = f'SELECT {extra}* FROM {quote(table)}'+(' WHERE '+' AND '.join(where) if where else '')+f' ORDER BY {key} LIMIT 128'
+            sql = f'SELECT {extra}* FROM {quote(table)}'+(' WHERE '+' AND '.join(where) if where else '')+f' ORDER BY {key} LIMIT {page_limit}'
             with closing(self.sql(self.src,'execute',sql,values)) as cursor:
                 batch = self.sql(cursor,'fetchall')
             if not batch:
@@ -230,6 +280,12 @@ class Preparation:
                     self.state['queries'][query_key] = dict(done=True,last=last)
                     self.save()
                 break
+            size = sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
+            if size > self.memory:
+                if page_limit > 1:
+                    page_limit = max(1, page_limit//2)
+                    continue  # same committed cursor; no counters or writes yet
+                raise RecoveryUnavailable('Preparation row exceeds memory budget')
             if key in ('ts,id','event_time,rowid'):
                 stamp, identity = key.split(',')
                 new_cursor = [float(batch[-1][stamp]), int(batch[-1]['id' if identity=='id' else '__copy_rowid'])]
@@ -241,9 +297,6 @@ class Preparation:
                           last_cursor_advance_at=time.time())
             metric['source_rows_scanned'] += len(batch)
             metric['payload_rows_fetched'] = metric['source_rows_scanned']
-            size = sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
-            if size>self.memory:
-                raise RecoveryUnavailable('Preparation row batch exceeds memory budget')
             columns = [c for c in batch[0].keys() if c!='__copy_rowid']
             if history:
                 for row in batch:
@@ -379,6 +432,12 @@ class Preparation:
                 for suffix in ('','-journal','-wal','-shm'):
                     Path(str(self.working)+suffix).unlink(missing_ok=True)
         from training_snapshot import install, capture, validate
+        from storage_files import worker_storage_budget
+        guard = worker_storage_budget()
+        self.reserve = guard.reserve
+        self.disk = generation_capacity(self.source, self.working, guard)
+        if self.disk < 16*MIB or self.disk < scratch_bytes(self.working):
+            raise generation_pressure('generation_capacity', self.working, self.disk, self.reserve)
         self.checkpoint()
         if self.working.exists():
             with closing(sqlite3.connect(self.working)) as old:
@@ -421,15 +480,16 @@ class Preparation:
             self.src.execute('PRAGMA query_only=ON')
             self.src.execute(f'PRAGMA cache_size=-{self.memory//1024}')
             self.dst.execute(f'PRAGMA cache_size=-{self.memory//1024}')
-            self.dst.execute(f'PRAGMA max_page_count={self.disk//4096}')
+            page_size = self.dst.execute('PRAGMA page_size').fetchone()[0]
+            self.dst.execute(f'PRAGMA max_page_count={self.disk//page_size}')
             def interrupt(throttle=True):
                 from storage_files import worker_storage_budget
                 from storage_budget import StoragePressure
                 try:
-                    before=TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)
+                    before=sleep_total()
                     if throttle and not self.bootstrap:
                         TRAINING_BUDGET.checkpoint('training_history_sql_vm')
-                    self.throttle+=max(0.,TRAINING_BUDGET.snapshot().get('sleep_seconds',0.)-before)
+                    self.throttle+=max(0.,sleep_total()-before)
                     guard=worker_storage_budget()
                     if guard.check_operation('source_read',refresh=False)!='normal':
                         self.pressure=guard.pressure()
@@ -461,6 +521,7 @@ class Preparation:
                     ready=json.loads(self.dst.execute('SELECT payload FROM recovery_manifest').fetchone()[0])
                     if ready.get('status')=='READY' and self.dst.execute('PRAGMA quick_check').fetchone()[0]=='ok':
                         ready['resumed']=True
+                        ready['generation_limit_bytes']=self.disk
                         self.dst.close()
                         os.replace(self.working,self.destination)
                         return ready
@@ -562,6 +623,7 @@ class Preparation:
                 recovery_wall_seconds=time.monotonic()-self.started,recovery_active_cpu_seconds=self.recovery_cpu,
                 preparation_cpu_seconds=time.process_time()-self.cpu_started,throttle_seconds=self.throttle,
                 sqlite_wait_seconds=max(0.,self.sqlite_elapsed-self.sqlite_cpu-self.lock_wait),lock_wait_seconds=self.lock_wait,
+                generation_limit_bytes=self.disk, recovery_disk_limit_bytes=self.recovery_disk,
                 copy_tables=self.state['tables'],resumed=self.resumed,availability='PARTIAL' if report['gaps'] else 'HISTORY_OK')
             self.dst.execute('CREATE TABLE IF NOT EXISTS recovery_projection(id INTEGER PRIMARY KEY,lo REAL,hi REAL)')
             self.dst.execute('INSERT OR REPLACE INTO recovery_projection VALUES(1,NULL,NULL)')
@@ -593,6 +655,7 @@ class Preparation:
     def recover(self, failed, report):
         """Prefer selected entity keys from a healthy covering index, never all keys."""
         self.in_recovery = True
+        self.recovery_start_bytes = scratch_bytes(self.working)
         self.recovery_started = time.process_time()
         cache_key=hashlib.sha256((str(self.source)+'|'+','.join(failed)).encode()).hexdigest()[:20]
         cache_path=self.destination.parent/('.quarantine-'+cache_key+'.json')
@@ -715,6 +778,7 @@ class Preparation:
             temp=cache_path.with_suffix('.'+self.destination.name+'.tmp')
             temp.write_text(json.dumps(dict(signature=self.source_signature,missing=missing)),encoding='utf-8')
             os.replace(temp,cache_path)
+        self.checkpoint()
         self.recovery_cpu=self.active_recovery_cpu()
         self.recovery_started=None
         self.in_recovery=False
@@ -722,4 +786,13 @@ class Preparation:
 
 def prepare_generation(source,destination,entities,start,end,*,options=None,cancelled=lambda:False,
                        progress=lambda **kw:None,http_gaps=(),agent_id=None,rebuild=False):
-    return Preparation(source,destination,entities,start,end,options,cancelled,progress,agent_id,rebuild).run(http_gaps)
+    preparation = Preparation(source,destination,entities,start,end,options,cancelled,progress,agent_id,rebuild)
+    try:
+        return preparation.run(http_gaps)
+    except sqlite3.OperationalError as exc:
+        if getattr(exc, 'sqlite_errorcode', 0) & 255 != sqlite3.SQLITE_FULL:
+            raise
+        # SQLITE_FULL can be an SQLite page limit even on a mostly empty disk.
+        # Preserve the committed scratch and distinguish capacity from free space.
+        raise generation_pressure('sqlite_full', preparation.working,
+                                  preparation.disk, preparation.reserve) from exc

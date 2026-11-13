@@ -1,3 +1,9 @@
+# 0.15.10 — Training generation capacity (TEST ONLY)
+
+- Separate normal copy capacity from the 512 MiB corruption-recovery budget. Bound the generation using source size, parent storage policy and actual destination filesystem free space; preserve HA reserve.
+- Larger history keyset pages (512 vs 128), adaptive reduction for large payloads, unchanged cursor and snapshot consistency. Report generation size, limit and actual throttle time.
+- Preserve committed scratch after SQLITE_FULL; surface a storage-specific error with capacity diagnostics. No history retention, Correct or policy changes.
+
 # 0.14.237 — Recorder wire comparison for Pi 5 (TEST ONLY)
 
 ## 0.15.5 — Spójny odczyt treningu przy bieżących zapisach
