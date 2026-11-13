@@ -55,10 +55,15 @@ def generation_capacity(source, working, guard):
     Existing committed scratch is credited only to this job, never to peers.
     """
     free = shutil.disk_usage(Path(working).parent).free
-    existing = scratch_bytes(working)
+    try:
+        existing = Path(working).stat().st_size
+    except FileNotFoundError:
+        existing = 0
     headroom = max(0, free - guard.reserve)
     estimate = max(512*MIB, 2*scratch_bytes(source) + 64*MIB)
-    return min(int(guard.db_limit), estimate, existing + headroom//2)
+    # Credit only the existing main file, once. Existing sidecars already use
+    # filesystem space and cannot be credited towards max_page_count.
+    return min(int(guard.db_limit), estimate, (existing + headroom)//2)
 
 
 def generation_pressure(reason, working, limit, reserve):
@@ -241,6 +246,30 @@ class Preparation:
         self.last_commit = time.monotonic()
         self.pending_batches = self.pending_bytes = 0
 
+    def read_page(self, cursor, limit):
+        """Consume a keyset page under a byte budget with bounded read-ahead.
+
+        The next query starts at the last *accepted* row, so a row read ahead
+        but not copied remains visible on the following page. No source reader
+        survives this call's enclosing closing(cursor) block.
+        """
+        rows, size, fetched = [], 0, 0
+        while len(rows) < limit:
+            chunk = self.sql(cursor,'fetchmany',min(32,limit-len(rows)))
+            if not chunk:
+                break
+            fetched += len(chunk)
+            for row in chunk:
+                row_size = sum(len(v.encode('utf-8')) if isinstance(v,str) else
+                               len(v) if isinstance(v,bytes) else 16 for v in row)
+                if size + row_size > self.memory:
+                    if not rows:
+                        raise RecoveryUnavailable('Preparation row exceeds memory budget')
+                    return rows, size, fetched
+                rows.append(row)
+                size += row_size
+        return rows, size, fetched
+
     def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql'):
         """Keyset paging uses the source's entity/time or agent index, before decoding."""
         query_key = query_key or table
@@ -274,18 +303,12 @@ class Preparation:
             extra = '' if key == 'ts,id' else 'rowid AS __copy_rowid,'
             sql = f'SELECT {extra}* FROM {quote(table)}'+(' WHERE '+' AND '.join(where) if where else '')+f' ORDER BY {key} LIMIT {page_limit}'
             with closing(self.sql(self.src,'execute',sql,values)) as cursor:
-                batch = self.sql(cursor,'fetchall')
+                batch, size, fetched = self.read_page(cursor,page_limit)
             if not batch:
                 if checkpoint:
                     self.state['queries'][query_key] = dict(done=True,last=last)
                     self.save()
                 break
-            size = sum(sum(len(v.encode('utf-8')) if isinstance(v,str) else len(v) if isinstance(v,bytes) else 16 for v in row) for row in batch)
-            if size > self.memory:
-                if page_limit > 1:
-                    page_limit = max(1, page_limit//2)
-                    continue  # same committed cursor; no counters or writes yet
-                raise RecoveryUnavailable('Preparation row exceeds memory budget')
             if key in ('ts,id','event_time,rowid'):
                 stamp, identity = key.split(',')
                 new_cursor = [float(batch[-1][stamp]), int(batch[-1]['id' if identity=='id' else '__copy_rowid'])]
@@ -295,8 +318,10 @@ class Preparation:
                              rows=len(batch), job_id=self.destination.stem, query_key=query_key)
             metric.update(query_key=query_key, previous_cursor=last, current_cursor=new_cursor,
                           last_cursor_advance_at=time.time())
+            metric['payload_rows_fetched'] = metric.get('payload_rows_fetched',metric['source_rows_scanned']) + fetched
+            metric['payload_read_ahead_rows'] = metric.get('payload_read_ahead_rows',0) + fetched-len(batch)
             metric['source_rows_scanned'] += len(batch)
-            metric['payload_rows_fetched'] = metric['source_rows_scanned']
+            metric['copy_pages'] = metric.get('copy_pages',0)+1
             columns = [c for c in batch[0].keys() if c!='__copy_rowid']
             if history:
                 for row in batch:
@@ -592,7 +617,7 @@ class Preparation:
             report = dict(contract=CONTRACT,status='BUILDING',source=str(self.source),agent_id=self.agent_id,
                 gaps=[],skipped_records=None,archive_status='HISTORY_OK',source_signature=self.source_signature,
                 correct_agent_ids=self.agent_ids or None,correct_fingerprint=correct_fingerprint(self.dst,self.agent_ids or None,guard_row),
-                row_counter_semantics='payload rows fetched after SQL predicates; version guards separate; catalog/key probes excluded',
+                row_counter_semantics='source_rows_scanned counts accepted rows; payload_rows_fetched includes bounded read-ahead; version guards separate; catalog/key probes excluded',
                 sqlite_wait_estimated=True)
             report['model_fingerprint'] = self.state['model_fingerprint']
             if self.agent_id:

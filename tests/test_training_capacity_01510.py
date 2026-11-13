@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 import support
-from training_generation import MIB, generation_capacity, generation_pressure, Preparation
+from training_generation import MIB, generation_capacity, generation_pressure, Preparation, prepare_generation
+from storage_budget import StoragePressure
 
 
 class TrainingCapacityTests(unittest.TestCase):
@@ -25,12 +26,28 @@ class TrainingCapacityTests(unittest.TestCase):
             source = Path(tmp)/'archive.db'
             working = Path(tmp)/'scratch.db'
             guard = SimpleNamespace(reserve=2048*MIB, db_limit=8192*MIB)
-            with patch('training_generation.scratch_bytes', side_effect=lambda p: 900*MIB if p==source else 300*MIB), \
+            with working.open('wb') as f:
+                f.truncate(300*MIB)
+            with patch('training_generation.scratch_bytes', return_value=900*MIB), \
                  patch('training_generation.shutil.disk_usage', return_value=SimpleNamespace(free=guard.reserve+200*MIB)):
-                self.assertEqual(generation_capacity(source,working,guard),400*MIB)
+                self.assertEqual(generation_capacity(source,working,guard),250*MIB)
             error = generation_pressure('sqlite_full',working,512*MIB,guard.reserve)
             self.assertEqual(error.reason,'sqlite_full')
             self.assertIn('generation_limit=536870912',str(error))
+
+    def test_real_sqlite_full_is_reported_as_storage_pressure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def fill(preparation, gaps):
+                with sqlite3.connect(preparation.working) as conn:
+                    conn.execute('CREATE TABLE payload(data BLOB)')
+                    conn.execute('PRAGMA max_page_count=4')
+                    conn.execute('INSERT INTO payload VALUES(zeroblob(100000))')
+            with patch.object(Preparation,'run',fill):
+                with self.assertRaises(StoragePressure) as cm:
+                    prepare_generation(root/'source.db',root/'result.db',[],0,1)
+            self.assertEqual(cm.exception.reason,'sqlite_full')
+            self.assertIn('filesystem_free=',str(cm.exception))
 
     def test_history_uses_larger_pages_preserving_keyset_and_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
