@@ -7,3 +7,7 @@ Baza: 0.15.10 (589e0b215a83f664209be5da2cd2a9b8518b014e). Log z 14.11: watchdog 
 - Bufor stron SQLite wykorzystuje limit RAM workera, nie limit odzyskiwania uszkodzonych rekordów.
 - Naprawiono niezgodną wersję statycznego index.html z 0.15.10 (6 błędów CI).
 - Nie skracamy zakresu historii, nie zmieniamy polityk ani danych użytkownika. Przed testem backup dodatku. Brak walidacji na fizycznym Pi.
+
+## Wznowienie po awarii 0.15.10
+
+Przy ponownym Train/Rebuild tego samego agenta można odzyskać zamrożony przedział poprzedniego zadania. Warunki: zachowany deskryptor i checkpoint v6, brak żywego workera i wyniku, zgodne opcje, agent, model, zakres encji, źródło oraz jego fence. Jeżeli któregokolwiek dowodu brakuje, przygotowanie zaczyna się na nowo. Nie rozszerzamy starego kursora o nową datę; późniejsza historia trafia do kolejnego treningu. Watchdog 0.15.11 pozostawia znacznik do jawnej ponownej próby, bez automatycznej pętli.

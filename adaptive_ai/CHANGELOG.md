@@ -3,6 +3,7 @@
 - Distinguish indexed history copy from index construction and integrity validation. Actual SQLite VM progress during named finalization operations keeps the watchdog informed; stalled ordinary keysets still fail closed.
 - Split the RAM-admitted SQLite cache between source and generation; no change to history scope or training semantics.
 - Align static UI version with add-on version.
+- Adopt a provably compatible, abandoned 0.15.10 preparation on explicit Rebuild. Preserve the exact frozen interval and validated committed checkpoint; otherwise rebuild normally. Watchdog failures retain an explicit-retry marker.
 
 # 0.15.10 — Training generation capacity (TEST ONLY)
 

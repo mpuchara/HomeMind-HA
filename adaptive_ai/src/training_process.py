@@ -1038,12 +1038,93 @@ def _retire_legacy_preparation(item):
     return True
 
 
+def _recover_01510_preparation(history, agent_id, store):
+    """Adopt an exact, abandoned v6 job after the 0.15.10 watchdog failure.
+
+    Never reinterpret its cursor against a new end time. Reuse the old frozen
+    interval only after checking the descriptor, dead owner, source fence, scope
+    and current agent/model. If any proof is missing, normal rebuild is safer.
+    """
+    import sqlite3
+    from contextlib import closing
+    from training_generation import CONTRACT
+    from training_snapshot import validate
+    root = _job_dir().resolve()
+    source = Path(store.path).resolve()
+    for path in sorted(root.glob('*.job.json'), key=lambda x:x.stat().st_mtime, reverse=True):
+        if path.is_symlink():
+            continue
+        job = _read_json(path,{}) or {}
+        job_id = str(job.get('job_id',''))
+        if (len(job_id)!=16 or any(c not in '0123456789abcdef' for c in job_id)
+                or path.name!=job_id+'.job.json' or job.get('agent_id')!=agent_id
+                or job.get('app_version')!='0.15.10' or job.get('training_revision')!=TRAINING_REVISION
+                or not job.get('training_generation') or not job.get('sequence_chunks')
+                or bool(job.get('generation_rebuild'))!=bool(getattr(history,'training_generation_rebuild',False))
+                or job.get('agent_fingerprint')!=agent_config_fingerprint(store.get_agent_config(agent_id))
+                or job.get('options_fingerprint')!=training_options_fingerprint(dict(OPTIONS))
+                or job.get('checksum')!=descriptor_checksum(job)):
+            continue
+        status_path = root/(job_id+'.status.json')
+        result_path = root/(job_id+'.result.json')
+        if (Path(job.get('status_path','')).resolve()!=status_path
+                or Path(job.get('result_path','')).resolve()!=result_path
+                or Path(job.get('log_path','')).resolve()!=root/(job_id+'.log')
+                or status_path.is_symlink() or result_path.exists()):
+            continue
+        status = _read_json(status_path,{}) or {}
+        pid = status.get('worker_pid')
+        if not status.get('training_preparation_active') or not pid or _same_process_alive(pid):
+            continue
+        key=hashlib.sha256((str(source)+'|'+str(agent_id)+'|'+CONTRACT).encode()).hexdigest()[:24]
+        working=root/'history_generations'/('.preparing-'+key+'.db')
+        if not working.is_file() or working.is_symlink():
+            continue
+        try:
+            with closing(sqlite3.connect(working,timeout=.2)) as scratch:
+                state=json.loads(scratch.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()[0])
+            identity=dict(contract=CONTRACT,source=str(source),entities=sorted(training_history_scope(job,store)),
+                start=float(job['sequence_start_ts']),end=float(job['sequence_target_end_ts']),
+                agent_id=agent_id,rebuild=bool(job.get('generation_rebuild')))
+            if state.get('identity')!=identity or not state.get('bootstrap_complete'):
+                continue
+            with closing(sqlite3.connect(source.as_uri()+'?mode=ro',uri=True,timeout=.2)) as live:
+                validate(live,state['boundary'])
+                model=live.execute('SELECT model_json FROM rl_models WHERE agent_id=?',(agent_id,)).fetchone()
+                digest=hashlib.sha256(model[0].encode()).hexdigest() if model else None
+                if digest!=state.get('model_fingerprint'):
+                    continue
+                if live.execute("SELECT 1 FROM sqlite_master WHERE name='tiny_mlp_shadow_models'").fetchone():
+                    neural=live.execute('SELECT * FROM tiny_mlp_shadow_models WHERE agent_id=?',(agent_id,)).fetchone()
+                    digest=hashlib.sha256(json.dumps(tuple(neural),default=str).encode()).hexdigest() if neural else None
+                    if digest!=state.get('neural_fingerprint'):
+                        continue
+        except (sqlite3.Error,RuntimeError,OSError,ValueError,TypeError,KeyError):
+            continue
+        job['app_version']=APP_VERSION
+        job['checksum']=descriptor_checksum(job)
+        return dict(source=str(source),state='retry_preparation',attempts=0,job=job,job_path=str(path))
+    return None
+
+
 def resume_deferred_training(history, agent_id):
     from storage import STORE
     item=_read_json(_resume_path(agent_id),{}) or {}
-    if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal'):
+    if not item and getattr(history,'training_generation_rebuild',False):
+        item=_recover_01510_preparation(history,agent_id,STORE) or {}
+        if item:
+            STORE.event(agent_id,'info','training_preparation_resumed',
+                        'Resuming committed preparation from the original frozen history interval',
+                        {'job_id':item['job']['job_id'],'previous_version':'0.15.10'})
+    if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal','retry_preparation'):
         return False
     job=item['job']
+    if item.get('state')=='retry_preparation':
+        if bool(job.get('generation_rebuild'))!=bool(getattr(history,'training_generation_rebuild',False)):
+            return False
+        if job.get('options_fingerprint')!=training_options_fingerprint(dict(OPTIONS)):
+            _resume_path(agent_id).unlink(missing_ok=True)
+            return False
     if item.get('state')=='running':
         item['attempts']=int(item.get('attempts',0))+1
     if job.get('app_version')!=APP_VERSION or job.get('agent_fingerprint')!=agent_config_fingerprint(STORE.get_agent_config(agent_id)):
@@ -1114,8 +1195,15 @@ def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
         except InterruptedError:
             marker.unlink(missing_ok=True)
             raise
-        except Exception:
-            marker.unlink(missing_ok=True)
+        except Exception as exc:
+            from training_generation import TrainingPreparationNoProgress
+            if isinstance(exc,TrainingPreparationNoProgress):
+                # Explicit retry may resume the same durable prefix, but a
+                # watchdog failure must not create an automatic restart loop.
+                state.update(state='retry_preparation')
+                _atomic_json(marker,state)
+            else:
+                marker.unlink(missing_ok=True)
             raise
 
 
