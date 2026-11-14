@@ -1,9 +1,9 @@
 {
-  "version": "0.15.10",
-  "release_date": "2026-11-13",
-  "base_version": "0.15.9",
-  "base_commit": "a55968432c297f3db0b03454a035be73ee7457e5",
-  "release_status": "pi5-manual-validation-candidate-generation-capacity-hotfix",
+  "version": "0.15.11",
+  "release_date": "2026-11-14",
+  "base_version": "0.15.10",
+  "base_commit": "589e0b215a83f664209be5da2cd2a9b8518b014e",
+  "release_status": "pi5-manual-validation-candidate-finalization-watchdog-hotfix",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4079,5 +4079,10 @@
     "scope": "Separate normal generation quota from corruption recovery; filesystem-aware capacity; larger bounded archive pages",
     "physical_pi_validation": "NOT RUN",
     "report": "docs/RELEASE_0_15_10_PL.md"
+  },
+  "release_01511": {
+    "scope": "Explicit index/quick_check finalization progress, RAM-admitted SQLite cache, UI version alignment",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_11_PL.md"
   }
 }

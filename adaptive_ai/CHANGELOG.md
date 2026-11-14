@@ -1,3 +1,9 @@
+# 0.15.11 — Generation finalization watchdog (TEST ONLY)
+
+- Distinguish indexed history copy from index construction and integrity validation. Actual SQLite VM progress during named finalization operations keeps the watchdog informed; stalled ordinary keysets still fail closed.
+- Split the RAM-admitted SQLite cache between source and generation; no change to history scope or training semantics.
+- Align static UI version with add-on version.
+
 # 0.15.10 — Training generation capacity (TEST ONLY)
 
 - Separate normal copy capacity from the 512 MiB corruption-recovery budget. Bound the generation using source size, parent storage policy and actual destination filesystem free space; preserve HA reserve.

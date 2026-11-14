@@ -148,6 +148,9 @@ class Preparation:
         self.last_commit = time.monotonic()
         self.commit_seconds = 0.
         self.status_write_seconds = 0.
+        self.operation = None
+        self.operation_vm_steps = 0
+        self.operation_started = 0.
 
     def checkpoint(self):
         if self.cancelled():
@@ -206,6 +209,21 @@ class Preparation:
             elif getattr(connection,'connection',None) is getattr(self,'src',None):
                 self.source_sql_max_seconds=max(self.source_sql_max_seconds,time.monotonic()-getattr(self,'source_query_started',before))
 
+    def begin_operation(self, name):
+        """Finalization has no history cursor. Publish its own measured work."""
+        self.operation = name
+        self.operation_vm_steps = 0
+        self.operation_started = time.monotonic()
+        self.emit('entity_history','generation_finalization',True)
+
+    def operation_step(self, steps=10000):
+        if self.operation is not None:
+            self.operation_vm_steps += steps
+            self.emit('entity_history','generation_finalization')
+
+    def end_operation(self):
+        self.operation = None
+
     def emit(self, table, strategy, force=False):
         now = time.monotonic()
         if not force and now-self.last_report < 1.:
@@ -224,9 +242,18 @@ class Preparation:
             job_id=self.destination.stem, commit_seconds=self.commit_seconds,
             status_write_seconds=self.status_write_seconds, generation_limit_bytes=self.disk,
             generation_scratch_bytes=scratch_bytes(self.working), recovery_disk_limit_bytes=self.recovery_disk)
+        message = f"{'Recovering historical data' if self.in_recovery else 'Preparing training history'}: {table}, {metric.get('rows_copied',0):,} records copied"
+        detail = 'Recovering historical data' if self.in_recovery else 'Copying required metadata / selected history'
+        if self.operation is not None:
+            metric.update(stage='Finalizing generation',operation=self.operation,
+                          operation_vm_steps=self.operation_vm_steps,
+                          operation_elapsed_seconds=round(now-self.operation_started,3),
+                          query_key=None,current_cursor=None,previous_cursor=None)
+            message = 'Finalizing training generation: '+self.operation
+            detail = self.operation
         status_started = time.monotonic()
-        self.progress(message=f"{'Recovering historical data' if self.in_recovery else 'Preparing training history'}: {table}, {metric.get('rows_copied',0):,} records copied",
-            phase_detail='Recovering historical data' if self.in_recovery else 'Copying required metadata / selected history',
+        self.progress(message=message,
+            phase_detail=detail,
             preparation=metric,work_done=metric.get('rows_copied',0),work_total=0,
             progress=min(.09,.01+.08*len([x for x in self.state['queries'].values() if x.get('done')])/(len(self.schema)+len(self.entities)+1)))
         self.status_write_seconds += time.monotonic()-status_started
@@ -503,8 +530,11 @@ class Preparation:
                 closing(sqlite3.connect(self.working,timeout=5)) as self.dst:
             self.src.row_factory = sqlite3.Row
             self.src.execute('PRAGMA query_only=ON')
-            self.src.execute(f'PRAGMA cache_size=-{self.memory//1024}')
-            self.dst.execute(f'PRAGMA cache_size=-{self.memory//1024}')
+            # Payload budget and SQLite page cache are different resources.
+            # Split the already RAM-admitted worker cache across these two connections.
+            cache_mb = max(2,min(256,int(self.options.get('training_worker_effective_sqlite_cache_mb',16))))
+            self.src.execute(f'PRAGMA cache_size=-{cache_mb*512}')
+            self.dst.execute(f'PRAGMA cache_size=-{cache_mb*512}')
             page_size = self.dst.execute('PRAGMA page_size').fetchone()[0]
             self.dst.execute(f'PRAGMA max_page_count={self.disk//page_size}')
             def interrupt(throttle=True):
@@ -522,7 +552,13 @@ class Preparation:
                 except StoragePressure as exc:
                     self.pressure=exc
                     return 1
-                return int(self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds))
+                if self.cancelled() or (self.in_recovery and self.active_recovery_cpu()>self.seconds):
+                    return 1
+                # VM counters are accepted only in named finalization operations,
+                # never as a substitute for advancing an ordinary copy cursor.
+                if throttle:
+                    self.operation_step()
+                return 0
             self.src.set_progress_handler(lambda: interrupt(False),10000)
             self.dst.set_progress_handler(interrupt,10000)
             self.schema = self.state['source_schema'] if 'source_schema' in self.state else []
@@ -544,7 +580,10 @@ class Preparation:
                 self.resumed = True
                 if self.dst.execute("SELECT 1 FROM sqlite_master WHERE name='recovery_manifest'").fetchone():
                     ready=json.loads(self.dst.execute('SELECT payload FROM recovery_manifest').fetchone()[0])
-                    if ready.get('status')=='READY' and self.dst.execute('PRAGMA quick_check').fetchone()[0]=='ok':
+                    self.begin_operation('Validate retained generation (quick_check)')
+                    valid_ready = ready.get('status')=='READY' and self.sql(self.dst,'execute','PRAGMA quick_check').fetchone()[0]=='ok'
+                    self.end_operation()
+                    if valid_ready:
                         ready['resumed']=True
                         ready['generation_limit_bytes']=self.disk
                         self.dst.close()
@@ -642,14 +681,21 @@ class Preparation:
                         failure_reason='HISTORY_GAP_HTTP500' if not gap.get('failure_reason') or 'HTTP500' in gap.get('failure_reason','') else 'HISTORY_UNKNOWN',recovery_attempts=0))
             for item in self.schema:
                 if item['type']=='index':
+                    self.begin_operation('Build index '+item['name'])
                     self.checkpoint()
                     self.sql(self.dst,'execute',item['sql'].replace('CREATE INDEX ','CREATE INDEX IF NOT EXISTS ',1).replace('CREATE UNIQUE INDEX ','CREATE UNIQUE INDEX IF NOT EXISTS ',1))
-            report.update(recovered_records=self.dst.execute('SELECT COUNT(*) FROM entity_history').fetchone()[0],attempts=self.attempts,
+                    self.dst.commit()
+                    self.end_operation()
+            self.begin_operation('Count copied history')
+            copied_records=self.sql(self.dst,'execute','SELECT COUNT(*) FROM entity_history').fetchone()[0]
+            self.end_operation()
+            report.update(recovered_records=copied_records,attempts=self.attempts,
                 recovery_wall_seconds=time.monotonic()-self.started,recovery_active_cpu_seconds=self.recovery_cpu,
                 preparation_cpu_seconds=time.process_time()-self.cpu_started,throttle_seconds=self.throttle,
                 sqlite_wait_seconds=max(0.,self.sqlite_elapsed-self.sqlite_cpu-self.lock_wait),lock_wait_seconds=self.lock_wait,
                 generation_limit_bytes=self.disk, recovery_disk_limit_bytes=self.recovery_disk,
                 copy_tables=self.state['tables'],resumed=self.resumed,availability='PARTIAL' if report['gaps'] else 'HISTORY_OK')
+            self.begin_operation('Finalize recovery projection and manifest')
             self.dst.execute('CREATE TABLE IF NOT EXISTS recovery_projection(id INTEGER PRIMARY KEY,lo REAL,hi REAL)')
             self.dst.execute('INSERT OR REPLACE INTO recovery_projection VALUES(1,NULL,NULL)')
             if report['gaps']:
@@ -671,8 +717,11 @@ class Preparation:
             self.dst.execute('CREATE TABLE recovery_manifest(payload TEXT NOT NULL)')
             self.dst.execute('INSERT INTO recovery_manifest VALUES(?)',(json.dumps(report),))
             self.dst.commit()
+            self.end_operation()
+            self.begin_operation('Validate generation (quick_check)')
             if self.sql(self.dst,'execute','PRAGMA quick_check').fetchone()[0]!='ok':
                 raise RecoveryUnavailable('Recovered generation failed quick_check')
+            self.end_operation()
             self.emit('entity_history','complete',True)
         os.replace(self.working,self.destination)
         return report

@@ -1119,6 +1119,14 @@ def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
             raise
 
 
+def preparation_progress_token(preparation):
+    # A row-copy watchdog remains strict. Only a distinct finalization
+    # operation may advance using actual SQLite VM work instead of row keys.
+    if preparation.get('copy_strategy')=='generation_finalization' and preparation.get('operation'):
+        return ('finalization',preparation['operation'],preparation.get('operation_vm_steps',0))
+    return (preparation.get('query_key'), preparation.get('current_cursor'), preparation.get('copy_strategy'))
+
+
 def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     from storage import STORE
     sequence_chunks=job.get('sequence_chunks')
@@ -1229,7 +1237,7 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
                 worker_status = _read_json(status_path, {}) or {}
                 _apply_status(history, worker_status)
                 preparation = worker_status.get('preparation') or {}
-                token = (preparation.get('query_key'), preparation.get('current_cursor'), preparation.get('copy_strategy'))
+                token = preparation_progress_token(preparation)
                 preparation_active = bool(worker_status.get('training_preparation_active'))
                 if not preparation_active or token != preparation_token:
                     preparation_advanced = time.monotonic()
@@ -1239,7 +1247,7 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
             if preparation_active and time.monotonic()-preparation_advanced > 600.:
                 _terminate(process, grace)
                 from training_generation import TrainingPreparationNoProgress
-                raise TrainingPreparationNoProgress('Preparation watchdog: no cursor advance for 600s; job='+str(job['job_id'])+'; cursor='+repr(preparation_token))
+                raise TrainingPreparationNoProgress('Preparation watchdog: no measured progress for 600s; job='+str(job['job_id'])+'; progress='+repr(preparation_token))
             latest_metrics = _proc_metrics(process.pid)
             sample_wall = time.monotonic()
             sample_cpu = latest_metrics.get("cpu_seconds")
@@ -1708,7 +1716,8 @@ def _worker_boot_status(job, message, *, stage, progress=None, **details):
     from training_stages import stage_for
     payload['training_stage']=stage_for(payload['phase'],message,payload.get('phase_detail'),details.get('preparation'))
     now=time.monotonic()
-    token=(stage,payload['training_stage'],bool(job.get('_preparation_complete')))
+    token=(stage,payload['training_stage'],bool(job.get('_preparation_complete')),
+           (details.get('preparation') or {}).get('operation'))
     previous=job.get('_last_boot_status')
     if previous and previous[1]==token and now-previous[0]<1.:
         return
