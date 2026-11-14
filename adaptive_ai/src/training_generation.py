@@ -557,7 +557,11 @@ class Preparation:
                 # VM counters are accepted only in named finalization operations,
                 # never as a substitute for advancing an ordinary copy cursor.
                 if throttle:
-                    self.operation_step()
+                    try:
+                        self.operation_step()
+                    except StoragePressure as exc:
+                        self.pressure=exc
+                        return 1
                 return 0
             self.src.set_progress_handler(lambda: interrupt(False),10000)
             self.dst.set_progress_handler(interrupt,10000)

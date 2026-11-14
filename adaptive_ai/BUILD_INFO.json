@@ -4081,8 +4081,16 @@
     "report": "docs/RELEASE_0_15_10_PL.md"
   },
   "release_01511": {
-    "scope": "Explicit index/quick_check finalization progress, RAM-admitted SQLite cache, UI version alignment",
+    "scope": "Explicit index/quick_check finalization progress, RAM-admitted SQLite cache, UI version alignment; verified old descriptor adoption, explicit retry, periodic preparation diagnostics",
     "physical_pi_validation": "NOT RUN",
-    "report": "docs/RELEASE_0_15_11_PL.md"
+    "report": "docs/RELEASE_0_15_11_PL.md",
+    "previous_ci": {
+      "version": "0.15.10",
+      "tests_per_python": 3282,
+      "failures_per_python": 6,
+      "reason": "Static index version mismatch",
+      "run": 43435988743
+    },
+    "validation": "PENDING"
   }
 }

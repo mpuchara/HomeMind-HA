@@ -11,3 +11,5 @@ Baza: 0.15.10 (589e0b215a83f664209be5da2cd2a9b8518b014e). Log z 14.11: watchdog 
 ## Wznowienie po awarii 0.15.10
 
 Przy ponownym Train/Rebuild tego samego agenta można odzyskać zamrożony przedział poprzedniego zadania. Warunki: zachowany deskryptor i checkpoint v6, brak żywego workera i wyniku, zgodne opcje, agent, model, zakres encji, źródło oraz jego fence. Jeżeli któregokolwiek dowodu brakuje, przygotowanie zaczyna się na nowo. Nie rozszerzamy starego kursora o nową datę; późniejsza historia trafia do kolejnego treningu. Watchdog 0.15.11 pozostawia znacznik do jawnej ponownej próby, bez automatycznej pętli.
+
+Log dodatku zawiera teraz co najwyżej co 60 s (oraz przy zmianie etapu) linię `[training] preparation` z liczbą rekordów, kursorem, etapem, krokami VM, czasem CPU/SQL/throttle i wielkością generacji. Pozwala rozróżnić powolną pracę od zawieszenia bez eksportowania bazy.

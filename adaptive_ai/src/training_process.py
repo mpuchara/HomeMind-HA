@@ -1291,6 +1291,8 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     preparation_token = None
     preparation_active = False
     preparation_advanced = time.monotonic()
+    preparation_logged_at = float('-inf')
+    preparation_log_stage = None
     cancelled = False
     memory_exceeded = False
     history.training_process_status = {
@@ -1330,6 +1332,18 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
                 if not preparation_active or token != preparation_token:
                     preparation_advanced = time.monotonic()
                     preparation_token = token
+                if preparation_active and preparation:
+                    now = time.monotonic()
+                    log_stage = (preparation.get('stage'),preparation.get('operation'))
+                    if log_stage!=preparation_log_stage or now-preparation_logged_at>=60.:
+                        keys=('stage','operation','operation_vm_steps','operation_elapsed_seconds',
+                              'query_key','current_cursor','rows_copied','copy_pages','elapsed_seconds',
+                              'cpu_seconds','sqlite_seconds','throttle_seconds','commit_seconds',
+                              'generation_scratch_bytes','generation_limit_bytes','wal_peak_bytes')
+                        diagnostic={k:preparation[k] for k in keys if k in preparation}
+                        print('[training] preparation '+str(job['job_id'])+' '+json.dumps(diagnostic,default=str),flush=True)
+                        preparation_log_stage=log_stage
+                        preparation_logged_at=now
                 last_status_mtime = mtime
 
             if preparation_active and time.monotonic()-preparation_advanced > 600.:
