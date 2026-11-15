@@ -112,7 +112,6 @@ class Preparation:
         self.end, self.agent_id = float(end), agent_id
         self.start = max(float(start), self.end-7*86400.)
         self.target_entities = list(self.entities)  # legacy/unscoped caller
-        self.metadata_gaps = []
         self.rebuild=bool(rebuild)
         self.started, self.cpu_started = time.monotonic(), time.process_time()
         self.throttle = self.sqlite_elapsed = self.sqlite_cpu = self.lock_wait = 0.
@@ -871,7 +870,7 @@ class Preparation:
             if cols[:2]==['entity_id','event_time']:
                 indexes.append(name)
         if not indexes:
-            raise sqlite3.DatabaseError('database disk image is malformed: no covering event index')
+            raise sqlite3.DatabaseError('database disk image is malformed')
         upper=self.state['boundary']['tables'][table]['upper']
         def read_keys(keys,depth=0):
             self.checkpoint()
@@ -916,6 +915,7 @@ class Preparation:
             metric['source_rows_scanned']+=len(rows)
             metric['rows_copied']+=self.dst.total_changes-before
             metric['bytes_copied']+=size
+            metric['pending_batches']=metric.get('pending_batches',0)+1
             self.pending_bytes+=size
             self.pending_batches+=1
         last_error=None
@@ -933,6 +933,10 @@ class Preparation:
                     next_cursor=(float(batch[-1][1]),int(batch[-1][0]))
                     advancing_cursor(last,next_cursor,table=table,strategy='metadata_witness',rows=len(batch),job_id=self.destination.stem,query_key=entity)
                     read_keys([(int(r[0]),float(r[1])) for r in batch])
+                    metric=self.state['tables'][table]
+                    metric.update(query_key=table+':'+entity+':witness:'+index,
+                                  previous_cursor=last,current_cursor=next_cursor,
+                                  last_cursor_advance_at=time.time())
                     last=next_cursor
                     self.save(force=False)
                     self.emit(table,'metadata_witness')

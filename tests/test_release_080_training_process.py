@@ -666,6 +666,15 @@ class ActualWorkerSmoke(unittest.TestCase):
         self.assertEqual(result['agent_mode'],'shadow')
         self.assertEqual(result['agent_progress'],1.)
 
+    def test_generation_child_completes_with_real_damaged_context_provenance(self):
+        result=self.run_worker_fixture(samples=480,corruption_recovery=True,
+            qualify=True,inherit_storage_budget=True,corrupt_context_provenance=True)
+        self.assertEqual(result['agent_mode'],'shadow')
+        self.assertEqual(result['agent_progress'],1.)
+        self.assertEqual(result['history_recovery']['training_window']['target_provenance_entities'],['switch.target'])
+        self.assertEqual(result['history_recovery']['gaps'],[])
+        self.assertGreater(result['benchmark_counts']['total'],0) if 'total' in (result['benchmark_counts'] or {}) else None
+
     def test_worker_with_corrupt_archive_indexes_keeps_the_same_learned_model(self):
         reference = self.run_worker_fixture(samples=120)
         recovered = self.run_worker_fixture(samples=120, corrupt_archive_indexes=True)
@@ -689,7 +698,8 @@ class ActualWorkerSmoke(unittest.TestCase):
                            qualify=False, concurrent_writes=False,
                            corruption_recovery=False, corrupt_table_page=False,
                            two_agents=False, http_gap=False, kill_and_restart=False,
-                             expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False, rich_checkpoints=False):
+                             expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False, rich_checkpoints=False,
+                             corrupt_context_provenance=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -917,6 +927,32 @@ class ActualWorkerSmoke(unittest.TestCase):
                 with db.open('r+b') as stream:
                     stream.seek((page-1)*size)
                     stream.write(b'\xff')
+
+            if corrupt_context_provenance:
+                from provenance import ProvenanceJournal
+                ProvenanceJournal(store)
+                with store.conn() as conn:
+                    conn.executemany("INSERT INTO provenance_events(event_id,contract_version,event_time,received_time,entity_id,source,origin,state_json) VALUES(?,1,?,?,?,'fixture','user',?)",
+                        [(f'context:{i}',base+i*.1,base+i*.1,'binary_sensor.motion','x'*300) for i in range(2500)])
+                    # Target event is intentionally in a separate later payload page.
+                    conn.execute("INSERT INTO provenance_events(event_id,contract_version,event_time,received_time,entity_id,source,origin) VALUES('target:0',1,?,?,'switch.target','fixture','user')",(base,base))
+                    conn.execute("INSERT INTO provenance_history_links VALUES('switch.target',?,'target:0')",(base,))
+                with sqlite3.connect(db) as conn:
+                    conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                    size=conn.execute('PRAGMA page_size').fetchone()[0]
+                    page=conn.execute("SELECT rootpage FROM sqlite_master WHERE name='provenance_events'").fetchone()[0]
+                raw=db.read_bytes()
+                while raw[(page-1)*size]==5:
+                    offset=(page-1)*size
+                    cell=int.from_bytes(raw[offset+12:offset+14],'big')
+                    page=int.from_bytes(raw[offset+cell:offset+cell+4],'big')
+                with db.open('r+b') as stream:
+                    stream.seek((page-1)*size)
+                    stream.write(b'\xff')
+                with sqlite3.connect(db) as conn:
+                    with self.assertRaises(sqlite3.DatabaseError):
+                        conn.execute("SELECT state_json FROM provenance_events WHERE entity_id='binary_sensor.motion'").fetchall()
+                    self.assertEqual(conn.execute("SELECT origin FROM provenance_events WHERE entity_id='switch.target'").fetchall(),[('user',)])
 
             if corrupt_archive_indexes:
                 # Modify only disposable index pages after closing SQLite readers.

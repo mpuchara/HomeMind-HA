@@ -1411,7 +1411,7 @@ class HistoryManager(threading.Thread):
         if not OPTIONS.get("training_process_isolation", True):
             STORE.set_training_progress(agent_id, start_ts, cursor, target_end)
         STORE.event(agent_id, "info", "agent_rebuild_started" if rebuild else "agent_resume_started",
-                    "Full historical rebuild started from archive beginning" if rebuild else
+                    "Historical rebuild started (up to 7 days)" if rebuild else
                     "Training resumed from saved historical cursor",
                     {"start_ts": start_ts, "cursor_ts": cursor, "end_ts": target_end,
                      "rebuild_reason": rebuild_reason if rebuild else None})
