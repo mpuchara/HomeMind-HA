@@ -1,9 +1,9 @@
 {
-  "version": "0.15.11",
-  "release_date": "2026-11-14",
-  "base_version": "0.15.10",
-  "base_commit": "589e0b215a83f664209be5da2cd2a9b8518b014e",
-  "release_status": "pi5-manual-validation-candidate-finalization-watchdog-hotfix",
+  "version": "0.15.12",
+  "release_date": "2026-11-15",
+  "base_version": "0.15.11",
+  "base_commit": "83ce27e13e8036e95f3417836bb7b04aad26aab5",
+  "release_status": "pi5-manual-validation-candidate-training-throughput-and-prefix",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4092,5 +4092,11 @@
       "run": 43435988743
     },
     "validation": "PENDING"
+  },
+  "release_01512": {
+    "scope": "Scoped history mutation fences, no-op UPSERT guard, routine retention coordination, batched private WAL scratch, early validation",
+    "validation": "PENDING",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_12_PL.md"
   }
 }

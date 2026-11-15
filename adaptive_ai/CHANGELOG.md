@@ -1,3 +1,9 @@
+# 0.15.12 — Training throughput and scoped prefix (TEST ONLY)
+
+- Guard selected historical entities instead of invalidating training for unrelated archive changes; genuine changes in the frozen input still fail closed, now checked during preparation.
+- Defer routine retention of training inputs while an isolated worker is supervised; storage pressure and other safety gates remain authoritative.
+- Avoid no-op single-row history UPSERTs. Copy private scratch via bounded WAL/NORMAL batches and seal to standalone DB before publication; source durability settings unchanged.
+
 # 0.15.11 — Generation finalization watchdog (TEST ONLY)
 
 - Distinguish indexed history copy from index construction and integrity validation. Actual SQLite VM progress during named finalization operations keeps the watchdog informed; stalled ordinary keysets still fail closed.

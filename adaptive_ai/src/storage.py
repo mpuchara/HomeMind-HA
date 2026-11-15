@@ -1399,7 +1399,11 @@ class Store:
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
                      source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
-                     mutation_revision=excluded.mutation_revision""",
+                     mutation_revision=excluded.mutation_revision
+                   WHERE entity_history.state IS NOT excluded.state
+                     OR (excluded.attributes_json!='{}' AND entity_history.attributes_json IS NOT excluded.attributes_json)
+                     OR (excluded.context_user_id IS NOT NULL AND entity_history.context_user_id IS NOT excluded.context_user_id)
+                     OR (excluded.source='ha_history_full' AND entity_history.source IS NOT excluded.source)""",
                 (
                     entity_id, float(ts), None if state is None else str(state),
                     attrs, user_id, source, revision,

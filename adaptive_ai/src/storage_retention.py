@@ -58,6 +58,11 @@ class StorageRetention:
             self.thread.join()
 
     def _delete_batch(self, c, table, predicate, parameters, order, tables):
+        from training_snapshot import retention_protected
+        # Routine retention can wait until the worker releases its snapshot.
+        # Do not stop live archiving, WAL maintenance or emergency storage GC.
+        if retention_protected(self.store,table):
+            return 0
         relation = {'feature_windows': ('window_id', 'feature_window_entities'),
                     'episode_evaluator_episodes': ('episode_id', 'episode_evaluator_policy_results')}.get(table)
         if relation and relation[1] in tables:

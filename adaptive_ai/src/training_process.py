@@ -1217,6 +1217,15 @@ def preparation_progress_token(preparation):
 
 def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     from storage import STORE
+    from training_snapshot import protect_training_inputs
+    if job.get('training_generation'):
+        with protect_training_inputs(STORE):
+            return _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path)
+    return _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path)
+
+
+def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
+    from storage import STORE
     sequence_chunks=job.get('sequence_chunks')
     parallel_slots = max(
         1, int(getattr(history, "training_parallel_slot_count", 1) or 1)

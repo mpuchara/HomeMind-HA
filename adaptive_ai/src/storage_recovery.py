@@ -179,6 +179,10 @@ class StorageRecovery:
                         # Slow microSD metadata reads must not consume every
                         # slice before even one bounded batch can make progress.
                         attempted += 1
+                        from training_snapshot import retention_protected
+                        if not self.active and retention_protected(self.store,table):
+                            exhausted.add(table)
+                            continue
                         with self.store.conn() as c:
                             expression = specs[table][0]
                             c.execute(f'CREATE INDEX IF NOT EXISTS idx_storage_retention_{table} ON {table}({expression})')

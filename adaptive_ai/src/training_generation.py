@@ -151,6 +151,7 @@ class Preparation:
         self.operation = None
         self.operation_vm_steps = 0
         self.operation_started = 0.
+        self.last_prefix_check = 0.
 
     def checkpoint(self):
         if self.cancelled():
@@ -169,6 +170,14 @@ class Preparation:
             self.last_disk_check=time.monotonic()
             if shutil.disk_usage(self.working.parent).free < self.reserve + 8*MIB:
                 raise generation_pressure('generation_disk_reserve', self.working, self.disk, self.reserve)
+        # Fail early on a real in-scope mutation instead of spending hours
+        # copying a generation we already know cannot be published.
+        if self.state.get('boundary',{}).get('entity_scope') is not None and getattr(self,'src',None) is not None:
+            now=time.monotonic()
+            if now-self.last_prefix_check>=30.:
+                from training_snapshot import validate
+                validate(self.src,self.state['boundary'])
+                self.last_prefix_check=now
         if self.in_recovery and scratch_bytes(self.working)-self.recovery_start_bytes > self.recovery_disk:
             raise RecoveryUnavailable('Additional corruption recovery disk budget exhausted; previous model retained')
         if self.in_recovery and self.active_recovery_cpu() > self.seconds:
@@ -260,8 +269,9 @@ class Preparation:
 
     def save(self, force=True):
         # Rows and the cursor always commit together. Bound uncommitted work by
-        # eight pages, the preparation memory budget, or one second of work.
-        if not force and self.pending_batches < 8 and self.pending_bytes < self.memory and time.monotonic()-self.last_commit < 1.:
+        # 64 bounded pages, the payload memory budget, or five seconds of work.
+        # Scratch is rebuildable. Rows and their cursor still commit together.
+        if not force and self.pending_batches < 64 and self.pending_bytes < self.memory and time.monotonic()-self.last_commit < 5.:
             return
         started = time.monotonic()
         for metric in self.state['tables'].values():
@@ -308,8 +318,8 @@ class Preparation:
         metric.update(query_key=query_key,previous_cursor=last,current_cursor=last)
         self.emit(table,strategy,True)
         # Larger archive pages amortize source seeks, guards and durable cursor writes.
-        # Metadata retains its existing page size and transaction contract.
-        page_limit = 512 if history else 128
+        # Entity-scoped metadata has the same indexed, bounded reader contract.
+        page_limit = 512 if history or strategy=='entity_time_keyset' else 128
         while True:
             self.checkpoint()
             where = [f'({predicate})'] if predicate else []
@@ -334,7 +344,12 @@ class Preparation:
             if not batch:
                 if checkpoint:
                     self.state['queries'][query_key] = dict(done=True,last=last)
-                    self.save()
+                    if strategy=='entity_time_keyset':
+                        # Empty/small entities no longer cause one fsync apiece.
+                        self.pending_batches += 1
+                        self.save(force=False)
+                    else:
+                        self.save()
                 break
             if key in ('ts,id','event_time,rowid'):
                 stamp, identity = key.split(',')
@@ -506,7 +521,8 @@ class Preparation:
             guard=worker_storage_budget()
             if guard.check(refresh=True)!='normal':
                 raise guard.pressure()
-            with closing(sqlite3.connect(self.source,timeout=.2)) as fence:
+            with closing(sqlite3.connect(self.source,timeout=2.)) as fence:
+                fence.execute('PRAGMA synchronous=NORMAL')
                 page_size=fence.execute('PRAGMA page_size').fetchone()[0]
                 fence.execute(f'PRAGMA max_page_count={max(1,guard.db_limit//page_size)}')
                 install(fence)
@@ -516,7 +532,7 @@ class Preparation:
                 fence.execute('BEGIN IMMEDIATE')
                 try:
                     self.src=fence
-                    self.state['boundary']=capture(fence,self.end)
+                    self.state['boundary']=capture(fence,self.end,self.entities)
                     self.state['source_schema']=[dict(row) for row in fence.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB '__training_*'").fetchall()]
                     self.agent_ids=[row[0] for row in fence.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))] if self.agent_id else []
                     self.initial_metadata=self.read_initial_metadata(fence)
@@ -535,6 +551,13 @@ class Preparation:
             cache_mb = max(2,min(256,int(self.options.get('training_worker_effective_sqlite_cache_mb',16))))
             self.src.execute(f'PRAGMA cache_size=-{cache_mb*512}')
             self.dst.execute(f'PRAGMA cache_size=-{cache_mb*512}')
+            # Only the private, disposable copy uses WAL/NORMAL. This removes
+            # the two filesystem syncs per tiny rollback-journal transaction.
+            # A lost power-cycle tail is reconstructed from the atomic cursor.
+            self.dst.execute('PRAGMA journal_mode=WAL').fetchone()
+            self.dst.execute('PRAGMA synchronous=NORMAL')
+            self.dst.execute('PRAGMA wal_autocheckpoint=1024')
+            self.dst.execute('PRAGMA journal_size_limit=4194304')
             page_size = self.dst.execute('PRAGMA page_size').fetchone()[0]
             self.dst.execute(f'PRAGMA max_page_count={self.disk//page_size}')
             def interrupt(throttle=True):
@@ -590,6 +613,7 @@ class Preparation:
                     if valid_ready:
                         ready['resumed']=True
                         ready['generation_limit_bytes']=self.disk
+                        self.finish_scratch()
                         self.dst.close()
                         os.replace(self.working,self.destination)
                         return ready
@@ -646,6 +670,7 @@ class Preparation:
                     for entity in self.entities:
                         self.copy(name,'entity_id=? AND event_time<=?',(entity,self.end),
                                   query_key=name+':'+entity,key='event_time,rowid',strategy='entity_time_keyset')
+                    self.save()
                 else:
                     self.copy(name,predicate,params,strategy=strategy)
             def guard_row(table):
@@ -676,8 +701,10 @@ class Preparation:
                     failed.append(entity)
                     report.update(archive_status='ARCHIVE_CORRUPTED',sqlite_errorcode=getattr(exc,'sqlite_errorcode',None),
                                   sqlite_errorname=getattr(exc,'sqlite_errorname',None),recovery_strategy='selected_covering_keys')
+            self.save()
             if failed:
                 self.recover(failed,report)
+            validate(self.src,self.state['boundary'])
             for gap in http_gaps:
                 if gap.get('entity_id') in self.entities:
                     report['gaps'].append(dict(entity_id=gap['entity_id'],start_ts=float(gap.get('start_ts',gap.get('start'))),
@@ -726,9 +753,22 @@ class Preparation:
             if self.sql(self.dst,'execute','PRAGMA quick_check').fetchone()[0]!='ok':
                 raise RecoveryUnavailable('Recovered generation failed quick_check')
             self.end_operation()
+            self.finish_scratch()
             self.emit('entity_history','complete',True)
         os.replace(self.working,self.destination)
         return report
+
+    def finish_scratch(self):
+        """Publish a standalone, durable DB, never rename a live WAL pair."""
+        self.begin_operation('Checkpoint isolated generation WAL')
+        self.dst.execute('PRAGMA synchronous=FULL')
+        busy, _, _ = self.dst.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+        if busy:
+            raise RecoveryUnavailable('Isolated generation checkpoint busy')
+        mode = self.dst.execute('PRAGMA journal_mode=DELETE').fetchone()[0]
+        if mode.lower()!='delete':
+            raise RecoveryUnavailable('Isolated generation WAL not sealed')
+        self.end_operation()
 
     def recover(self, failed, report):
         """Prefer selected entity keys from a healthy covering index, never all keys."""
