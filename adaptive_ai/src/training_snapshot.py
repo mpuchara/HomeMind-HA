@@ -17,6 +17,10 @@ ENTITY_PREFIX_TABLES = {'entity_history':'ts', 'feature_observation_events':'eve
 @contextmanager
 def protect_training_inputs(store):
     """Coordinate routine retention with the supervised child; no held SQLite lock."""
+    # Small scheduling fixtures and legacy read-only adapters own no retention.
+    if not hasattr(store, 'lock'):
+        yield
+        return
     with store.lock:
         store._training_input_readers = getattr(store, '_training_input_readers', 0)+1
     try:
@@ -128,7 +132,7 @@ def schema_manifest(connection, names=None):
     return {name:hashlib.sha256(objects[name].encode()).hexdigest() if objects.get(name) is not None else None for name in sorted(names)}
 
 
-def capture(connection, end_ts, entities=None):
+def capture(connection, end_ts, entities=None, entity_scopes=None):
     """Caller owns a brief write transaction; no payload scan or throttle here."""
     bounds={}
     for name,epoch,_ in connection.execute('SELECT name,epoch,boundary FROM __training_prefix_versions').fetchall():
@@ -151,14 +155,15 @@ def capture(connection, end_ts, entities=None):
                     ('__training_fence_scope_'+table+'_update',)).fetchone():
                 continue
             upper = bounds[table]['upper']
+            selected = sorted(set((entity_scopes or {}).get(table, entities)))
             connection.executemany(
                 'INSERT INTO __training_entity_prefix_versions VALUES(?,?,0,?,?) '
                 'ON CONFLICT(table_name,entity_id) DO UPDATE SET '
                 'boundary=MAX(boundary,excluded.boundary),end_ts=MAX(end_ts,excluded.end_ts)',
-                [(table,entity,upper,float(end_ts)) for entity in entities])
+                [(table,entity,upper,float(end_ts)) for entity in selected])
             epochs = {r[0]:int(r[1]) for r in connection.execute(
                 'SELECT entity_id,epoch FROM __training_entity_prefix_versions WHERE table_name=?',(table,))}
-            scoped[table] = {entity:epochs[entity] for entity in entities}
+            scoped[table] = {entity:epochs[entity] for entity in selected}
         result['entity_scope'] = scoped
     return result
 

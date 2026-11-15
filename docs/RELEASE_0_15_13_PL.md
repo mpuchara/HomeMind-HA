@@ -1,0 +1,7 @@
+# Adaptive AI 0.15.13 — testowa naprawa treningu
+
+Baza: e6ec33d30edc3a125e920744b272bea7cec1da8a. Log 15.11: po 4 h 40 min od uruchomienia kolejki do rozpoczęcia generacji, kopiowanie zakończyło się po 3 min 50 s na odczycie provenance_events (fetchmany), nie w HA Recorder ani w końcowym sprawdzeniu prefixu. Ostatnia telemetria: 55 834 rekordy provenance_events, 155.8 s, commit 45 s. Nie da się z logu rozstrzygnąć czy uszkodzony jest indeks czy strona payload.
+
+Zakres: ostatnie maksymalnie 7 dni dla Recorder/replay/long memory/kopii. Jedna starsza obserwacja na encję jest wyłącznie seedem stanu; starsza historia i Correct pozostają w źródle. Historyczne provenance potrzebne jest dla targetu, nie dla całego kontekstu. Przy uszkodzeniu odczyt po covering keys identyfikuje znane luki, a fallback NOT INDEXED omija uszkodzone indeksy. Brak mapowania nie uprawnia do uznania własnego polecenia za demonstrację użytkownika: poprzedni model pozostaje. Uszkodzenia wymagające mapowania innych tabel (Correct, modele) nadal fail closed. Retencja nie jest zmniejszana, nie naprawiamy źródła SQL-em, nie kasujemy archiwum. Nowy kontrakt v7 nie wznawia starych kopii v6.
+
+Walidacja: CI i fizyczny Pi wymagane, nie gwarantujemy uczenia przy braku wiarygodnej historii, braku przejść stanu lub uszkodzonych danych wymaganych. Test akceptacyjny: Rebuild jednego agenta, ukończony replay/benchmark, Shadow, kolejne zadanie kolejki; brak regresji HA/runtime.

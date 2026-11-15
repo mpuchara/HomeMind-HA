@@ -515,13 +515,20 @@ class HistoryManager(threading.Thread):
 
     def _training_bounds(self):
         bounds = getattr(STORE, 'archive_bounds', None)
-        stats = bounds() if callable(bounds) else STORE.archive_stats()
+        try:
+            stats = bounds() if callable(bounds) else STORE.archive_stats()
+        except sqlite3.DatabaseError as exc:
+            if not is_sqlite_corruption(exc):
+                raise
+            # A corrupt extremum/index must not prevent the bounded Recorder
+            # refresh or the isolated salvage path from running.
+            stats = {}
         end_ts = max(float(stats.get("max_ts") or 0.0), now_ts())
-        earliest = float(stats.get("min_ts") or end_ts)
+        earliest = float(stats.get("min_ts") or (end_ts - 7 * 86400.0))
         # Explicit agent training intentionally uses a recent rolling window rather than
         # replaying the entire local archive. Older history remains durable for diagnostics
         # and future offline analysis, but does not multiply every interactive retrain.
-        days = max(1.0, min(30.0, float(OPTIONS.get("agent_training_history_days", 14) or 14)))
+        days = max(1.0, min(7.0, float(OPTIONS.get("agent_training_history_days", 7) or 7)))
         start_ts = max(earliest, end_ts - days * 86400.0)
         return start_ts, end_ts
 
@@ -1330,6 +1337,8 @@ class HistoryManager(threading.Thread):
         # local archive maximum. Resume backfills only selected features; Rebuild scans
         # the broader eligible sensor pool so newly added sensors can be discovered.
         target_end = max(now_ts(), archive_end, float(agent.get("training_window_end_ts") or archive_end))
+        start_ts = max(start_ts, target_end - min(7., max(1., float(OPTIONS.get("agent_training_history_days", 7) or 7))) * 86400.)
+        cursor = max(start_ts, cursor)
         refresh_start = start_ts if rebuild else max(start_ts, cursor - max(60.0, float(OPTIONS.get("agent_training_overlap_hours", 12)) * 3600.0))
         recorder_wall_started = time.perf_counter()
         self.training_job_timings = {
@@ -5390,13 +5399,13 @@ class HistoryManager(threading.Thread):
             )
             recent_days = max(
                 1.0,
-                float(OPTIONS.get("agent_training_history_days", 14) or 14),
+                min(7.0, float(OPTIONS.get("agent_training_history_days", 7) or 7)),
             )
             long_days = max(
                 recent_days,
                 min(
-                    90.0,
-                    float(OPTIONS.get("agent_training_long_memory_days", 14) or 14),
+                    7.0,
+                    float(OPTIONS.get("agent_training_long_memory_days", 7) or 7),
                 ),
             )
             max_long_samples = max(

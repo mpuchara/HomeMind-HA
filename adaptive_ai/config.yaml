@@ -1,5 +1,5 @@
 name: "Adaptive AI"
-version: "0.15.12"
+version: "0.15.13"
 slug: "adaptive_ai"
 description: >-
   History-first local reinforcement-learning policies for Home Assistant. Imports
@@ -82,8 +82,8 @@ options:
   agent_training_chunk_hours: 6
   agent_training_overlap_hours: 6
   agent_training_stateful_continuation: true
-  agent_training_history_days: 14
-  agent_training_long_memory_days: 14
+  agent_training_history_days: 7
+  agent_training_long_memory_days: 7
   agent_training_long_memory_max_samples: 96
   agent_training_long_memory_max_mass_ratio: 0.50
   agent_training_pause_ms: 0

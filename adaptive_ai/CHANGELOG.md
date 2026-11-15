@@ -1,3 +1,9 @@
+# 0.15.13 — Seven-day training and metadata recovery (TEST ONLY)
+
+- Cap explicit history and sparse replay to seven days, even with persisted older settings; retain existing archive and Correct.
+- Copy only in-window history plus one causal seed per entity, target provenance and required context observation events. Salvage corrupted required metadata through covering keys or physical rowid reads; exclude unmapped/unsafe inputs rather than infer user intent.
+- Keep worker isolation and atomic publication; fix retention protection on scheduling fixtures.
+
 # 0.15.12 — Training throughput and scoped prefix (TEST ONLY)
 
 - Guard selected historical entities instead of invalidating training for unrelated archive changes; genuine changes in the frozen input still fail closed, now checked during preparation.

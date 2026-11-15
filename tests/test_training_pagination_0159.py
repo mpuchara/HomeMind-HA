@@ -127,7 +127,7 @@ class PaginationTests(unittest.TestCase):
                 fixture.prepare(progress=progress,cancelled=lambda:bool(stopped))
         with patch('ha.HA.history',side_effect=AssertionError('upgrade must not fetch Recorder')):
             report=fixture.prepare()
-        self.assertEqual(report['contract'],'training-history-generation-v6')
+        self.assertEqual(report['contract'],'training-history-generation-v7')
         self.assertFalse(report['resumed'])
         self.assertEqual(frozen(),before)
 
@@ -168,7 +168,7 @@ class PaginationTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_contract_invalidates_0158_preparation_only(self):
-        self.assertEqual(CONTRACT,'training-history-generation-v6')
+        self.assertEqual(CONTRACT,'training-history-generation-v7')
         p=self.make('home_checkpoints',[])
         import hashlib
         legacy=hashlib.sha256((str(p.source)+'|agent|training-history-generation-v5').encode()).hexdigest()[:24]

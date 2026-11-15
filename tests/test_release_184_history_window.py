@@ -20,18 +20,20 @@ class HistoryWindow184Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'options.json'
             with patch.object(settings, 'OPTIONS_PATH', path):
-                self.assertTrue(all(settings.load_options()[key] == 14 for key in keys))
+                self.assertEqual([settings.load_options()[key] for key in keys],[7,7,14,14,14])
                 path.write_text(json.dumps(dict.fromkeys(keys, 10)), encoding='utf-8')
-                self.assertTrue(all(settings.load_options()[key] == 14 for key in keys))
+                self.assertEqual([settings.load_options()[key] for key in keys],[7,7,14,14,14])
+                path.write_text(json.dumps(dict.fromkeys(keys, 14)), encoding='utf-8')
+                self.assertEqual([settings.load_options()[key] for key in keys],[7,7,14,14,14])
                 path.write_text(json.dumps(dict.fromkeys(keys, 5)), encoding='utf-8')
                 self.assertTrue(all(settings.load_options()[key] == 5 for key in keys))
 
-    def test_training_bounds_include_fourteen_days_but_never_missing_archive(self):
+    def test_training_bounds_cap_seven_days_but_never_missing_archive(self):
         end = 50 * 86400.0
         store = SimpleNamespace(archive_stats=lambda: {'min_ts': end - 20 * 86400, 'max_ts': end})
         with patch.object(history, 'STORE', store), patch.object(history, 'now_ts', return_value=end):
             with patch.dict(history.OPTIONS, agent_training_history_days=14):
-                self.assertEqual(history.HistoryManager._training_bounds(None), (end - 14 * 86400, end))
+                self.assertEqual(history.HistoryManager._training_bounds(None), (end - 7 * 86400, end))
                 store.archive_stats = lambda: {'min_ts': end - 3 * 86400, 'max_ts': end}
                 self.assertEqual(history.HistoryManager._training_bounds(None), (end - 3 * 86400, end))
 

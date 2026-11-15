@@ -16,7 +16,7 @@ try:
 except Exception:
     ws_connect = None
 
-APP_VERSION = "0.15.12"
+APP_VERSION = "0.15.13"
 HISTORY_BOOTSTRAP_REVISION = "target-attrs-v2"
 TRAINING_REVISION = "shared-home-intents-v26"
 DATA_DIR = Path(os.environ.get("ADAPTIVE_AI_DATA", "/data"))
@@ -101,9 +101,9 @@ DEFAULT_OPTIONS = {
     # it after reconstructing the minimal open-dwell state at each chunk boundary.
     "agent_training_overlap_hours": 6,
     "agent_training_stateful_continuation": True,
-    "agent_training_history_days": 14,
+    "agent_training_history_days": 7,
     # Raw replay and any optional sparse replay share the same storage horizon.
-    "agent_training_long_memory_days": 14,
+    "agent_training_long_memory_days": 7,
     "agent_training_long_memory_max_samples": 96,
     "agent_training_long_memory_max_mass_ratio": 0.50,
     "agent_training_pause_ms": 0,
@@ -532,11 +532,11 @@ def load_options():
     # 0.9 never starts heavy replay implicitly, including installations with the
     # legacy automatic option. One shared job covers agent AND global bootstrap.
     options["manual_agent_training"] = True
-    # Migrate the historical default even when HA persists the old options.json.
-    if options.get('agent_training_history_days') == 7:
-        options['agent_training_history_days'] = 14
-    for key in ('agent_training_history_days', 'agent_training_long_memory_days',
-                'archive_retention_days', 'history_bootstrap_days', 'auto_agent_recent_days'):
+    # The training window is capped independently of archival retention.
+    # HA may keep the previous 14-day values in its persisted options.json.
+    for key in ('agent_training_history_days', 'agent_training_long_memory_days'):
+        options[key] = max(1, min(7, float(options.get(key, 7))))
+    for key in ('archive_retention_days', 'history_bootstrap_days', 'auto_agent_recent_days'):
         # Upgrade the former persisted default; retain shorter custom windows.
         value = float(options.get(key, 14))
         options[key] = 14 if value == 10 else max(1, min(14, value))

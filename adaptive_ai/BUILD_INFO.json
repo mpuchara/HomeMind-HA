@@ -1,9 +1,9 @@
 {
-  "version": "0.15.12",
+  "version": "0.15.13",
   "release_date": "2026-11-15",
-  "base_version": "0.15.11",
-  "base_commit": "83ce27e13e8036e95f3417836bb7b04aad26aab5",
-  "release_status": "pi5-manual-validation-candidate-training-throughput-and-prefix",
+  "base_version": "0.15.12",
+  "base_commit": "e6ec33d30edc3a125e920744b272bea7cec1da8a",
+  "release_status": "pi5-manual-validation-candidate-seven-day-corruption-recovery",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4098,5 +4098,11 @@
     "validation": "PENDING",
     "physical_pi_validation": "NOT RUN",
     "report": "docs/RELEASE_0_15_12_PL.md"
+  },
+  "release_01513": {
+    "scope": "Seven-day hard cap; target provenance; read-only metadata salvage; retention fixture fix",
+    "validation": "PENDING",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_13_PL.md"
   }
 }

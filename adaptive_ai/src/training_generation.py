@@ -20,7 +20,7 @@ from sqlite_background import is_sqlite_corruption
 from training_budget import TRAINING_BUDGET
 from storage_budget import StoragePressure
 
-CONTRACT = 'training-history-generation-v6'
+CONTRACT = 'training-history-generation-v7'
 AGENT_TABLES = frozenset(CORRECT_TABLES) | {
     'rl_models', 'historical_experiences', 'tiny_mlp_shadow_models',
     'agent_candidate_generations', 'automatic_reward_experiences',
@@ -108,8 +108,11 @@ class Preparation:
     def __init__(self, source, destination, entities, start, end, options, cancelled, progress, agent_id, rebuild=False):
         self.source, self.destination = Path(source).resolve(), Path(destination)
         self.entities = sorted(set(entities))
-        self.start, self.end, self.agent_id = float(start), float(end), agent_id
         self.options, self.cancelled, self.progress = options or {}, cancelled, progress
+        self.end, self.agent_id = float(end), agent_id
+        self.start = max(float(start), self.end-7*86400.)
+        self.target_entities = list(self.entities)  # legacy/unscoped caller
+        self.metadata_gaps = []
         self.rebuild=bool(rebuild)
         self.started, self.cpu_started = time.monotonic(), time.process_time()
         self.throttle = self.sqlite_elapsed = self.sqlite_cpu = self.lock_wait = 0.
@@ -127,7 +130,7 @@ class Preparation:
         self.reserve = 0
         self.source_signature = signature(self.source)
         self.identity = dict(contract=CONTRACT,source=str(self.source),entities=self.entities,
-                             start=start,end=end,agent_id=agent_id,rebuild=self.rebuild)
+                             start=self.start,end=self.end,agent_id=agent_id,rebuild=self.rebuild)
         # At most one unfinished preparation per source/agent. Durable prefix
         # versions allow live append/WAL maintenance without invalidating cursors.
         key = hashlib.sha256((str(self.source)+'|'+str(agent_id)+'|'+CONTRACT).encode()).hexdigest()[:24]
@@ -307,7 +310,7 @@ class Preparation:
                 size += row_size
         return rows, size, fetched
 
-    def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql'):
+    def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql', physical=False):
         """Keyset paging uses the source's entity/time or agent index, before decoding."""
         query_key = query_key or table
         saved = self.state['queries'].get(query_key,{}) if checkpoint else {}
@@ -338,7 +341,7 @@ class Preparation:
                 else:
                     where.append('rowid>?'); values.append(last)
             extra = '' if key == 'ts,id' else 'rowid AS __copy_rowid,'
-            sql = f'SELECT {extra}* FROM {quote(table)}'+(' WHERE '+' AND '.join(where) if where else '')+f' ORDER BY {key} LIMIT {page_limit}'
+            sql = f'SELECT {extra}* FROM {quote(table)}'+(' NOT INDEXED' if physical else '')+(' WHERE '+' AND '.join(where) if where else '')+f' ORDER BY {key} LIMIT {page_limit}'
             with closing(self.sql(self.src,'execute',sql,values)) as cursor:
                 batch, size, fetched = self.read_page(cursor,page_limit)
             if not batch:
@@ -424,14 +427,17 @@ class Preparation:
         if name=='tiny_mlp_correct_samples' and 'batch_id' in columns:
             return f'batch_id IN (SELECT batch_id FROM tiny_mlp_correct_batches WHERE agent_id IN ({marks}))',ids,'correct_batch_dependency'
         if name in ('provenance_events','provenance_history_links','feature_observation_events'):
-            stamp = 'event_time'
-            return f'entity_id IN ({entity_marks}) AND {stamp}<=?',(*self.entities,self.end),'entity_time'
+            # Historical replay only loads provenance for target_history_id,
+            # never for every high-rate context/radar sensor.
+            selected = self.target_entities if name.startswith('provenance_') else self.entities
+            slots = ','.join('?' for _ in selected)
+            return f'entity_id IN ({slots}) AND event_time>=? AND event_time<=?',(*selected,self.start,self.end),'entity_time'
         if name in ('home_checkpoints','adaptive_presence_checkpoints'):
             # Keep all as-of checkpoints that recent/optional sparse replay can
             # consume, plus its one older seed. A single start checkpoint would
             # silently change later logical chunks and older sparse replay.
-            days=max(1.,float(self.options.get('agent_training_history_days',14)),
-                     min(90.,float(self.options.get('agent_training_long_memory_days',14))))
+            days=max(1.,min(7.,float(self.options.get('agent_training_history_days',7))),
+                     min(7.,float(self.options.get('agent_training_long_memory_days',7))))
             horizons=str(self.options.get('prediction_horizons_seconds','1')).replace(';',',').split(',')
             guard=max(30.,float(self.options.get('temporal_long_seconds',300)),
                       float(self.options.get('fast_precursor_off_seconds',120)),
@@ -532,7 +538,14 @@ class Preparation:
                 fence.execute('BEGIN IMMEDIATE')
                 try:
                     self.src=fence
-                    self.state['boundary']=capture(fence,self.end,self.entities)
+                    if self.agent_id:
+                        target=fence.execute('SELECT target_entity FROM agents WHERE id=?',(self.agent_id,)).fetchone()
+                        if target is None:
+                            raise RecoveryUnavailable('Selected agent is missing')
+                        self.target_entities=[target[0]]
+                    self.state['boundary']=capture(fence,self.end,self.entities,
+                        entity_scopes={'provenance_events':self.target_entities,
+                                       'provenance_history_links':self.target_entities})
                     self.state['source_schema']=[dict(row) for row in fence.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB '__training_*'").fetchall()]
                     self.agent_ids=[row[0] for row in fence.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))] if self.agent_id else []
                     self.initial_metadata=self.read_initial_metadata(fence)
@@ -656,6 +669,10 @@ class Preparation:
                 rows=batch=None
             if self.agent_id:
                 self.agent_ids=[r[0] for r in self.dst.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))]
+                target=self.dst.execute('SELECT target_entity FROM agents WHERE id=?',(self.agent_id,)).fetchone()
+                if target is None:
+                    raise RecoveryUnavailable('Selected agent is missing from frozen configuration')
+                self.target_entities=[target[0]]
             # Normal metadata copying has no corruption time budget; all work still
             # uses cooperative CPU throttling, bounded batches, disk quota and cancel.
             for name,item in tables.items():
@@ -667,10 +684,9 @@ class Preparation:
                     continue
                 predicate,params,strategy = plan
                 if strategy=='entity_time':
-                    for entity in self.entities:
-                        self.copy(name,'entity_id=? AND event_time<=?',(entity,self.end),
-                                  query_key=name+':'+entity,key='event_time,rowid',strategy='entity_time_keyset')
-                    self.save()
+                    # Copy these after the authoritative history, including at
+                    # most one pre-window causal seed's target provenance.
+                    continue
                 else:
                     self.copy(name,predicate,params,strategy=strategy)
             def guard_row(table):
@@ -693,7 +709,7 @@ class Preparation:
             failed = []
             for entity in self.entities:
                 try:
-                    self.copy('entity_history','entity_id=? AND ts<=?',(entity,self.end),query_key='history:'+entity,
+                    self.copy('entity_history','entity_id=? AND ts>=? AND ts<=?',(entity,self.start,self.end),query_key='history:'+entity,
                               history=True,key='ts,id',strategy='entity_time_keyset')
                 except sqlite3.DatabaseError as exc:
                     if not is_sqlite_corruption(exc):
@@ -704,6 +720,41 @@ class Preparation:
             self.save()
             if failed:
                 self.recover(failed,report)
+            # A single older row is a causal seed, never a replay sample.
+            # An unreadable old seed is not evidence of any state; wait for
+            # the first actual observation in the seven-day window instead.
+            upper=self.state['boundary']['tables']['entity_history']['upper']
+            for entity in self.entities:
+                try:
+                    self.copy('entity_history',
+                        'entity_id=? AND id=(SELECT id FROM entity_history WHERE entity_id=? AND ts<? AND rowid<=? ORDER BY ts DESC,id DESC LIMIT 1)',
+                        (entity,entity,self.start,upper),query_key='seed:'+entity,
+                        history=True,key='ts,id',strategy='entity_time_keyset')
+                except sqlite3.DatabaseError as exc:
+                    if not is_sqlite_corruption(exc):
+                        raise
+                    self.state.setdefault('unreadable_causal_seeds',[])
+                    if entity not in self.state['unreadable_causal_seeds']:
+                        self.state['unreadable_causal_seeds'].append(entity)
+            self.save()
+            for name in ('provenance_events','provenance_history_links','feature_observation_events'):
+                if name not in tables:
+                    continue
+                selected=self.target_entities if name.startswith('provenance_') else self.entities
+                for entity in selected:
+                    self.copy_event_window(name,entity,self.start,self.end)
+                    if name.startswith('provenance_'):
+                        seed=self.dst.execute('SELECT ts FROM entity_history WHERE entity_id=? AND ts<? LIMIT 1',(entity,self.start)).fetchone()
+                        if seed:
+                            self.copy_event_window(name,entity,float(seed[0]),float(seed[0]),suffix=':seed')
+                self.save()
+            report['gaps'].extend(self.state.get('metadata_gaps',[]))
+            report['unreadable_causal_seeds']=self.state.get('unreadable_causal_seeds',[])
+            report['metadata_recoveries']=self.state.get('metadata_recoveries',[])
+            report['training_window']=dict(start_ts=self.start,end_ts=self.end,max_days=7,
+                target_provenance_entities=self.target_entities,causal_seed_only_before_start=True)
+            if report['metadata_recoveries']:
+                report['archive_status']='ARCHIVE_CORRUPTED'
             validate(self.src,self.state['boundary'])
             for gap in http_gaps:
                 if gap.get('entity_id') in self.entities:
@@ -770,6 +821,127 @@ class Preparation:
             raise RecoveryUnavailable('Isolated generation WAL not sealed')
         self.end_operation()
 
+    def copy_event_window(self, table, entity, lo, hi, suffix=''):
+        """Required provenance/observation metadata: read-only recovery, no fake origin."""
+        key=table+':'+entity+suffix
+        predicate='entity_id=? AND event_time>=? AND event_time<=?'
+        params=(entity,lo,hi)
+        try:
+            self.copy(table,predicate,params,query_key=key,key='event_time,rowid',strategy='entity_time_keyset')
+            return
+        except sqlite3.DatabaseError as exc:
+            if not is_sqlite_corruption(exc):
+                raise
+        self.in_recovery=True
+        self.recovery_started=time.process_time()
+        self.recovery_start_bytes=scratch_bytes(self.working)
+        recovery=dict(table=table,entity_id=entity,start_ts=lo,end_ts=hi,strategy='covering_index')
+        try:
+            self.recover_event_keys(table,entity,lo,hi)
+        except sqlite3.DatabaseError as exc:
+            if not is_sqlite_corruption(exc):
+                raise
+            # An index can be damaged while every payload row is healthy.
+            # One rowid-ordered physical pass, not repeated OFFSET scans.
+            recovery['strategy']='physical_rowid'
+            try:
+                self.copy(table,predicate,params,query_key=key+':physical',key='rowid',
+                          strategy='entity_time_keyset',physical=True)
+            except sqlite3.DatabaseError as physical_error:
+                if not is_sqlite_corruption(physical_error):
+                    raise
+                raise RecoveryUnavailable(
+                    f'Unmapped SQLite damage in {table}, entity={entity}, interval={lo}..{hi}; '
+                    'cannot verify training provenance; previous model retained') from physical_error
+        finally:
+            self.recovery_cpu=self.active_recovery_cpu()
+            self.recovery_started=None
+            self.in_recovery=False
+        self.state.setdefault('metadata_recoveries',[]).append(recovery)
+        self.state['queries'][key]=dict(done=True,last=self.state['queries'].get(key,{}).get('last'))
+        self.save()
+        self.emit(table,'metadata_recovered',True)
+
+    def recover_event_keys(self, table, entity, lo, hi):
+        """Map damaged payload rows using independently readable time/rowid keys."""
+        indexes=[]
+        for row in self.src.execute('PRAGMA index_list('+quote(table)+')').fetchall():
+            name=row[1]
+            cols=[r[2] for r in self.src.execute('PRAGMA index_info('+quote(name)+')')]
+            if cols[:2]==['entity_id','event_time']:
+                indexes.append(name)
+        if not indexes:
+            raise sqlite3.DatabaseError('database disk image is malformed: no covering event index')
+        upper=self.state['boundary']['tables'][table]['upper']
+        def read_keys(keys,depth=0):
+            self.checkpoint()
+            self.attempts+=1
+            if self.attempts>self.limit:
+                raise RecoveryUnavailable('Metadata recovery attempt budget exhausted; previous model retained')
+            marks=','.join('?' for _ in keys)
+            try:
+                with closing(self.sql(self.src,'execute',f'SELECT rowid AS __copy_rowid,* FROM {quote(table)} NOT INDEXED WHERE rowid IN ({marks}) ORDER BY rowid',[k[0] for k in keys])) as cursor:
+                    rows,size,_=self.read_page(cursor,len(keys))
+                if len(rows)!=len(keys):
+                    if len(keys)>1:
+                        mid=len(keys)//2
+                        read_keys(keys[:mid],depth+1);read_keys(keys[mid:],depth+1)
+                        return
+                    raise RecoveryUnavailable('Metadata witness row missing; previous model retained')
+                expected=dict(keys)
+                for row in rows:
+                    if row['entity_id']!=entity or float(row['event_time'])!=expected[row['__copy_rowid']]:
+                        raise RecoveryUnavailable('Metadata witness mismatch; previous model retained')
+            except sqlite3.DatabaseError as exc:
+                if not is_sqlite_corruption(exc):
+                    raise
+                if len(keys)>1 and depth<self.depth:
+                    mid=len(keys)//2
+                    read_keys(keys[:mid],depth+1);read_keys(keys[mid:],depth+1)
+                    return
+                for _,stamp in keys:
+                    # Missing provenance MUST NOT turn our own commands into
+                    # independent demonstrations. Exclude the affected time.
+                    gap=dict(entity_id=entity,start_ts=stamp,end_ts=stamp,source=table,
+                             failure_reason='HISTORY_GAP_SQLITE_CORRUPT',recovery_attempts=self.attempts)
+                    gaps=self.state.setdefault('metadata_gaps',[])
+                    if not any(x['source']==table and x['entity_id']==entity and x['start_ts']==stamp for x in gaps):
+                        gaps.append(gap)
+                return
+            columns=[c for c in rows[0].keys() if c!='__copy_rowid']
+            before=self.dst.total_changes
+            self.sql(self.dst,'executemany',f'INSERT OR IGNORE INTO {quote(table)} ({",".join(map(quote,columns))}) VALUES ({",".join("?" for _ in columns)})',
+                     [tuple(r[c] for c in columns) for r in rows])
+            metric=self.state['tables'][table]
+            metric['source_rows_scanned']+=len(rows)
+            metric['rows_copied']+=self.dst.total_changes-before
+            metric['bytes_copied']+=size
+            self.pending_bytes+=size
+            self.pending_batches+=1
+        last_error=None
+        for index in indexes:
+            last=None
+            try:
+                while True:
+                    self.checkpoint()
+                    after=' AND (event_time,rowid)>(?,?)' if last else ''
+                    args=(entity,lo,hi,upper)+tuple(last or ())
+                    with closing(self.sql(self.src,'execute',f'SELECT rowid,event_time FROM {quote(table)} INDEXED BY {quote(index)} WHERE entity_id=? AND event_time>=? AND event_time<=? AND rowid<=?'+after+' ORDER BY event_time,rowid LIMIT 128',args)) as cursor:
+                        batch=self.sql(cursor,'fetchall')
+                    if not batch:
+                        return
+                    next_cursor=(float(batch[-1][1]),int(batch[-1][0]))
+                    advancing_cursor(last,next_cursor,table=table,strategy='metadata_witness',rows=len(batch),job_id=self.destination.stem,query_key=entity)
+                    read_keys([(int(r[0]),float(r[1])) for r in batch])
+                    last=next_cursor
+                    self.save(force=False)
+                    self.emit(table,'metadata_witness')
+            except sqlite3.DatabaseError as exc:
+                if not is_sqlite_corruption(exc):
+                    raise
+                last_error=exc
+        raise last_error
+
     def recover(self, failed, report):
         """Prefer selected entity keys from a healthy covering index, never all keys."""
         self.in_recovery = True
@@ -781,7 +953,8 @@ class Preparation:
             cache=json.loads(cache_path.read_text(encoding='utf-8'))
         except (OSError,ValueError):
             cache={}
-        known={int(k):v for k,v in cache.get('missing',{}).items()} if cache.get('signature')==self.source_signature else {}
+        known={int(k):v for k,v in cache.get('missing',{}).items()
+               if self.start<=v['start_ts']<=self.end} if cache.get('signature')==self.source_signature else {}
         missing=dict(known)
         report['quarantine_cache_hit']=bool(known)
         self.dst.execute('CREATE TABLE IF NOT EXISTS recovery_witness(id INTEGER PRIMARY KEY,entity_id TEXT,ts REAL)')
@@ -796,8 +969,8 @@ class Preparation:
                     while True:
                         self.checkpoint()
                         predicate=' AND (ts,id)>(?,?)' if last else ''
-                        params=(entity,self.end,self.state['boundary']['tables']['entity_history']['upper'])+tuple((last[0],last[1]) if last else ())
-                        with closing(self.sql(self.src,'execute',f'SELECT id,entity_id,ts FROM entity_history INDEXED BY {quote(index)} WHERE entity_id=? AND ts<=? AND rowid<=?'+predicate+' ORDER BY ts,id LIMIT 128',params)) as cursor:
+                        params=(entity,self.start,self.end,self.state['boundary']['tables']['entity_history']['upper'])+tuple((last[0],last[1]) if last else ())
+                        with closing(self.sql(self.src,'execute',f'SELECT id,entity_id,ts FROM entity_history INDEXED BY {quote(index)} WHERE entity_id=? AND ts>=? AND ts<=? AND rowid<=?'+predicate+' ORDER BY ts,id LIMIT 128',params)) as cursor:
                             batch=self.sql(cursor,'fetchall')
                         if not batch:
                             break
@@ -871,7 +1044,7 @@ class Preparation:
                 if self.attempts>self.limit:
                     raise RecoveryUnavailable('History recovery attempt budget exhausted; previous model retained')
                 try:
-                    with closing(self.sql(self.src,'execute',f'SELECT * FROM entity_history NOT INDEXED WHERE id BETWEEN ? AND ? AND entity_id IN ({marks}) AND ts<=? ORDER BY id',(lo,hi,*failed,self.end))) as cursor:
+                    with closing(self.sql(self.src,'execute',f'SELECT * FROM entity_history NOT INDEXED WHERE id BETWEEN ? AND ? AND entity_id IN ({marks}) AND ts>=? AND ts<=? ORDER BY id',(lo,hi,*failed,self.start,self.end))) as cursor:
                         rows=self.sql(cursor,'fetchall')
                     if rows:
                         size=self.validate_history(rows)
