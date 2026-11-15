@@ -2018,9 +2018,12 @@ class HistoryManager(threading.Thread):
                         self.stop_event, self.job_cancel_event,
                         capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting,
                         busy_timeout=30.)
+                elif explicit:
+                    written += run_storage_write(STORE, write_batch,
+                        self.stop_event, self.job_cancel_event, busy_timeout=30.)
                 else:
                     written += run_storage_write(STORE, write_batch,
-                        self.stop_event, self.job_cancel_event, busy_timeout=30. if explicit else 0.)
+                        self.stop_event, self.job_cancel_event)
             except sqlite3.DatabaseError as exc:
                 if explicit and is_sqlite_corruption(exc):
                     raise TrainingImportWriteCorruption(

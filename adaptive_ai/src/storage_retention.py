@@ -61,7 +61,8 @@ class StorageRetention:
         from training_snapshot import retention_protected
         # Routine retention can wait until the worker releases its snapshot.
         # Do not stop live archiving, WAL maintenance or emergency storage GC.
-        if retention_protected(self.store,table):
+        if (retention_protected(self.store,table)
+                and self.store.storage_budget.snapshot().get('level')=='normal'):
             return 0
         relation = {'feature_windows': ('window_id', 'feature_window_entities'),
                     'episode_evaluator_episodes': ('episode_id', 'episode_evaluator_policy_results')}.get(table)

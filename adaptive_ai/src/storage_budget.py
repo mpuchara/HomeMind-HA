@@ -552,19 +552,6 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
             raise InterruptedError('Training storage wait cancelled')
         try:
             return callback()
-        except sqlite3.DatabaseError as exc:
-            # Only opt-in callers that own a replayable rolled-back batch may
-            # retry lock contention. Never retry corruption or other SQL errors.
-            if not busy_timeout or not is_sqlite_busy(exc):
-                raise
-            if busy_deadline is None:
-                busy_deadline = time.monotonic()+busy_timeout
-            if time.monotonic()>=busy_deadline:
-                raise
-            from recorder_metrics import timed
-            with timed('storage_pressure_wait_seconds'):
-                stop_event.wait(min(busy_delay,max(0.,busy_deadline-time.monotonic())))
-            busy_delay=min(.5,busy_delay*2)
         except StoragePressure as exc:
             budget = getattr(store, 'storage_budget', None)
             if not isinstance(budget, StorageBudget):
@@ -613,6 +600,19 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
             from recorder_metrics import timed
             with timed('storage_pressure_wait_seconds'):
                 stop_event.wait(1.0)
+        except sqlite3.DatabaseError as exc:
+            # Only opt-in callers that own a replayable rolled-back batch may
+            # retry lock contention. Never retry corruption or other SQL errors.
+            if not busy_timeout or not is_sqlite_busy(exc):
+                raise
+            if busy_deadline is None:
+                busy_deadline = time.monotonic()+busy_timeout
+            if time.monotonic()>=busy_deadline:
+                raise
+            from recorder_metrics import timed
+            with timed('storage_pressure_wait_seconds'):
+                stop_event.wait(min(busy_delay,max(0.,busy_deadline-time.monotonic())))
+            busy_delay=min(.5,busy_delay*2)
 
 
 class StorageRetry:

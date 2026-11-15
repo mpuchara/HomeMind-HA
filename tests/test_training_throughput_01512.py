@@ -55,6 +55,17 @@ class TrainingThroughputTests(unittest.TestCase):
                 raise ValueError('worker failed')
         self.assertFalse(retention_protected(store,'entity_history'))
 
+    def test_storage_pressure_is_not_mistaken_for_sqlite_busy(self):
+        from storage_budget import run_storage_write,StoragePressure
+        error=StoragePressure('database is locked')
+        calls=[]
+        def batch():
+            calls.append(1)
+            raise error
+        with self.assertRaises(StoragePressure):
+            run_storage_write(None,batch,threading.Event(),busy_timeout=2.)
+        self.assertEqual(calls,[1])
+
     def test_real_busy_recorder_batch_retries_and_commits_once(self):
         from storage_budget import run_storage_write
         with tempfile.TemporaryDirectory() as tmp:
