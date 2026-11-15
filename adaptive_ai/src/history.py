@@ -1345,9 +1345,12 @@ class HistoryManager(threading.Thread):
             eta_source="measuring Recorder import", phase_detail="Preparing Recorder history for the selected agent",
         )
         try:
-            self._refresh_agent_history(
-                agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
-            )
+            from training_snapshot import protect_training_inputs
+            # Retention must not race the explicit Recorder import either.
+            with protect_training_inputs(STORE):
+                self._refresh_agent_history(
+                    agent, refresh_start, target_end, rebuild=rebuild, replay_start=start_ts
+                )
         except TrainingImportWriteCorruption as exc:
             # The read path can still work when the import touches a damaged index
             # or other page only needed by writes. Keep a working model on Rebuild.
@@ -2013,10 +2016,11 @@ class HistoryManager(threading.Thread):
                 if explicit and profile.get('capacity_wait_seconds', 0) > 0:
                     written += run_storage_write(STORE, write_batch,
                         self.stop_event, self.job_cancel_event,
-                        capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting)
+                        capacity_timeout=profile['capacity_wait_seconds'], on_wait=waiting,
+                        busy_timeout=30.)
                 else:
                     written += run_storage_write(STORE, write_batch,
-                        self.stop_event, self.job_cancel_event)
+                        self.stop_event, self.job_cancel_event, busy_timeout=30. if explicit else 0.)
             except sqlite3.DatabaseError as exc:
                 if explicit and is_sqlite_corruption(exc):
                     raise TrainingImportWriteCorruption(

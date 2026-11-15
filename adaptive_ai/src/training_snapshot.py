@@ -98,9 +98,18 @@ def _install_entity_guard(connection, table, stamp):
     for operation, versions in [('INSERT',('NEW',)),('DELETE',('OLD',)),('UPDATE',('OLD','NEW'))]:
         name = '__training_fence_scope_'+table+'_'+operation.lower()
         matches = ' OR '.join(f'(entity_id={v}.entity_id AND {v}.rowid<=boundary AND {v}.{stamp}<=end_ts)' for v in versions)
-        guard = f' WHEN ({changed} OR OLD.rowid IS NOT NEW.rowid)' if operation=='UPDATE' else ''
+        # Most realtime rows are appended above every frozen boundary. Avoid
+        # even looking up a per-entity ledger row on this hot path.
+        bound = f'(SELECT boundary FROM __training_prefix_versions WHERE name={literal})'
+        cutoff = f'(SELECT end_ts FROM __training_prefix_versions WHERE name={literal})'
+        possible = ' OR '.join(f'({v}.rowid<={bound} AND {v}.{stamp}<={cutoff})' for v in versions)
+        guard = ' WHEN ('+possible+')'
+        if operation=='UPDATE':
+            guard += f' AND ({changed} OR OLD.rowid IS NOT NEW.rowid)'
+        members = ','.join(v+'.entity_id' for v in versions)
         sql = (f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {quote(table)}'+guard+
-               f' BEGIN UPDATE {ledger} SET epoch=epoch+1 WHERE table_name={literal} AND ({matches}); END')
+               f' BEGIN UPDATE {ledger} SET epoch=epoch+1 WHERE table_name={literal} '
+               f'AND entity_id IN ({members}) AND ({matches}); END')
         existing = connection.execute('SELECT sql FROM sqlite_master WHERE name=?',(name,)).fetchone()
         if existing is None:
             connection.execute(sql)

@@ -973,9 +973,16 @@ stamp=float(sys.argv[1]); ready=Path(sys.argv[2]); args=sys.argv[3:]
 policy.now_ts=lambda:stamp
 original=training_generation.Preparation.save
 def save(preparation, *args, **kwargs):
-    original(preparation)
-    if any(key.startswith('history:') and value.get('last') and not value.get('done')
-           for key,value in preparation.state['queries'].items()):
+    original(preparation, *args, **kwargs)
+    # Small/corrupt fixtures may finish an entity in one page. Verify the
+    # persisted cursor, not the in-memory cursor or a specific batch size.
+    if preparation.dst.in_transaction:
+        return
+    import json,sqlite3
+    with sqlite3.connect(preparation.working.as_uri()+'?mode=ro',uri=True) as reader:
+        saved=reader.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()
+    if saved and any(key.startswith('history:') and value.get('last')
+                     for key,value in json.loads(saved[0])['queries'].items()):
         ready.write_text('committed real history batch')
         time.sleep(30)
 training_generation.Preparation.save=save

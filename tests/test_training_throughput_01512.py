@@ -55,6 +55,31 @@ class TrainingThroughputTests(unittest.TestCase):
                 raise ValueError('worker failed')
         self.assertFalse(retention_protected(store,'entity_history'))
 
+    def test_real_busy_recorder_batch_retries_and_commits_once(self):
+        from storage_budget import run_storage_write
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'busy.db'
+            with closing(sqlite3.connect(path,timeout=.01,check_same_thread=False)) as writer:
+                writer.execute('CREATE TABLE data(id INTEGER PRIMARY KEY)')
+                writer.commit()
+                writer.execute('BEGIN IMMEDIATE')
+                writer.execute('INSERT INTO data VALUES(1)')
+                with closing(sqlite3.connect(path,timeout=.01)) as conn:
+                    calls=[]
+                    def batch():
+                        calls.append(1)
+                        with conn:
+                            conn.execute('INSERT INTO data VALUES(2)')
+                        return 1
+                    release=threading.Timer(.12,writer.commit)
+                    release.start()
+                    try:
+                        self.assertEqual(run_storage_write(None,batch,threading.Event(),busy_timeout=2.),1)
+                    finally:
+                        release.join()
+                    self.assertGreater(len(calls),1)
+                    self.assertEqual(conn.execute('SELECT id FROM data ORDER BY id').fetchall(),[(1,),(2,)])
+
     def test_sealed_scratch_has_all_rows_without_wal_sidecar(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

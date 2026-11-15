@@ -536,7 +536,7 @@ def storage_recording_paused(store):
 
 
 def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90.0,
-                      *, capacity_timeout=0.0, on_wait=None):
+                      *, capacity_timeout=0.0, on_wait=None, busy_timeout=0.0):
     """Retry the same rolled-back history batch after a transient WAL pause.
 
     Called outside SQL/Store locks. The checkpoint/recovery workers own recovery.
@@ -545,11 +545,26 @@ def run_storage_write(store, callback, stop_event, cancel_event=None, timeout=90
     """
     deadline = time.monotonic() + timeout
     capacity_deadline = None
+    busy_deadline = None
+    busy_delay = .05
     while True:
         if stop_event.is_set() or (cancel_event is not None and cancel_event.is_set()):
             raise InterruptedError('Training storage wait cancelled')
         try:
             return callback()
+        except sqlite3.DatabaseError as exc:
+            # Only opt-in callers that own a replayable rolled-back batch may
+            # retry lock contention. Never retry corruption or other SQL errors.
+            if not busy_timeout or not is_sqlite_busy(exc):
+                raise
+            if busy_deadline is None:
+                busy_deadline = time.monotonic()+busy_timeout
+            if time.monotonic()>=busy_deadline:
+                raise
+            from recorder_metrics import timed
+            with timed('storage_pressure_wait_seconds'):
+                stop_event.wait(min(busy_delay,max(0.,busy_deadline-time.monotonic())))
+            busy_delay=min(.5,busy_delay*2)
         except StoragePressure as exc:
             budget = getattr(store, 'storage_budget', None)
             if not isinstance(budget, StorageBudget):
