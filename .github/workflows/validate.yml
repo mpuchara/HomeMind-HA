@@ -22,7 +22,7 @@ jobs:
       - name: Seven-day training, real SQLite metadata damage and actual worker Shadow
         run: |
           python -m unittest discover -s tests -p test_training_seven_days_01513.py -v
-          PYTHONPATH=tests python -m unittest test_release_080_training_process.ActualWorkerSmoke.test_generation_child_completes_with_real_damaged_context_provenance -v
+          PYTHONPATH=tests python -c "import support, unittest; unittest.main(module=None, argv=['unittest', '-v', 'test_release_080_training_process.ActualWorkerSmoke.test_generation_child_completes_with_real_damaged_context_provenance'])"
       - run: python -m unittest discover -s tests -v
       - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
         run: python tools/validate_training_0159.py
