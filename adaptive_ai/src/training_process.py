@@ -24,6 +24,16 @@ from settings import (
     APP_VERSION, DATA_DIR, OPTIONS, TRAINING_REVISION, now_ts,
 )
 from storage_budget import StoragePressure
+from sqlite_background import is_sqlite_busy
+
+class WorkerSQLiteBusy(RuntimeError):
+    """Native transient lock failure in an isolated, unpublished child."""
+    pass
+
+def worker_sqlite_error(exc):
+    return dict(sqlite_busy=is_sqlite_busy(exc),
+                sqlite_errorcode=getattr(exc,'sqlite_errorcode',None),
+                sqlite_errorname=getattr(exc,'sqlite_errorname',None))
 
 
 JOB_FORMAT = "homemind-isolated-training-job"
@@ -1000,7 +1010,7 @@ def _resume_path(agent_id):
 def pending_training_agents(store):
     for path in _job_dir().glob('resume-*.json'):
         item=_read_json(path,{}) or {}
-        if item.get('source')==str(Path(store.path).resolve()) and item.get('state') in ('running','waiting_wal'):
+        if item.get('source')==str(Path(store.path).resolve()) and item.get('state') in ('running','waiting_wal','waiting_sqlite'):
             yield str(item['job']['agent_id'])
 
 
@@ -1116,7 +1126,7 @@ def resume_deferred_training(history, agent_id):
             STORE.event(agent_id,'info','training_preparation_resumed',
                         'Resuming committed preparation from the original frozen history interval',
                         {'job_id':item['job']['job_id'],'previous_version':'0.15.10'})
-    if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal','retry_preparation'):
+    if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal','waiting_sqlite','retry_preparation'):
         return False
     job=item['job']
     if item.get('state')=='retry_preparation':
@@ -1149,6 +1159,7 @@ def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
     marker=_resume_path(job['agent_id'])
     state=dict(saved or {},source=str(Path(STORE.path).resolve()),job=job,job_path=str(job_path))
     attempts=int(state.get('attempts',0))
+    busy_attempts=int(state.get('busy_attempts',0))
     stop=getattr(history,'stop_event',threading.Event())
     cancel=getattr(history,'job_cancel_event',None)
     while True:
@@ -1164,7 +1175,35 @@ def _supervise_generation(history,start_ts,end_ts,job,job_path,saved=None):
             result=_run_isolated_training_attempt(history,start_ts,end_ts,job,job_path)
             marker.unlink(missing_ok=True)
             return result
+        except WorkerSQLiteBusy as exc:
+            # The failed child has exited; no source connection or publication
+            # remains active. Retry the original frozen descriptor, not Recorder.
+            busy_attempts+=1
+            if busy_attempts>=5:
+                state.update(state='retry_preparation',busy_attempts=0)
+                _atomic_json(marker,state)
+                error=StoragePressure('SQLite worker lock retry limit exhausted; previous model retained')
+                error.reason='sqlite_busy_exhausted'
+                raise error from exc
+            state.update(state='waiting_sqlite',busy_attempts=busy_attempts)
+            _atomic_json(marker,state)
+            history.training_process_status={**getattr(history,'training_process_status',{}),
+                'state':'waiting_sqlite','sqlite_busy_retries':busy_attempts,
+                'message':'Waiting for SQLite writer; retrying frozen training job'}
+            STORE.event(job['agent_id'],'info','training_sqlite_retry',
+                        'Transient SQLite lock; retrying the same training job',
+                        dict(attempt=busy_attempts,job_id=job['job_id'],error=str(exc)))
+            delay=min(8.,2.**busy_attempts)
+            until=time.monotonic()+delay
+            while time.monotonic()<until:
+                if stop.wait(min(.2,max(0.,until-time.monotonic()))) or (cancel is not None and cancel.is_set()):
+                    marker.unlink(missing_ok=True)
+                    raise InterruptedError('SQLite worker retry cancelled')
         except StoragePressure as exc:
+            if getattr(exc,'reason',None)=='sqlite_busy_exhausted':
+                state.update(state='retry_preparation',busy_attempts=0)
+                _atomic_json(marker,state)
+                raise
             if getattr(exc,'reason',None)!='wal_budget':
                 marker.unlink(missing_ok=True)
                 raise
@@ -1348,7 +1387,8 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
                         keys=('stage','operation','operation_vm_steps','operation_elapsed_seconds',
                               'query_key','current_cursor','rows_copied','copy_pages','elapsed_seconds',
                               'cpu_seconds','sqlite_seconds','throttle_seconds','commit_seconds',
-                              'generation_scratch_bytes','generation_limit_bytes','wal_peak_bytes')
+                              'generation_scratch_bytes','generation_limit_bytes','wal_peak_bytes',
+                              'sqlite_busy_retries','sqlite_errorcode','sqlite_errorname','retry_delay_seconds')
                         diagnostic={k:preparation[k] for k in keys if k in preparation}
                         print('[training] preparation '+str(job['job_id'])+' '+json.dumps(diagnostic,default=str),flush=True)
                         preparation_log_stage=log_stage
@@ -1458,6 +1498,8 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
             if isinstance(result, dict) and result.get("trace"):
                 print("[training] Isolated worker failed:\n" + result["trace"], flush=True)
                 history.training_process_status["failure_trace"] = result["trace"]
+            if (result or {}).get('sqlite_busy') and job.get('training_generation'):
+                raise WorkerSQLiteBusy(detail or 'Isolated worker SQLite contention')
             if error_type == "StaleTrainingJob":
                 raise StaleTrainingJob(
                     detail or "isolated worker rejected stale training job",
@@ -1555,9 +1597,16 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
         if result.get('generation_path'):
             from history_recovery import publish_generation
             from storage_budget import run_storage_write
-            run_storage_write(STORE,lambda:publish_generation(STORE,result['generation_path'],agent_id,
-                job['agent_fingerprint'],agent_config_fingerprint),
-                getattr(history,'stop_event',threading.Event()),getattr(history,'job_cancel_event',None))
+            from sqlite_background import background_sqlite
+            def publish_once():
+                # The transaction rolls back on BUSY. Release Store.lock before
+                # backoff; do not rerun the already successful training.
+                with background_sqlite(STORE, retryable=False):
+                    return publish_generation(STORE,result['generation_path'],agent_id,
+                        job['agent_fingerprint'],agent_config_fingerprint)
+            run_storage_write(STORE,publish_once,
+                getattr(history,'stop_event',threading.Event()),getattr(history,'job_cancel_event',None),
+                busy_timeout=90.)
             neural_service = getattr(history.engine,'tiny_mlp_shadow',None)
             if neural_service is not None and callable(getattr(neural_service,'invalidate',None)):
                 neural_service.invalidate(agent_id)
@@ -1675,9 +1724,10 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
-        if job.get('training_generation'):
+        if job.get('training_generation') and not isinstance(exc, WorkerSQLiteBusy):
             STORE.event(agent_id,'warning','training_recovery_failed',
-                        str(exc),dict(agent_id=agent_id,previous_model_retained=True))
+                        str(exc),dict(agent_id=agent_id,previous_model_retained=True,
+                            trace=history.training_process_status.get('failure_trace') or traceback.format_exc(limit=8)))
         rollback_agent = agent_before
         rollback_model = model_before
         rollback_neural = neural_before
@@ -1948,7 +1998,8 @@ def worker_main(job_path):
         except Exception as exc:
             _atomic_json(job['result_path'], dict(format=RESULT_FORMAT, version=RESULT_VERSION,
                 job_id=job['job_id'], ok=False, error=f'{type(exc).__name__}: {exc}',
-                error_type=type(exc).__name__, storage_pressure_reason=getattr(exc,'reason',None), trace=traceback.format_exc(limit=8)))
+                error_type=type(exc).__name__, storage_pressure_reason=getattr(exc,'reason',None),
+                trace=traceback.format_exc(limit=12), **worker_sqlite_error(exc)))
             return 2
         # This is a fresh child: all subsequent Store, context, RAM index, temporal
         # and long-memory readers/writers share the SAME clean generation path.
@@ -2275,6 +2326,7 @@ def worker_main(job_path):
         result.update({
             "error": f"{type(exc).__name__}: {exc}",
             "error_type": type(exc).__name__,
+            **worker_sqlite_error(exc),
             "storage_pressure_reason": getattr(exc, 'reason', None) if isinstance(exc, StoragePressure) else None,
             "trace": traceback.format_exc(limit=12),
             "training_budget": TRAINING_BUDGET.snapshot(),
@@ -2303,7 +2355,20 @@ def main():
     # Direct CLI/test invocation must use the same existing-database bootstrap contract
     # as subprocesses created by run_isolated_training_chunk().
     os.environ["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
-    raise SystemExit(worker_main(args.worker))
+    try:
+        code=worker_main(args.worker)
+    except Exception as exc:
+        # Bootstrap imports / Store attachment can fail before worker_main's
+        # own result handler exists. Preserve native SQLite classification.
+        job=_read_json(args.worker,{}) or {}
+        if not job.get('result_path') or not job.get('job_id'):
+            raise
+        _atomic_json(job['result_path'],dict(format=RESULT_FORMAT,version=RESULT_VERSION,
+            job_id=job['job_id'],ok=False,error=f'{type(exc).__name__}: {exc}',
+            error_type=type(exc).__name__,storage_pressure_reason=getattr(exc,'reason',None),
+            trace=traceback.format_exc(limit=12),**worker_sqlite_error(exc)))
+        code=2
+    raise SystemExit(code)
 
 
 if __name__ == "__main__":

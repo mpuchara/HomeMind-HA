@@ -675,6 +675,13 @@ class ActualWorkerSmoke(unittest.TestCase):
         self.assertEqual(result['history_recovery']['gaps'],[])
         self.assertGreater(result['benchmark_counts']['total'],0) if 'total' in (result['benchmark_counts'] or {}) else None
 
+    def test_generation_worker_waits_for_real_sqlite_writer_then_finishes_shadow(self):
+        result=self.run_worker_fixture(samples=480,corruption_recovery=True,
+            qualify=True,inherit_storage_budget=True,hold_source_writer=True)
+        self.assertEqual(result['agent_mode'],'shadow')
+        self.assertEqual(result['agent_progress'],1.)
+        self.assertGreater(result['history_recovery']['sqlite_busy_retries'],0)
+
     def test_worker_with_corrupt_archive_indexes_keeps_the_same_learned_model(self):
         reference = self.run_worker_fixture(samples=120)
         recovered = self.run_worker_fixture(samples=120, corrupt_archive_indexes=True)
@@ -699,7 +706,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                            corruption_recovery=False, corrupt_table_page=False,
                            two_agents=False, http_gap=False, kill_and_restart=False,
                              expect_unavailable=False, large_noise_rows=0, inherit_storage_budget=False, rich_checkpoints=False,
-                             corrupt_context_provenance=False):
+                             corrupt_context_provenance=False,hold_source_writer=False):
         with tempfile.TemporaryDirectory(prefix="hm-worker-smoke-") as root:
             db = Path(root) / "adaptive_ai.db"
             store = Store(db)
@@ -1079,9 +1086,33 @@ runpy.run_path(args[0],run_name='__main__')
                 except Exception as exc:
                     writer_errors.append(exc)
 
-            writer = threading.Thread(target=write_metadata) if concurrent_writes else None
+            lock_ready=threading.Event()
+            lock_observed=[]
+            def hold_writer():
+                try:
+                    with sqlite3.connect(db,timeout=5) as connection:
+                        connection.execute('BEGIN IMMEDIATE')
+                        connection.execute("INSERT OR REPLACE INTO app_meta VALUES('lock_probe','retained')")
+                        lock_ready.set()
+                        until=time.monotonic()+30.
+                        while not writer_stop.is_set() and time.monotonic()<until:
+                            try:
+                                status=json.loads(Path(job['status_path']).read_text())
+                                if (status.get('preparation') or {}).get('stage')=='Waiting for SQLite':
+                                    lock_observed.append(True)
+                                    break
+                            except (OSError,ValueError):
+                                pass
+                            writer_stop.wait(.05)
+                except Exception as exc:
+                    writer_errors.append(exc)
+                    lock_ready.set()
+
+            writer = threading.Thread(target=hold_writer if hold_source_writer else write_metadata) if (concurrent_writes or hold_source_writer) else None
             if writer:
                 writer.start()
+            if hold_source_writer:
+                self.assertTrue(lock_ready.wait(5))
             try:
                 completed = subprocess.run(
                     command,
@@ -1098,6 +1129,8 @@ runpy.run_path(args[0],run_name='__main__')
                     writer.join(15)
                     self.assertFalse(writer.is_alive())
             self.assertEqual(writer_errors, [])
+            if hold_source_writer:
+                self.assertTrue(lock_observed,'worker never reported waiting for real SQLite lock')
             if realtime_rows:
                 with store.conn() as conn:
                     self.assertEqual(conn.execute("SELECT COUNT(*) FROM entity_history WHERE entity_id='sensor.realtime_probe'").fetchone()[0],len(realtime_rows))

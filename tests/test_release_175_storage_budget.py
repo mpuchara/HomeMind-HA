@@ -233,8 +233,8 @@ class StorageBudget175Tests(unittest.TestCase):
         path.write_text(json.dumps({'agent_training_history_days': 7, 'agent_training_long_memory_days': 35, 'archive_retention_days': 365}))
         with patch.object(settings, 'OPTIONS_PATH', path):
             options = settings.load_options()
-        self.assertEqual(options['agent_training_history_days'], 14)
-        self.assertEqual(options['agent_training_long_memory_days'], 14)
+        self.assertEqual(options['agent_training_history_days'], 7)
+        self.assertEqual(options['agent_training_long_memory_days'], 7)
         self.assertEqual(options['archive_retention_days'], 14)
 
     def test_worker_json_quota_preserves_previous_result(self):

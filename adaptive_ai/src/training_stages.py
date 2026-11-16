@@ -3,6 +3,8 @@
 def stage_for(phase='', message='', detail='', preparation=None, process=None):
     if (process or {}).get('state')=='waiting_wal':
         return 'Waiting for WAL'
+    if (process or {}).get('state')=='waiting_sqlite':
+        return 'Waiting for SQLite'
     if preparation:
         return preparation.get('stage','Preparing generation')
     text=(str(message)+' '+str(detail)).lower()

@@ -16,7 +16,7 @@ import sqlite3
 import time
 
 from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct_fingerprint, correct_predicate
-from sqlite_background import is_sqlite_corruption
+from sqlite_background import is_sqlite_corruption, is_sqlite_busy
 from training_budget import TRAINING_BUDGET
 from storage_budget import StoragePressure
 
@@ -154,6 +154,7 @@ class Preparation:
         self.operation_vm_steps = 0
         self.operation_started = 0.
         self.last_prefix_check = 0.
+        self.failure_stage = 'admission'
 
     def checkpoint(self):
         if self.cancelled():
@@ -223,6 +224,7 @@ class Preparation:
     def begin_operation(self, name):
         """Finalization has no history cursor. Publish its own measured work."""
         self.operation = name
+        self.failure_stage='finalize:'+name
         self.operation_vm_steps = 0
         self.operation_started = time.monotonic()
         self.emit('entity_history','generation_finalization',True)
@@ -312,6 +314,7 @@ class Preparation:
     def copy(self, table, predicate='', params=(), *, query_key=None, history=False, key='rowid', checkpoint=True, strategy='scoped_sql', physical=False):
         """Keyset paging uses the source's entity/time or agent index, before decoding."""
         query_key = query_key or table
+        self.failure_stage='copy:'+query_key
         saved = self.state['queries'].get(query_key,{}) if checkpoint else {}
         if saved.get('done'):
             return
@@ -497,7 +500,12 @@ class Preparation:
                 with closing(sqlite3.connect(self.working)) as old:
                     record=old.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()
                     reusable=bool(record and json.loads(record[0]).get('identity')==self.identity and json.loads(record[0]).get('bootstrap_complete'))
-            except (sqlite3.Error,ValueError):
+            except sqlite3.Error as exc:
+                # A busy reader does not prove that committed scratch is invalid.
+                if is_sqlite_busy(exc):
+                    raise
+                reusable=False
+            except ValueError:
                 reusable=False
             if not reusable:
                 # This is our disposable work file, never the original DB/WAL.
@@ -511,6 +519,7 @@ class Preparation:
         if self.disk < 16*MIB or self.disk < scratch_bytes(self.working):
             raise generation_pressure('generation_capacity', self.working, self.disk, self.reserve)
         self.checkpoint()
+        self.failure_stage='validate_retained_prefix' if self.working.exists() else 'source_fence'
         if self.working.exists():
             with closing(sqlite3.connect(self.working)) as old:
                 saved=json.loads(old.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()[0])
@@ -530,12 +539,14 @@ class Preparation:
                 fence.execute('PRAGMA synchronous=NORMAL')
                 page_size=fence.execute('PRAGMA page_size').fetchone()[0]
                 fence.execute(f'PRAGMA max_page_count={max(1,guard.db_limit//page_size)}')
-                install(fence)
-                fence.commit()
-                snapshot_started=time.perf_counter()
                 fence.row_factory=sqlite3.Row
+                # Acquire the writer slot before any reads/ledger writes, avoiding
+                # a deferred read->write upgrade (SQLITE_BUSY_SNAPSHOT).
+                # Install and capture must use one transaction, not two acquisitions.
                 fence.execute('BEGIN IMMEDIATE')
+                snapshot_started=time.perf_counter()
                 try:
+                    install(fence)
                     self.src=fence
                     if self.agent_id:
                         target=fence.execute('SELECT target_entity FROM agents WHERE id=?',(self.agent_id,)).fetchone()
@@ -553,6 +564,7 @@ class Preparation:
                 except Exception:
                     fence.rollback()
                     raise
+        self.failure_stage='open_generation'
         self.source_signature=signature(self.source)
         with closing(sqlite3.connect(self.source.as_uri()+'?mode=ro',uri=True,timeout=5)) as self.src, \
                 closing(sqlite3.connect(self.working,timeout=5)) as self.dst:
@@ -607,7 +619,9 @@ class Preparation:
                 self.agent_ids = [r[0] for r in self.src.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))]
             try:
                 previous = self.dst.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as exc:
+                if is_sqlite_busy(exc) or 'no such table' not in str(exc).lower():
+                    raise
                 previous = None
             if previous:
                 self.state = json.loads(previous[0])
@@ -1081,13 +1095,47 @@ class Preparation:
 
 def prepare_generation(source,destination,entities,start,end,*,options=None,cancelled=lambda:False,
                        progress=lambda **kw:None,http_gaps=(),agent_id=None,rebuild=False):
-    preparation = Preparation(source,destination,entities,start,end,options,cancelled,progress,agent_id,rebuild)
-    try:
-        return preparation.run(http_gaps)
-    except sqlite3.OperationalError as exc:
-        if getattr(exc, 'sqlite_errorcode', 0) & 255 != sqlite3.SQLITE_FULL:
-            raise
-        # SQLITE_FULL can be an SQLite page limit even on a mostly empty disk.
-        # Preserve the committed scratch and distinguish capacity from free space.
-        raise generation_pressure('sqlite_full', preparation.working,
-                                  preparation.disk, preparation.reserve) from exc
+    # Retry only native lock contention. Every attempt closes its connections,
+    # and the next attempt validates the committed source fence/copy checkpoint.
+    # Do not keep a reader or writer open while sleeping.
+    entities=tuple(entities)
+    deadline=time.monotonic()+90.
+    retries=0
+    busy_wait_seconds=0.
+    while True:
+        preparation = Preparation(source,destination,entities,start,end,options,cancelled,progress,agent_id,rebuild)
+        try:
+            report=preparation.run(http_gaps)
+            report['sqlite_busy_retries']=retries
+            report['sqlite_busy_wait_seconds']=round(busy_wait_seconds,3)
+            return report
+        except sqlite3.OperationalError as exc:
+            if getattr(exc, 'sqlite_errorcode', 0) & 255 == sqlite3.SQLITE_FULL:
+                raise generation_pressure('sqlite_full', preparation.working,
+                                          preparation.disk, preparation.reserve) from exc
+            if not is_sqlite_busy(exc):
+                raise
+            retries+=1
+            if retries>=10 or time.monotonic()>=deadline:
+                error=StoragePressure('SQLite busy retry budget exhausted during '+preparation.failure_stage+
+                                      '; previous model and committed preparation retained')
+                error.reason='sqlite_busy_exhausted'
+                raise error from exc
+            delay=min(4.,.25*2**min(retries-1,4),max(0.,deadline-time.monotonic()))
+            details=dict(stage='Waiting for SQLite',operation=preparation.failure_stage,
+                         sqlite_busy_retries=retries,sqlite_errorcode=getattr(exc,'sqlite_errorcode',None),
+                         sqlite_errorname=getattr(exc,'sqlite_errorname',None),
+                         retry_delay_seconds=delay,copy_strategy='sqlite_busy_wait',
+                         generation_scratch_bytes=scratch_bytes(preparation.working))
+            progress(message='Waiting for SQLite writer; training will retry',
+                     phase_detail=preparation.failure_stage,progress=None,work_done=0,preparation=details)
+            print('[training] SQLite busy: '+json.dumps(details),flush=True)
+            began=time.monotonic()
+            until=began+delay
+            while time.monotonic()<until:
+                if cancelled():
+                    raise InterruptedError('SQLite preparation retry cancelled')
+                time.sleep(min(.1,max(0.,until-time.monotonic())))
+            busy_wait_seconds+=time.monotonic()-began
+            if cancelled():
+                raise InterruptedError('SQLite preparation retry cancelled')

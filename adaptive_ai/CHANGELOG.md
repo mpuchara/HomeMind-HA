@@ -1,3 +1,9 @@
+# 0.15.14 — SQLite writer contention (TEST ONLY)
+
+- Acquire source fence in a single immediate transaction. Retry native BUSY/LOCKED outside connections with bounded backoff and preserved committed scratch.
+- Preserve SQLite error classification across worker process boundary, retry unpublished children, retry atomic publication without relearning.
+- Keep seven-day replay, prior model and Correct. Expose retry stage and failure trace.
+
 # 0.15.13 — Seven-day training and metadata recovery (TEST ONLY)
 
 - Cap explicit history and sparse replay to seven days, even with persisted older settings; retain existing archive and Correct.

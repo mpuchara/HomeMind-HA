@@ -858,7 +858,7 @@ class HistoryManager(threading.Thread):
                 STORE.event(
                     agent_id, "warning" if isinstance(exc, StoragePressure) else "error",
                     "agent_storage_paused" if isinstance(exc, StoragePressure) else "agent_index_failed", str(exc),
-                    {"trace": traceback.format_exc(limit=6)},
+                    {"trace": (getattr(session,'training_process_status',{}) or {}).get('failure_trace') or traceback.format_exc(limit=12)},
                 )
                 if not bool(getattr(exc, "preserve_training_state", False)):
                     current = STORE.get_agent_config(agent_id) or agent
