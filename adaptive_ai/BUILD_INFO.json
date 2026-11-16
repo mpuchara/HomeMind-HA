@@ -1,9 +1,9 @@
 {
-  "version": "0.15.14",
+  "version": "0.15.15",
   "release_date": "2026-11-16",
-  "base_version": "0.15.13",
-  "base_commit": "0564ce8bb7edfb9c02b26c04bfe627906ca064e4",
-  "release_status": "pi5-manual-validation-candidate-sqlite-contention",
+  "base_version": "0.15.14",
+  "base_commit": "56a18f184a06af06aea2d1eb835a1e01b75da086",
+  "release_status": "test-candidate-transparent-history-entity-progress",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
@@ -4110,5 +4110,11 @@
     "validation": "PENDING",
     "physical_pi_validation": "NOT RUN",
     "report": "docs/RELEASE_0_15_14_PL.md"
+  },
+  "release_01515": {
+    "scope": "Non-invasive live preparation telemetry; truthful per-entity time cursor and throughput; no training semantics changed",
+    "validation": "PENDING",
+    "physical_pi_validation": "NOT RUN",
+    "report": "docs/RELEASE_0_15_15_PL.md"
   }
 }

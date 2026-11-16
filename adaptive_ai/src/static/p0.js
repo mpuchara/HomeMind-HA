@@ -58,7 +58,20 @@
     const prep=h.training_process?.preparation;
     if(h.training_preparation_active && prep){
       const age=prep.last_cursor_advance_at?Math.max(0,Date.now()/1000-prep.last_cursor_advance_at):null;
-      return {title:prep.recovery_attempts?'Recovering corruption':'Preparing generation',detail:`${prep.table_name||''} · ${num(prep.payload_rows_fetched||0)} fetched · ${num(prep.unique_rows_copied||0)} unique${age==null?'':` · last advance ${Math.floor(age)} s ago`}`,p:Number(h.progress||0),eta:null,work:`${num(prep.committed_batches||0)} batches committed`};
+      const copyingHistory=prep.table_name==='entity_history' && prep.history_current_entity;
+      const cursorFraction=Number(prep.history_cursor_window_fraction);
+      const haveCursor=copyingHistory && prep.history_cursor_window_fraction!=null && Number.isFinite(cursorFraction);
+      const days=Number(prep.training_window_days||7);
+      const stageInfo=copyingHistory?[
+        `${num(prep.history_entities_done||0)}/${num(prep.history_entities_total||0)} entities finished`,
+        haveCursor?`${Math.round(cursorFraction*100)}% of current entity's ${days}-day time span scanned (not row count)`:null,
+        Number(prep.history_copy_rows_per_second)>0?`${num(Math.round(prep.history_copy_rows_per_second))} rows/s`:null
+      ].filter(Boolean).join(' · '):null;
+      const stale=age!=null&&age>=120;
+      return {title:prep.recovery_attempts?'Recovering corruption':'Preparing generation',
+        detail:`${copyingHistory?prep.history_current_entity:(prep.table_name||'')} · ${num(prep.payload_rows_fetched||0)} fetched · ${num(prep.unique_rows_copied||0)} unique${age==null?'':` · last advance ${Math.floor(age)} s ago`}${stale?' · check worker log':''}`,
+        p:Number(h.progress||0),eta:null,
+        work:`${stageInfo?stageInfo+' · ':''}${num(prep.committed_batches||0)} batches committed`};
     }
     const activeTrainingId=String(status.training_queue?.active?.agent_id||h.training_job_agent_id||'');
     const training=lastAgents.find(a=>String(a.id)===activeTrainingId)
@@ -85,7 +98,7 @@
   renderHistory = (h,status={}) => {
     const t=taskFor(h,status), p=Math.max(0,Math.min(100,Math.round((t.p||0)*100))), eta=duration(t.eta);
     const task=$('#taskPanel');
-    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?(h.training_preparation_active?'Counting preparation work…':'Measuring whole-training ETA…'):''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Percent and ETA cover the complete selected-agent training pass; stage counters may restart between chunks.':''}</span></div>`;
+    if(task) task.innerHTML=`<div class="history-head"><div><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||(p>0&&p<100?(h.training_preparation_active?'Overall training · copying selected history':'Measuring whole-training ETA…'):''))}</small></div></div>${p<100?`<div class="bar history-bar"><i style="width:${p}%"></i></div>`:''}<div class="history-timing"><b>${esc(t.work||'')}</b><span>${p<100?'Percent and ETA cover the complete selected-agent training pass; stage counters may restart between chunks.':''}</span></div>`;
     const ar=h.archive||{};
     $('#historyPanel').innerHTML=`<div class="history-head"><div><b>History / training diagnostics</b><span>${esc(h.message||h.phase||'idle')}</span></div><div class="history-percent"><strong>${p}%</strong><small>${esc(eta||'')}</small></div></div><div class="history-timing"><b>${h.work_total?`${num(h.work_done)} / ${num(h.work_total)} ${esc(h.work_unit||'items')}`:'No measurable background work'}</b><span>${esc(h.phase_detail||'')}</span></div><div class="history-grid"><div><b>${ar.stale&&!ar.measured_at?'Updating…':num(ar.n||0)}</b><span>archived changes${ar.stale?' · cached overview':''}</span></div><div><b>${ar.stale&&!ar.measured_at?'Updating…':Number(ar.days||0).toFixed(1)+' d'}</b><span>coverage</span></div><div><b>${num(h.context_candidates||ar.entities||0)}</b><span>context candidates</span></div><div><b>${Number(h.training_rows_per_second||0).toLocaleString(undefined,{maximumFractionDigits:2})}</b><span>training rows/s</span></div></div>`;
   };

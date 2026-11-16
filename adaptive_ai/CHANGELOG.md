@@ -1,3 +1,9 @@
+# 0.15.15 — Transparent long-running history preparation (TEST ONLY)
+
+- Show current history entity, its seven-day timestamp cursor percentage, number of completed entities and moving source rows/s; clearly label time cursor vs overall train percentage.
+- Replace ambiguous 'Counting preparation work' message; warn if no cursor progress for 120 s. Never block preparation to calculate record totals.
+- All copying, model/Correct semantics and disk safety remain unchanged.
+
 # 0.15.14 — SQLite writer contention (TEST ONLY)
 
 - Acquire source fence in a single immediate transaction. Retry native BUSY/LOCKED outside connections with bounded backoff and preserved committed scratch.

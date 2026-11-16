@@ -155,6 +155,9 @@ class Preparation:
         self.operation_started = 0.
         self.last_prefix_check = 0.
         self.failure_stage = 'admission'
+        self._history_rate_at = None
+        self._history_rate_rows = 0
+        self._history_copy_rate = 0.0
 
     def checkpoint(self):
         if self.cancelled():
@@ -243,6 +246,37 @@ class Preparation:
             return
         self.last_report = now
         metric = dict(self.state['tables'].get(table) or {})
+        if table == 'entity_history' and not self.in_recovery:
+            # Progress is *not* the number of records: the source may hold
+            # millions of dense radar readings in a single seven-day entity.
+            # Report a separate, explicitly time-based current-entity cursor
+            # without an expensive COUNT(*) or another source read/transaction.
+            done = sum(bool(self.state['queries'].get('history:'+entity,{}).get('done'))
+                       for entity in self.entities)
+            metric['history_entities_done'] = done
+            metric['history_entities_total'] = len(self.entities)
+            query = str(metric.get('query_key') or '')
+            if query.startswith('history:'):
+                entity = query[len('history:'):]
+                metric['history_current_entity'] = entity
+                cursor = metric.get('current_cursor')
+                if isinstance(cursor,(tuple,list)) and cursor and isinstance(cursor[0],(int,float)):
+                    ts = float(cursor[0])
+                    if math.isfinite(ts) and self.end > self.start:
+                        metric['history_cursor_ts'] = ts
+                        metric['history_cursor_window_fraction'] = round(
+                            max(0.,min(1.,(ts-self.start)/(self.end-self.start))),5)
+            rows = int(metric.get('source_rows_scanned',0))
+            if self._history_rate_at is not None and now > self._history_rate_at + 0.5:
+                recent = max(0.,(rows-self._history_rate_rows)/(now-self._history_rate_at))
+                # One-second instantaneous rates are noisy under disk sync;
+                # a lightweight EMA makes the display stable without I/O.
+                self._history_copy_rate = (recent if self._history_copy_rate == 0.
+                    else .3*recent+.7*self._history_copy_rate)
+            if self._history_rate_at is None or now >= self._history_rate_at + .5:
+                self._history_rate_at,self._history_rate_rows = now,rows
+            metric['history_copy_rows_per_second'] = round(self._history_copy_rate,1)
+            metric['training_window_days'] = round((self.end-self.start)/86400.,3)
         metric.update(agent_id=self.agent_id,table_name=table,copy_strategy=strategy,
             stage="Recovering corruption" if self.in_recovery else "Preparing generation",
             elapsed_seconds=round(now-self.started,6),cpu_seconds=round(time.process_time()-self.cpu_started,6),
