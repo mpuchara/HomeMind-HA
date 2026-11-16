@@ -1099,7 +1099,7 @@ def prepare_generation(source,destination,entities,start,end,*,options=None,canc
     # and the next attempt validates the committed source fence/copy checkpoint.
     # Do not keep a reader or writer open while sleeping.
     entities=tuple(entities)
-    deadline=time.monotonic()+90.
+    deadline=None
     retries=0
     busy_wait_seconds=0.
     while True:
@@ -1116,6 +1116,8 @@ def prepare_generation(source,destination,entities,start,end,*,options=None,canc
             if not is_sqlite_busy(exc):
                 raise
             retries+=1
+            if deadline is None:
+                deadline=time.monotonic()+90.
             if retries>=10 or time.monotonic()>=deadline:
                 error=StoragePressure('SQLite busy retry budget exhausted during '+preparation.failure_stage+
                                       '; previous model and committed preparation retained')
