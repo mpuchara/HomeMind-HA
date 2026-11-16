@@ -67,8 +67,9 @@
         haveCursor?`${Math.round(cursorFraction*100)}% of current entity's ${days}-day time span scanned (not row count)`:null,
         Number(prep.history_copy_rows_per_second)>0?`${num(Math.round(prep.history_copy_rows_per_second))} rows/s`:null
       ].filter(Boolean).join(' · '):null;
-      const stale=age!=null&&age>=120;
-      return {title:prep.recovery_attempts?'Recovering corruption':'Preparing generation',
+      const finalizing=prep.stage==='Finalizing generation';
+      const stale=!finalizing&&copyingHistory&&age!=null&&age>=120;
+      return {title:finalizing?'Finalizing generation':prep.recovery_attempts?'Recovering corruption':'Preparing generation',
         detail:`${copyingHistory?prep.history_current_entity:(prep.table_name||'')} · ${num(prep.payload_rows_fetched||0)} fetched · ${num(prep.unique_rows_copied||0)} unique${age==null?'':` · last advance ${Math.floor(age)} s ago`}${stale?' · check worker log':''}`,
         p:Number(h.progress||0),eta:null,
         work:`${stageInfo?stageInfo+' · ':''}${num(prep.committed_batches||0)} batches committed`};
