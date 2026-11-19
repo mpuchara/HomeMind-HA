@@ -91,9 +91,9 @@ Drugi gęsty trening wykonał własną kopię 2 137 110 rekordów i dotarł do j
 
 ## Pakiet i test instalacyjny
 
-Weryfikowany commit dodatku `9dfc3f26aa91a035a74436871074de126274278f`. CI zakończyło się sukcesem na Pythonie 3.11 i 3.13. Przeszły obraz Docker, build i smoke ARM64 pod QEMU, gotowość dostarczonego entrypointu i manifesty ZIP. [GitHub Actions](https://github.com/mpuchara/HomeMind-HA/actions/runs/44614495298)
+Weryfikowany commit dodatku `9dfc3f26aa91a035a74436871074de126274278f`. CI zakończyło się sukcesem na Pythonie 3.11 i 3.13, po 3 312 testów na wersję. Przeszły obraz Docker, build i smoke ARM64 pod QEMU, gotowość dostarczonego entrypointu i manifesty ZIP. [GitHub Actions](https://github.com/mpuchara/HomeMind-HA/actions/runs/44614495298)
 
-Pakiet testowy z CI zawiera wersję addon i repository oraz ich sumy SHA-256. Artefakt GitHub jest dostępny do 3.12.2026. [Pobierz pakiet testowy z CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/44614495298/artifacts/14576785041)
+Pakiet testowy z CI zawiera wersję addon i repository oraz ich sumy SHA-256. Zweryfikowany addon ZIP z CI jest dostępny lokalnie w `dist/ci-9dfc3f26/HomeMind-HA-0.15.16-addon.zip`, SHA-256 `25e737d0f988d5b363676177685afb4a3ad0895f1d5e9174d6aa0da3cd47872a`. Artefakt GitHub jest dostępny do 3.12.2026. [Pobierz pakiet testowy z CI](https://github.com/mpuchara/HomeMind-HA/actions/runs/44614495298/artifacts/14576785041)
 
 Lokalnie zweryfikowano ZIP dodatku z tego commita, jego manifest, wersję oraz wszystkie hashe pakietu. Plik to `dist/HomeMind-HA-0.15.16-addon.zip`, SHA-256 `9b0e07192ee181dfed1a02d06ed5a5017aa42640143274491f474ca8d9f04c64`. Migracja rzeczywistej bazy fixture 0.15.15 zachowała stan i czas odbioru obserwacji. Wersja 0.15.16 odrzuciła stary checkpoint i poprawnie zweryfikowała nowo zarejestrowane okno po operacji ochrony.
 
