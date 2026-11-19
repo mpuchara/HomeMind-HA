@@ -1,4 +1,7 @@
-"""Train three agents through the shipped HTTP runtime on disposable SQLite."""
+"""Train three agents through the shipped HTTP runtime on disposable SQLite.
+
+Use --rich for a seven-day, 25-agent archive with 240 entities and >2M observations.
+"""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,8 +31,8 @@ class RecorderStub(BaseHTTPRequestHandler):
     def do_GET(self):
         stamp = datetime.now(timezone.utc).isoformat()
         if self.path == '/api/states':
-            body = [dict(state(entity, 'off'), last_updated=stamp, last_changed=stamp)
-                    for entity in [RADAR, *TARGETS]]
+            body = [dict(row, last_updated=stamp, last_changed=stamp)
+                    for row in self.server.states]
         elif self.path.startswith('/api/history/period/'):
             self.server.recorder_requests += 1
             # The test starts with a prepared archive. No network history is missing.
@@ -146,23 +149,55 @@ def durable_shadow(store, aid):
             'features': model['schema']['entities'], 'watermark': watermark}
 
 
-def main(folder, recorder):
+def prepare_fixture(store, journal, rich):
+    targets = TARGETS if not rich else TARGETS + [f'switch.training_fixture_{i}' for i in range(3, 25)]
+    context = {}
+    if rich:
+        for kind, domain, count in (('occupancy', 'binary_sensor', 24), ('illuminance', 'sensor', 40),
+                                    ('temperature', 'sensor', 75), ('humidity', 'sensor', 75)):
+            for number in range(count):
+                context[f'{domain}.fixture_{kind}_{number}'] = kind
+    states = [state(entity, 'off') for entity in [RADAR, *targets]]
+    for entity, kind in context.items():
+        states.append({'entity_id': entity, 'state': 'off' if kind == 'occupancy' else '20',
+                       'attributes': {'device_class': kind}})
+    ids = [store.create_agent(dict(
+        name=target, target_entity=target, target_property='power', min_value=0, max_value=1,
+        deadband=.5, confidence_threshold=.78, action_interval=30, exploration_step=1,
+        input_entities=[RADAR, *context] if index < 3 else [RADAR]
+    ))['id'] for index, target in enumerate(targets)]
+    duration = (7 * 86400 - 300) if rich else 480 * 30
+    base = time.time() - duration - 30
+    step = duration / 480
+    store.archive_batch([(entity, base + index * step + (2 if entity != RADAR else 0),
+                           'on' if index % 2 else 'off', state(entity, 'off')['attributes'], None, 'test')
+                         for index in range(480) for entity in [RADAR, *targets]])
+    if rich:
+        for entity, kind in context.items():
+            attributes = {'device_class': kind}
+            for start in range(0, 10000, 500):
+                store.archive_batch([
+                    (entity, base + index * duration / 10000,
+                     ('on' if index % 2 else 'off') if kind == 'occupancy' else str(20 + index % 9),
+                     attributes, None, 'test') for index in range(start, start + 500)])
+        for aid in ids[:3]:
+            store.add_feedback(aid, 0, 0., -1., 'Correct fixture', {0: 1.}, source='manual_feedback')
+    frozen_stamp = max(base+30, time.time()-6*3600)
+    journal.record(RADAR, state(RADAR, 'on'), event_time=frozen_stamp, received_time=frozen_stamp,
+                   source='ha_event', event_key='fixture-frozen')
+    return ids[:3], states, frozen_stamp, {
+        'agents': len(ids), 'entities': len(states), 'seeded_observations': 480*(len(targets)+1)+10000*len(context),
+        'archive_window_hours': duration / 3600.,
+    }
+
+
+def main(folder, recorder, rich=False):
     from observation_contract import FeatureJournal
     from storage import STORE as store
 
-    agent_ids = [store.create_agent(dict(
-        name=target, target_entity=target, target_property='power', min_value=0, max_value=1,
-        deadband=.5, confidence_threshold=.78, action_interval=30, exploration_step=1,
-        input_entities=[RADAR]
-    ))['id'] for target in TARGETS]
-    base = time.time() - 480 * 30 - 30
-    events = [(entity, base + index * 30 + (2 if entity != RADAR else 0),
-               'on' if index % 2 else 'off', state(entity, 'off')['attributes'], None, 'test')
-              for index in range(480) for entity in [RADAR, *TARGETS]]
-    store.archive_batch(events)
     journal = FeatureJournal(store)
-    journal.record(RADAR, state(RADAR, 'on'), event_time=base+30, received_time=base+30,
-                   source='ha_event', event_key='fixture-frozen')
+    agent_ids, recorder.states, frozen_stamp, fixture = prepare_fixture(store, journal, rich)
+    training_timeout = 1800 if rich else 90
     env = dict(os.environ, HA_BASE_URL=f'http://127.0.0.1:{recorder.server_port}/api',
                SUPERVISOR_TOKEN='', HA_TOKEN='', PYTHONHASHSEED='0', OPENBLAS_NUM_THREADS='1')
     successes = []
@@ -173,8 +208,8 @@ def main(folder, recorder):
                       timeout=20)
         assert queue['active']['agent_id'] == agent_ids[0], queue
         assert queue['queued'][0]['agent_id'] == agent_ids[1], queue
-        successes.append(until(lambda: durable_shadow(store, agent_ids[0])))
-        successes.append(until(lambda: durable_shadow(store, agent_ids[1])))
+        successes.append(until(lambda: durable_shadow(store, agent_ids[0]), timeout=training_timeout))
+        successes.append(until(lambda: durable_shadow(store, agent_ids[1]), timeout=training_timeout))
     prior_models = {aid: store.get_model(aid) for aid in agent_ids[:2]}
     http_latency = []
     with runtime(folder, env, 'restarted') as port:
@@ -186,10 +221,10 @@ def main(folder, recorder):
             with store.conn() as conn:
                 return conn.execute('SELECT 1 FROM __training_feature_windows WHERE owner=?', (aid,)).fetchone()
 
-        until(frozen)
+        until(frozen, timeout=training_timeout)
         # Actual mutation that caused the 0.15.15 prefix failure, while the
         # third production job holds its boundary. Append live observations too.
-        journal.open_window('fixture-window', aid, [RADAR], base+30, 'decision', before=1, after=1)
+        journal.open_window('fixture-window', aid, [RADAR], frozen_stamp, 'decision', before=1, after=1)
         with store.conn() as conn:
             assert conn.execute("SELECT protected_until FROM feature_observation_events "
                                 "WHERE event_key='fixture-frozen'").fetchone()[0] > time.time()
@@ -202,7 +237,7 @@ def main(folder, recorder):
             began = time.perf_counter()
             call(port, '/api/agents')
             http_latency.append((time.perf_counter()-began)*1000)
-        successes.append(until(lambda: durable_shadow(store, aid)))
+        successes.append(until(lambda: durable_shadow(store, aid), timeout=training_timeout))
         path = f'/api/agents/{aid}/training-diagnostics'
         diagnostics = until(lambda: (report if (report := call(port, path))['overall'].get('completed') else None))
         assert diagnostics['preparation']['payload_rows_fetched_total'] > 0, diagnostics
@@ -215,7 +250,7 @@ def main(folder, recorder):
     assert len({item['watermark'] for item in successes}) == 3
     ordered = sorted(http_latency)
     percentiles = {f'p{pct}': ordered[math.ceil(pct / 100 * len(ordered)) - 1] for pct in (50, 95, 99)}
-    print(json.dumps({'completed': successes, 'recorder_requests': recorder.recorder_requests,
+    print(json.dumps({'fixture': fixture, 'completed': successes, 'recorder_requests': recorder.recorder_requests,
                       'control_requests': recorder.control_requests, 'http_ms': http_latency,
                       'http_percentiles_ms': percentiles, 'diagnostics': diagnostics}, indent=2))
 
@@ -238,7 +273,7 @@ if __name__ == '__main__':
                 thread = threading.Thread(target=recorder.serve_forever, daemon=True)
                 thread.start()
                 try:
-                    main(folder, recorder)
+                    main(folder, recorder, rich='--rich' in sys.argv)
                 finally:
                     recorder.shutdown()
                     thread.join()
