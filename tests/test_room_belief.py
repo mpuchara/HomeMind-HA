@@ -29,6 +29,31 @@ def route(model, path, start):
 
 
 class RoomBeliefTests(unittest.TestCase):
+    def test_observe_keeps_detailed_forecast_and_checkpoint_parity(self):
+        class DetailedObservations(RoomBeliefModel):
+            def _fuse_room(self, area, ts, *, include_evidence=True):
+                return super()._fuse_room(area, ts, include_evidence=True)
+
+        detailed = DetailedObservations()
+        compact = RoomBeliefModel()
+        series = [
+            ('presence', 'kitchen', 0., 1., RADAR, 1.),
+            ('pir', 'kitchen', 1., 3., PIR, 2.),
+            ('presence', 'kitchen', 1., 4., RADAR, 4.),
+            ('energy', 'kitchen', .8, 5., RAW, 5.),
+            ('presence', 'office', 1., 8., RADAR, 7.),
+            ('presence', 'office', None, 9., RADAR, 9.),
+            ('pir', 'kitchen', 0., 10., PIR, 1.),  # delayed older event
+            ('presence', 'office', 0., 11., RADAR, 11.),
+        ]
+        for entity, area, value, ts, evidence, event_ts in series:
+            args = (entity, area, value, ts)
+            kwargs = dict(evidence=evidence, event_ts=event_ts, received_ts=ts)
+            self.assertEqual(detailed.observe(*args, **kwargs), compact.observe(*args, **kwargs))
+            for room in ('kitchen', 'office'):
+                self.assertEqual(detailed.forecast(room, ts), compact.forecast(room, ts))
+        self.assertEqual(detailed.export(), compact.export())
+
     def test_two_people_can_occupy_two_rooms_without_identity_inference(self):
         m = RoomBeliefModel()
         m.observe('radar.a', 'kitchen', 1.0, 1, evidence=RADAR)
@@ -150,27 +175,28 @@ class RoomBeliefTests(unittest.TestCase):
 
             live = ContextEngine(DEFAULT_OPTIONS)
             live.configure({sensor: sensor_off, target: target_state}, entities=registry)
-            live.observe(sensor, sensor_off, 100.0, event_ts=100.0, received_ts=100.0)
-            live_before = live.forecast(target, 110.0)
-            live.observe(sensor, sensor_on, 112.0, event_ts=105.0, received_ts=112.0)
-            live_after = live.forecast(target, 113.0)
+            base = 1_700_000_000.0
+            live.observe(sensor, sensor_off, base+100, event_ts=base+100, received_ts=base+100)
+            live_before = live.forecast(target, base+110)
+            live.observe(sensor, sensor_on, base+112, event_ts=base+105, received_ts=base+112)
+            live_after = live.forecast(target, base+113)
 
             store.archive_batch([
-                (sensor, 100.0, 'off', {'device_class': 'occupancy'}, None, 'live', 100.0),
-                (sensor, 105.0, 'on', {'device_class': 'occupancy'}, None, 'live', 112.0),
+                (sensor, base+100, 'off', {'device_class': 'occupancy'}, None, 'live', base+100),
+                (sensor, base+105, 'on', {'device_class': 'occupancy'}, None, 'live', base+112),
             ])
             replay_context = ContextEngine(DEFAULT_OPTIONS)
             replay_context.configure(
                 {sensor: sensor_on, target: target_state}, entities=registry
             )
             tracker = SQLiteTemporalTracker(
-                store, {sensor}, replay_context, 90.0, 120.0
+                store, {sensor}, replay_context, base+90, base+120
             )
             try:
-                tracker.advance(110.0)
-                replay_before = tracker.history.home_context.forecast(target, 110.0)
-                tracker.advance(113.0)
-                replay_after = tracker.history.home_context.forecast(target, 113.0)
+                tracker.advance(base+110)
+                replay_before = tracker.history.home_context.forecast(target, base+110)
+                tracker.advance(base+113)
+                replay_after = tracker.history.home_context.forecast(target, base+113)
             finally:
                 tracker.close()
 
