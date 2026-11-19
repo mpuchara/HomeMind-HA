@@ -32,11 +32,15 @@ jobs:
       - name: Feature fence and production training queue through HTTP with restart
         run: |
           python -m unittest discover -s tests -p test_training_feature_fence.py -v
-          python tools/validate_training_queue_e2e.py | tee training-queue-e2e.json
+          python tools/validate_training_queue_e2e.py > training-queue-e2e.json
+          cat training-queue-e2e.json
       - uses: actions/upload-artifact@v4
         with:
           name: training-queue-e2e-py${{ matrix.python }}
           path: training-queue-e2e.json
+      - name: Paired room-observation timing and forecast parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_room_observation.py
       - run: python -m unittest discover -s tests -v
       - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
         run: python tools/validate_training_0159.py

@@ -61,6 +61,17 @@ def serve(port_file):
     import trial_queue_main
     core = trial_queue_main.core
     default_server = core.ThreadingHTTPServer
+    topology = port_file.parent / 'fixture-topology.json'
+    if topology.exists():
+        prepare = core.prepare_engine_extensions
+
+        def prepare_with_registry():
+            prepare()
+            # Model the registry normally supplied by HA's websocket.
+            entries = json.loads(topology.read_text(encoding='utf-8'))
+            core.ENGINE.update_entity_registry(entries)
+
+        core.prepare_engine_extensions = prepare_with_registry
 
     def bind(_address, handler):
         listener = default_server(('127.0.0.1', 0), handler)
@@ -138,15 +149,18 @@ def durable_shadow(store, aid):
     if agent['mode'] != 'shadow' or agent['training_progress'] != 1.0:
         return None
     model = store.get_model(aid)
-    assert model and RADAR in model['schema']['entities'], model
+    features = (model or {}).get('schema', {}).get('entities', [])
+    assert RADAR in features, f'Expected radar in learned features, got {features}'
     with store.conn() as conn:
         count, watermark = conn.execute(
             'SELECT COUNT(*),MAX(id) FROM historical_experiences WHERE agent_id=?', (aid,)).fetchone()
         assert count > 0 and model['_history_watermark'] == watermark
         assert conn.execute('SELECT 1 FROM training_generation_backup WHERE agent_id=?', (aid,)).fetchone()
     assert agent['benchmark_samples'] >= 12, agent
+    holdout = model['_frozen_holdout_counts']['per_action']
+    assert all(holdout.get(action, {}).get('samples', 0) > 0 for action in ('0', '1')), holdout
     return {'agent_id': aid, 'experiences': count, 'benchmark_samples': agent['benchmark_samples'],
-            'features': model['schema']['entities'], 'watermark': watermark}
+            'features': features, 'watermark': watermark, 'holdout_per_action': holdout}
 
 
 def prepare_fixture(store, journal, rich):
@@ -197,10 +211,30 @@ def main(folder, recorder, rich=False):
 
     journal = FeatureJournal(store)
     agent_ids, recorder.states, frozen_stamp, fixture = prepare_fixture(store, journal, rich)
+    if rich:
+        kitchen = [RADAR, *TARGETS, 'sensor.fixture_illuminance_0']
+        entities = [
+            {'entity_id': row['entity_id'], 'area_id': 'kitchen' if row['entity_id'] in kitchen else 'other'}
+            for row in recorder.states
+        ]
+        (folder/'fixture-topology.json').write_text(json.dumps(entities), encoding='utf-8')
     training_timeout = 1800 if rich else 90
     env = dict(os.environ, HA_BASE_URL=f'http://127.0.0.1:{recorder.server_port}/api',
                SUPERVISOR_TOKEN='', HA_TOKEN='', PYTHONHASHSEED='0', OPENBLAS_NUM_THREADS='1')
     successes = []
+    timings = []
+
+    def completed(port, aid):
+        outcome = until(lambda: durable_shadow(store, aid), timeout=training_timeout)
+        path = f'/api/agents/{aid}/training-diagnostics'
+        report = until(lambda: (row if (row := call(port, path))['overall'].get('completed') else None))
+        profile = call(port, '/api/status')['history']['recent_training_profiles'][aid]
+        sequence = profile['training_job_timings'].get('training_session_profile') or {}
+        report['sequence'] = {key: sequence[key] for key in ('chunks', 'chunk_elapsed_seconds', 'phase_seconds')
+                              if key in sequence}
+        successes.append(outcome)
+        timings.append(report)
+
     with runtime(folder, env, 'first') as port:
         enqueue(port, agent_ids[0], 0)
         enqueue(port, agent_ids[1], 1)
@@ -208,8 +242,8 @@ def main(folder, recorder, rich=False):
                       timeout=20)
         assert queue['active']['agent_id'] == agent_ids[0], queue
         assert queue['queued'][0]['agent_id'] == agent_ids[1], queue
-        successes.append(until(lambda: durable_shadow(store, agent_ids[0]), timeout=training_timeout))
-        successes.append(until(lambda: durable_shadow(store, agent_ids[1]), timeout=training_timeout))
+        completed(port, agent_ids[0])
+        completed(port, agent_ids[1])
     prior_models = {aid: store.get_model(aid) for aid in agent_ids[:2]}
     http_latency = []
     with runtime(folder, env, 'restarted') as port:
@@ -237,9 +271,8 @@ def main(folder, recorder, rich=False):
             began = time.perf_counter()
             call(port, '/api/agents')
             http_latency.append((time.perf_counter()-began)*1000)
-        successes.append(until(lambda: durable_shadow(store, aid), timeout=training_timeout))
-        path = f'/api/agents/{aid}/training-diagnostics'
-        diagnostics = until(lambda: (report if (report := call(port, path))['overall'].get('completed') else None))
+        completed(port, aid)
+        diagnostics = timings[-1]
         assert diagnostics['preparation']['payload_rows_fetched_total'] > 0, diagnostics
         assert diagnostics['phases']['replay_seconds'] > 0, diagnostics
         for private in (aid, RADAR, TARGETS[2], 'current_cursor', 'received_time', 'trace', 'token'):
@@ -252,7 +285,7 @@ def main(folder, recorder, rich=False):
     percentiles = {f'p{pct}': ordered[math.ceil(pct / 100 * len(ordered)) - 1] for pct in (50, 95, 99)}
     print(json.dumps({'fixture': fixture, 'completed': successes, 'recorder_requests': recorder.recorder_requests,
                       'control_requests': recorder.control_requests, 'http_ms': http_latency,
-                      'http_percentiles_ms': percentiles, 'diagnostics': diagnostics}, indent=2))
+                      'http_percentiles_ms': percentiles, 'jobs': timings}, indent=2))
 
 
 if __name__ == '__main__':
