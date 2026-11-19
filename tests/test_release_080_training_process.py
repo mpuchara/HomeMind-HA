@@ -1010,6 +1010,7 @@ class ActualWorkerSmoke(unittest.TestCase):
                 checkpoint_ready=Path(root)/'committed-history-checkpoint'
                 probe_code='''
 import sys,runpy,time
+from contextlib import closing
 from pathlib import Path
 import policy,training_generation
 stamp=float(sys.argv[1]); ready=Path(sys.argv[2]); args=sys.argv[3:]
@@ -1017,15 +1018,17 @@ policy.now_ts=lambda:stamp
 original=training_generation.Preparation.save
 def save(preparation, *args, **kwargs):
     original(preparation, *args, **kwargs)
-    # Small/corrupt fixtures may finish an entity in one page. Verify the
-    # persisted cursor, not the in-memory cursor or a specific batch size.
+    # Recovery can write durable payload even when normal keyset reads hit a
+    # damaged page before advancing. Observe committed inputs from a separate
+    # connection, closing it before the child can seal its WAL.
     if preparation.dst.in_transaction:
         return
     import json,sqlite3
-    with sqlite3.connect(preparation.working.as_uri()+'?mode=ro',uri=True) as reader:
+    with closing(sqlite3.connect(preparation.working.as_uri()+'?mode=ro',uri=True)) as reader:
         saved=reader.execute('SELECT payload FROM __training_copy_state WHERE id=1').fetchone()
-    if saved and any(key.startswith('history:') and value.get('last')
-                     for key,value in json.loads(saved[0])['queries'].items()):
+        copied=reader.execute('SELECT 1 FROM entity_history WHERE ts BETWEEN ? AND ? LIMIT 1',
+                              (preparation.start, preparation.end)).fetchone()
+    if saved and json.loads(saved[0]).get('bootstrap_complete') and copied:
         ready.write_text('committed real history batch')
         time.sleep(30)
 training_generation.Preparation.save=save

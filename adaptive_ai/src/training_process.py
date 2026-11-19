@@ -1724,10 +1724,6 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
-        if job.get('training_generation') and not isinstance(exc, WorkerSQLiteBusy):
-            STORE.event(agent_id,'warning','training_recovery_failed',
-                        str(exc),dict(agent_id=agent_id,previous_model_retained=True,
-                            trace=history.training_process_status.get('failure_trace') or traceback.format_exc(limit=8)))
         rollback_agent = agent_before
         rollback_model = model_before
         rollback_neural = neural_before
