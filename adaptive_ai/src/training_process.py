@@ -336,18 +336,54 @@ def descriptor_checksum(payload):
     return _digest(clean)
 
 
-def _process_start_token(pid):
-    """Return Linux process start ticks when available, otherwise None."""
+def _windows_process_start_token(pid):
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    file_time = ctypes.POINTER(wintypes.FILETIME)
+    kernel.GetProcessTimes.argtypes = (wintypes.HANDLE, file_time, file_time, file_time, file_time)
+    handle = kernel.OpenProcess(0x00101000, False, pid)  # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None
     try:
-        fields = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8").split()
-        return str(fields[21])
+        if kernel.WaitForSingleObject(handle, 0) != 258:  # WAIT_TIMEOUT: process is alive
+            return None
+        started, exited, cpu_kernel, cpu_user = (wintypes.FILETIME() for _ in range(4))
+        if kernel.GetProcessTimes(handle, started, exited, cpu_kernel, cpu_user):
+            return str((started.dwHighDateTime << 32) | started.dwLowDateTime)
+        return None
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _process_start_token(pid):
+    """Return the OS process creation token when available."""
+    try:
+        pid = int(pid)
+        if os.name == 'nt':
+            return _windows_process_start_token(pid)
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        return stat.rpartition(')')[2].split()[19]
     except (OSError, ValueError, IndexError):
         return None
 
 
 def _same_process_alive(pid, start_token=None):
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+        if pid <= 0:
+            return False
+        if os.name == 'nt':
+            # On Windows signal 0 is CTRL_C_EVENT, which sends a console signal.
+            current = _windows_process_start_token(pid)
+            return current is not None and (start_token is None or str(start_token) == current)
+        os.kill(pid, 0)
     except (OSError, ValueError):
         return False
     if start_token is None:
@@ -378,25 +414,11 @@ def _read_json(path, default=None):
         return default
 
 
-def _host_memory_mb(path="/proc/meminfo"):
-    """Return Linux MemTotal/MemAvailable in MB without importing psutil."""
-    result = {"total_mb": None, "available_mb": None}
-    try:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            key, _, raw = line.partition(":")
-            if key not in ("MemTotal", "MemAvailable"):
-                continue
-            value = raw.strip().split()
-            if not value:
-                continue
-            mb = float(value[0]) / 1024.0
-            if key == "MemTotal":
-                result["total_mb"] = mb
-            else:
-                result["available_mb"] = mb
-    except (OSError, ValueError):
-        pass
-    return result
+def _host_memory_mb():
+    """Reuse the runtime's effective host and container headroom calculation."""
+    from runtime_sqlite_cache import memory_headroom
+    total, available = memory_headroom()
+    return {"total_mb": total, "available_mb": available}
 
 
 def resolve_training_resource_profile(options=None, memory=None):
@@ -451,7 +473,7 @@ def resolve_training_resource_profile(options=None, memory=None):
     candidates = [ceiling]
     if isinstance(total_mb, (int, float)) and float(total_mb) > 0.0:
         candidates.append(max(floor, float(total_mb) * total_fraction))
-    if isinstance(available_mb, (int, float)) and float(available_mb) > 0.0:
+    if isinstance(available_mb, (int, float)) and float(available_mb) >= 0.0:
         available = float(available_mb)
         by_fraction = available * available_fraction
         by_reserve = max(floor, available - reserve)

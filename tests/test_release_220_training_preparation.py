@@ -55,8 +55,8 @@ class Preparation220Tests(unittest.TestCase):
 
     def test_cgroup_cap_is_applied_to_headroom(self):
         def read(p, *a, **kw):
-            if str(p)=='/sys/fs/cgroup/memory.max':return str(1024*1024*1024)
-            if str(p)=='/sys/fs/cgroup/memory.current':return str(600*1024*1024)
+            if p.as_posix()=='/sys/fs/cgroup/memory.max':return str(1024*1024*1024)
+            if p.as_posix()=='/sys/fs/cgroup/memory.current':return str(600*1024*1024)
             raise FileNotFoundError
         with patch('training_process._host_memory_mb', return_value={'total_mb':7806.,'available_mb':5600.}), \
                 patch('training_preparation.Path.read_text', autospec=True, side_effect=read):
