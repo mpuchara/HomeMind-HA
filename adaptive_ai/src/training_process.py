@@ -1030,10 +1030,16 @@ def _resume_path(agent_id):
 
 
 def pending_training_agents(store):
+    from history_recovery import generation_already_published
     for path in _job_dir().glob('resume-*.json'):
         item=_read_json(path,{}) or {}
         if item.get('source')==str(Path(store.path).resolve()) and item.get('state') in ('running','waiting_wal','waiting_sqlite'):
-            yield str(item['job']['agent_id'])
+            job = item['job']
+            agent_id = str(job['agent_id'])
+            if generation_already_published(store, agent_id, job.get('job_id')):
+                path.unlink(missing_ok=True)
+            else:
+                yield agent_id
 
 
 def _retire_legacy_preparation(item):
@@ -1151,6 +1157,10 @@ def resume_deferred_training(history, agent_id):
     if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal','waiting_sqlite','retry_preparation'):
         return False
     job=item['job']
+    from history_recovery import generation_already_published
+    if generation_already_published(STORE, agent_id, job.get('job_id')):
+        _resume_path(agent_id).unlink(missing_ok=True)
+        return False
     if item.get('state')=='retry_preparation':
         if bool(job.get('generation_rebuild'))!=bool(getattr(history,'training_generation_rebuild',False)):
             return False
@@ -1625,7 +1635,7 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
                 # backoff; do not rerun the already successful training.
                 with background_sqlite(STORE, retryable=False):
                     return publish_generation(STORE,result['generation_path'],agent_id,
-                        job['agent_fingerprint'],agent_config_fingerprint)
+                        job['agent_fingerprint'],agent_config_fingerprint,job_id=job['job_id'])
             run_storage_write(STORE,publish_once,
                 getattr(history,'stop_event',threading.Event()),getattr(history,'job_cancel_event',None),
                 busy_timeout=90.)

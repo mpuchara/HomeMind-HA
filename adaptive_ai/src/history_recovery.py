@@ -104,7 +104,18 @@ LIFECYCLE_COLUMNS = ('training_state', 'mode', 'benchmark_score', 'benchmark_sam
     'training_progress', 'training_updated_at')
 
 
-def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint):
+def generation_already_published(store, agent_id, job_id):
+    if not job_id:
+        return False
+    with store.conn() as conn:
+        return bool(
+            conn.execute("SELECT 1 FROM sqlite_master WHERE name='__training_published_jobs'").fetchone()
+            and conn.execute('SELECT 1 FROM __training_published_jobs WHERE agent_id=? AND job_id=?',
+                             (agent_id, job_id)).fetchone()
+        )
+
+
+def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint, *, job_id=None):
     """Publish policy, experiences, cursor, benchmark and neural record in ONE WAL transaction.
 
     Correct/config/candidates/other agents are never replaced by stale worker copies.
@@ -114,9 +125,15 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint)
     ensure_tables(store)
     with store.lock, store.conn() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS training_generation_backup(agent_id TEXT PRIMARY KEY,agent_json TEXT,model_json TEXT,neural_json TEXT)')
+        if job_id:
+            conn.execute('CREATE TABLE IF NOT EXISTS __training_published_jobs ('
+                         'agent_id TEXT PRIMARY KEY, job_id TEXT NOT NULL)')
     with store.lock, store.conn() as conn:
         conn.execute("ATTACH DATABASE ? AS trained", (str(path),))
         conn.execute("BEGIN IMMEDIATE")
+        if job_id and conn.execute('SELECT 1 FROM __training_published_jobs WHERE agent_id=? AND job_id=?',
+                                   (agent_id, job_id)).fetchone():
+            return
         current = store.get_agent_config(agent_id)
         if fingerprint(current) != expected_fingerprint:
             raise RecoveryUnavailable("Agent changed before atomic publication")
@@ -157,4 +174,6 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint)
             conn.execute("INSERT INTO tiny_mlp_shadow_models SELECT * FROM trained.tiny_mlp_shadow_models WHERE agent_id=?", (agent_id,))
         from training_snapshot import release_feature_window
         release_feature_window(conn, boundary)
+        if job_id:
+            conn.execute('INSERT OR REPLACE INTO __training_published_jobs VALUES(?,?)', (agent_id, job_id))
     store.touch_agent_index()
