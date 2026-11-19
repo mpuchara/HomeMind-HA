@@ -12,6 +12,25 @@ from contextlib import contextmanager
 
 ENTITY_PREFIX_TABLES = {'entity_history':'ts', 'feature_observation_events':'event_time',
                         'provenance_events':'event_time', 'provenance_history_links':'event_time'}
+FEATURE_EVENTS = 'feature_observation_events'
+FEATURE_FENCES = '__training_feature_windows'
+
+
+def changed_columns(columns, excluded=()):
+    fields = (f'OLD.{quote(column)} IS NOT NEW.{quote(column)}'
+              for column in columns if column not in excluded)
+    return '(' + ' OR '.join([*fields, 'OLD.rowid IS NOT NEW.rowid']) + ')'
+
+
+def install_trigger(connection, name, sql, legacy=None):
+    existing = connection.execute('SELECT sql FROM sqlite_master WHERE name=?', (name,)).fetchone()
+    if existing is not None and existing[0] == sql:
+        return
+    if existing is not None:
+        if existing[0] != legacy:
+            raise RuntimeError('Training mutation guard definition mismatch: ' + name)
+        connection.execute('DROP TRIGGER ' + quote(name))
+    connection.execute(sql)
 
 
 @contextmanager
@@ -61,6 +80,8 @@ def install(connection):
         if 'WITHOUT ROWID' in (tables[table] or '').upper():
             raise RuntimeError('Training boundary requires rowid: '+table)
         literal="'"+table.replace("'","''")+"'"
+        feature_columns = ([r[1] for r in connection.execute('PRAGMA table_info('+quote(table)+')')]
+                           if table == FEATURE_EVENTS else [])
         connection.execute('INSERT OR IGNORE INTO __training_prefix_versions VALUES(?,0,0,-1e300)',(table,))
         for operation, predicate in [('INSERT','NEW.rowid'),('DELETE','OLD.rowid'),
                                      ('UPDATE','MIN(OLD.rowid,NEW.rowid)')]:
@@ -79,13 +100,16 @@ def install(connection):
             sql=(f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {quote(table)} '
                  f'WHEN {predicate}<=(SELECT boundary FROM __training_prefix_versions WHERE name={literal})'+time_guard+' '
                  f'BEGIN UPDATE __training_prefix_versions SET epoch=epoch+1 WHERE name={literal}; END')
-            existing=connection.execute('SELECT sql FROM sqlite_master WHERE name=?',(name,)).fetchone()
-            if existing is None:
-                connection.execute(sql)
-            elif existing[0]!=sql:
-                raise RuntimeError('Training mutation guard definition mismatch: '+name)
+            legacy = None
+            if feature_columns and operation == 'UPDATE':
+                legacy = sql
+                sql = sql.replace(' BEGIN UPDATE ', ' AND '+changed_columns(feature_columns, ('protected_until',))
+                                  +' BEGIN UPDATE ', 1)
+            install_trigger(connection, name, sql, legacy)
         if table in ENTITY_PREFIX_TABLES:
             _install_entity_guard(connection, table, ENTITY_PREFIX_TABLES[table])
+        if {'entity_id', 'event_time'}.issubset(feature_columns):
+            _install_feature_window_guards(connection, feature_columns)
 
 
 def _install_entity_guard(connection, table, stamp):
@@ -114,11 +138,38 @@ def _install_entity_guard(connection, table, stamp):
         sql = (f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {quote(table)}'+guard+
                f' BEGIN UPDATE {ledger} SET epoch=epoch+1 WHERE table_name={literal} '
                f'AND entity_id IN ({members}) AND ({matches}); END')
-        existing = connection.execute('SELECT sql FROM sqlite_master WHERE name=?',(name,)).fetchone()
-        if existing is None:
-            connection.execute(sql)
-        elif existing[0]!=sql:
-            raise RuntimeError('Training entity guard definition mismatch: '+name)
+        legacy = None
+        if table == FEATURE_EVENTS and operation == 'UPDATE':
+            legacy = sql
+            sql = sql.replace(f'({changed} OR OLD.rowid IS NOT NEW.rowid)',
+                              changed_columns(columns, ('protected_until', 'mutation_revision')), 1)
+        install_trigger(connection, name, sql, legacy)
+
+
+def _install_feature_window_guards(connection, columns):
+    # One durable slot per owner, indexed by entity for the mutation hot path.
+    # Retain only the first affecting operation. There is no per-event log.
+    connection.execute(f'CREATE TABLE IF NOT EXISTS {FEATURE_FENCES} ('
+                       'entity_id TEXT NOT NULL, owner TEXT NOT NULL, token TEXT NOT NULL, '
+                       'boundary INTEGER NOT NULL, start_ts REAL NOT NULL, end_ts REAL NOT NULL, '
+                       'operation TEXT, PRIMARY KEY(entity_id,owner)) WITHOUT ROWID')
+    connection.execute(f'CREATE INDEX IF NOT EXISTS __training_feature_windows_owner '
+                       f'ON {FEATURE_FENCES}(owner)')
+    bound = f"(SELECT boundary FROM __training_prefix_versions WHERE name='{FEATURE_EVENTS}')"
+    end = f"(SELECT end_ts FROM __training_prefix_versions WHERE name='{FEATURE_EVENTS}')"
+    for operation, versions in [('INSERT', ('NEW',)), ('DELETE', ('OLD',)), ('UPDATE', ('OLD', 'NEW'))]:
+        name = '__training_fence_feature_window_' + operation.lower()
+        possible = ' OR '.join(f'({v}.rowid<={bound} AND {v}.event_time<={end})' for v in versions)
+        condition = f'({possible})'
+        if operation == 'UPDATE':
+            condition += ' AND ' + changed_columns(columns, ('protected_until', 'mutation_revision'))
+        entity_ids = ','.join(v+'.entity_id' for v in versions)
+        members = ' OR '.join(f'(entity_id={v}.entity_id AND {v}.rowid<=boundary '
+                              f'AND {v}.event_time BETWEEN start_ts AND end_ts)' for v in versions)
+        sql = (f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {FEATURE_EVENTS} WHEN {condition} '
+               f"BEGIN UPDATE {FEATURE_FENCES} SET operation='{operation}' WHERE operation IS NULL "
+               f'AND entity_id IN ({entity_ids}) AND ({members}); END')
+        install_trigger(connection, name, sql)
 
 
 def schema_manifest(connection, names=None):
@@ -129,10 +180,12 @@ def schema_manifest(connection, names=None):
         names=tables|{'agents','app_meta','entity_history_revision',
                       '__training_prefix_versions','__training_source_identity','__training_entity_prefix_versions'}
         names|={name for name in objects if name.startswith('__training_fence_')}
+        if FEATURE_FENCES in objects:
+            names.add(FEATURE_FENCES)
     return {name:hashlib.sha256(objects[name].encode()).hexdigest() if objects.get(name) is not None else None for name in sorted(names)}
 
 
-def capture(connection, end_ts, entities=None, entity_scopes=None):
+def capture(connection, end_ts, entities=None, entity_scopes=None, *, start_ts=None, owner=None):
     """Caller owns a brief write transaction; no payload scan or throttle here."""
     bounds={}
     for name,epoch,_ in connection.execute('SELECT name,epoch,boundary FROM __training_prefix_versions').fetchall():
@@ -156,6 +209,18 @@ def capture(connection, end_ts, entities=None, entity_scopes=None):
                 continue
             upper = bounds[table]['upper']
             selected = sorted(set((entity_scopes or {}).get(table, entities)))
+            if table == FEATURE_EVENTS and start_ts is not None and owner is not None:
+                token = uuid.uuid4().hex
+                connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE owner=?', (owner,))
+                if connection.execute("SELECT 1 FROM sqlite_master WHERE name='agents' AND type='table'").fetchone():
+                    connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE NOT EXISTS '
+                                       f'(SELECT 1 FROM agents WHERE id={FEATURE_FENCES}.owner)')
+                connection.executemany(
+                    f'INSERT INTO {FEATURE_FENCES} VALUES(?,?,?,?,?,?,NULL)',
+                    [(entity, owner, token, upper, float(start_ts), float(end_ts)) for entity in selected])
+                result['feature_window'] = dict(owner=owner, token=token, start_ts=float(start_ts),
+                                                count=len(selected))
+                continue
             connection.executemany(
                 'INSERT INTO __training_entity_prefix_versions VALUES(?,?,0,?,?) '
                 'ON CONFLICT(table_name,entity_id) DO UPDATE SET '
@@ -180,7 +245,17 @@ def validate(connection, boundary):
         row = current.get(table)
         if not row or row[1]<expected['upper'] or row[2]<boundary['end_ts']:
             raise RuntimeError('Training input prefix changed: '+table+'; previous model retained')
-        if table in scoped:
+        window = boundary.get('feature_window') if table == FEATURE_EVENTS else None
+        if window is not None:
+            rows = connection.execute(
+                f'SELECT operation FROM {FEATURE_FENCES} WHERE owner=? AND token=? AND boundary=? '
+                'AND start_ts=? AND end_ts=?',
+                (window['owner'], window['token'], expected['upper'], window['start_ts'], boundary['end_ts'])).fetchall()
+            operation = next((row[0] for row in rows if row[0] is not None), None)
+            if operation is not None or len(rows) != window['count']:
+                reason = f'{operation} inside frozen feature window' if operation else 'window superseded'
+                raise RuntimeError(f'Training input prefix changed: {table}; {reason}; previous model retained')
+        elif table in scoped:
             actual = {r[0]:(int(r[1]),int(r[2]),float(r[3])) for r in connection.execute(
                 'SELECT entity_id,epoch,boundary,end_ts FROM __training_entity_prefix_versions WHERE table_name=?',(table,))}
             for entity,epoch in scoped[table].items():
@@ -189,6 +264,13 @@ def validate(connection, boundary):
                     raise RuntimeError('Training input prefix changed: '+table+'; entity='+entity+'; previous model retained')
         elif row[0]!=expected['epoch']:
             raise RuntimeError('Training input prefix changed: '+table+'; previous model retained')
+
+
+def release_feature_window(connection, boundary):
+    window = (boundary or {}).get('feature_window')
+    if window is not None:
+        connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE owner=? AND token=?',
+                           (window['owner'], window['token']))
 
 
 def boundary_digest(boundary):

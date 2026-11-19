@@ -589,7 +589,8 @@ class Preparation:
                         self.target_entities=[target[0]]
                     self.state['boundary']=capture(fence,self.end,self.entities,
                         entity_scopes={'provenance_events':self.target_entities,
-                                       'provenance_history_links':self.target_entities})
+                                       'provenance_history_links':self.target_entities},
+                        start_ts=self.start, owner=self.agent_id)
                     self.state['source_schema']=[dict(row) for row in fence.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB '__training_*'").fetchall()]
                     self.agent_ids=[row[0] for row in fence.execute('SELECT id FROM agents WHERE target_entity=(SELECT target_entity FROM agents WHERE id=?)',(self.agent_id,))] if self.agent_id else []
                     self.initial_metadata=self.read_initial_metadata(fence)
