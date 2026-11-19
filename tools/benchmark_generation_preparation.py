@@ -1,4 +1,4 @@
-"""Same million-row, 100-entity full-worker fixture on 0.15.8 and candidate.
+"""Same million-row, 100-entity full-worker fixture on a pinned baseline and candidate.
 
 Reference source is extracted from its pinned commit into a disposable directory.
 RSS/CPU are child rusage on Linux; unsupported host counters remain null.
@@ -37,17 +37,21 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--rows',type=int,default=1_000_000)
     parser.add_argument('--candidate-only',action='store_true')
+    parser.add_argument('--reference', default=REFERENCE)
+    parser.add_argument('--output', type=Path, default=ROOT/'docs/benchmarks/generation-preparation-0159.json')
     args=parser.parse_args()
     if args.rows<1_000_000:
         parser.error('acceptance fixture requires at least one million history rows')
     results={}
     if not args.candidate_only:
         try:
-            raw=subprocess.check_output(['git','archive','--format=tar',REFERENCE,'adaptive_ai/src'],cwd=ROOT,stderr=subprocess.DEVNULL)
+            raw=subprocess.check_output(['git','archive','--format=tar',args.reference,'adaptive_ai/src'],cwd=ROOT,stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError:
-            subprocess.run(['git','fetch','--depth=1','origin',REFERENCE],cwd=ROOT,check=True)
-            raw=subprocess.check_output(['git','archive','--format=tar',REFERENCE,'adaptive_ai/src'],cwd=ROOT)
-        with tempfile.TemporaryDirectory(prefix='hm-reference-0158-') as directory:
+            subprocess.run(['git','fetch','--depth=1','origin',args.reference],cwd=ROOT,check=True)
+            raw=subprocess.check_output(['git','archive','--format=tar',args.reference,'adaptive_ai/src'],cwd=ROOT)
+        results['reference_commit'] = subprocess.check_output(
+            ['git', 'rev-parse', args.reference], cwd=ROOT, text=True).strip()
+        with tempfile.TemporaryDirectory(prefix='hm-training-reference-') as directory:
             with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
                 # Pinned git archive, regular files below the one requested tree.
                 for member in archive.getmembers():
@@ -79,7 +83,7 @@ def main():
             learning_hash_identical=True,
             reference_resources=reference['worker_resource_metrics'],
             candidate_resources=candidate['worker_resource_metrics'])
-    path=ROOT/'docs/benchmarks/generation-preparation-0159.json'
+    path=args.output
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(results,indent=2),encoding='utf-8')
     print(json.dumps(results.get('comparison',dict(candidate_rows=tables['entity_history']['source_rows_scanned'])),indent=2))
