@@ -1,3 +1,9 @@
+# 0.15.16 — Frozen training observation window (TEST ONLY)
+
+- Retention-only protection updates no longer invalidate historical feature observations.
+- Scoped SQLite guards detect changes to required rows, record the first affecting operation, and preserve the previous model on failure.
+- Exhausted training retries release the slot and require a new request.
+
 # 0.15.15 — Transparent long-running history preparation (TEST ONLY)
 
 - Show current history entity, its seven-day timestamp cursor percentage, number of completed entities and moving source rows/s; clearly label time cursor vs overall train percentage.
