@@ -1106,7 +1106,10 @@ class FeatureJournal:
                     ''' ON CONFLICT(event_key) DO UPDATE SET
                          received_time=MIN(feature_observation_events.received_time,excluded.received_time),
                          protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
-                         quality=MAX(feature_observation_events.quality,excluded.quality)''')
+                         quality=MAX(feature_observation_events.quality,excluded.quality)
+                       WHERE excluded.received_time<feature_observation_events.received_time
+                          OR excluded.protected_until>feature_observation_events.protected_until
+                          OR excluded.quality>feature_observation_events.quality''')
             with self._write_count_lock:
                 previous_writes = self._writes
                 self._writes += len(prepared)
@@ -1301,6 +1304,7 @@ class FeatureJournal:
                 "_feature_received_time": float(row["received_time"])}
 
     def prune(self, entity_id=None):
+        from training_snapshot import retention_protected
         now = float(self.clock())
         cutoff = now - self.retention_hours * 3600.0
         with self.store.lock, self.store.conn() as c:
@@ -1308,20 +1312,21 @@ class FeatureJournal:
                       "(SELECT window_id FROM feature_windows WHERE protected_until<?)", (now,))
             c.execute("DELETE FROM feature_windows WHERE protected_until<?", (now,))
             observations_before=c.total_changes
-            # Bounded candidate lists; native triggers atomically track every
-            # actual row mutation, including hard-cap protected-row deletion.
-            while True:
-                deleted=c.execute('''DELETE FROM feature_observation_events WHERE event_key IN
-                    (SELECT event_key FROM feature_observation_events
-                     WHERE received_time<? AND protected_until<? LIMIT 512)''',(cutoff,now)).rowcount
-                if deleted<512:break
-            if entity_id:
+            # Share the supervisor's protection with the archive retention path.
+            # The hard global cap below still applies during training.
+            if not retention_protected(self.store, 'feature_observation_events'):
                 while True:
-                    extra = c.execute("""SELECT event_key FROM feature_observation_events
-                        WHERE entity_id=? AND protected_until<? ORDER BY received_time DESC LIMIT 512 OFFSET ?""",
-                        (str(entity_id), now, self.max_events_per_entity)).fetchall()
-                    if not extra:break
-                    c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in extra])
+                    deleted=c.execute('''DELETE FROM feature_observation_events WHERE event_key IN
+                        (SELECT event_key FROM feature_observation_events
+                         WHERE received_time<? AND protected_until<? LIMIT 512)''',(cutoff,now)).rowcount
+                    if deleted<512:break
+                if entity_id:
+                    while True:
+                        extra = c.execute("""SELECT event_key FROM feature_observation_events
+                            WHERE entity_id=? AND protected_until<? ORDER BY received_time DESC LIMIT 512 OFFSET ?""",
+                            (str(entity_id), now, self.max_events_per_entity)).fetchall()
+                        if not extra:break
+                        c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in extra])
             tracked=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='universal_retention_meta'").fetchone()
             if tracked:
                 row=c.execute('SELECT live_count FROM universal_retention_meta WHERE id=1').fetchone()

@@ -38,7 +38,8 @@ def preparation_memory():
             continue
         if limit <= 0:
             continue
-        memory['total_mb'] = min(memory.get('total_mb') or limit, limit)
-        memory['available_mb'] = min(memory.get('available_mb') or max(0., limit-used),
-                                     max(0., limit-used))
+        free = max(0., limit-used)
+        total, available = memory['total_mb'], memory['available_mb']
+        memory['total_mb'] = min(total, limit) if total is not None else limit
+        memory['available_mb'] = min(available, free) if available is not None else free
     return memory

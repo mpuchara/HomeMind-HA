@@ -70,6 +70,14 @@ class EffectiveParallelSlotsTests(unittest.TestCase):
         # persistent sequence and therefore keep their existing causal order.
         self.assertIn("run_isolated_training_sequence(self, chunks)", source)
 
+    def test_exhausted_container_headroom_does_not_use_host_capacity(self):
+        with patch('runtime_sqlite_cache.memory_headroom', return_value=(2048.0, 0.0)):
+            self.assertEqual(self.manager().effective_training_slots(), 1)
+            profile = training_process.resolve_training_resource_profile(DEFAULT_OPTIONS)
+            self.assertEqual(profile['host_memory_mb']['available'], 0.)
+            self.assertEqual(profile['effective_memory_limit_mb'],
+                             DEFAULT_OPTIONS['training_worker_memory_floor_mb'])
+
 
 class DualQueueAdmissionTests(unittest.TestCase):
     class FakeGate:

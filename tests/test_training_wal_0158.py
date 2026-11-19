@@ -361,6 +361,40 @@ process._supervise_generation(history,900,77000,job,root/'kill-wait.job.json')
             publish_generation(self.store,self.fixture.fixture.destination,self.fixture.agent['id'],
                                agent_config_fingerprint(self.fixture.agent),agent_config_fingerprint)
 
+    def test_committed_model_consumes_leftover_running_descriptor_after_restart(self):
+        from history_recovery import publish_generation, generation_already_published
+        from tiny_mlp_shadow import ensure_tables
+        import training_process as process
+
+        ensure_tables(self.store)
+        agent = self.fixture.agent
+        aid = agent['id']
+        self.store.save_model(aid, {'marker': 'previous'})
+        self.fixture.prepare()
+        prepared = self.fixture.fixture.destination
+        with closing(sqlite3.connect(prepared)) as generation, generation:
+            manifest = json.loads(generation.execute('SELECT payload FROM recovery_manifest').fetchone()[0])
+            manifest['status'] = 'TRAINED'
+            generation.execute('UPDATE recovery_manifest SET payload=?', (json.dumps(manifest),))
+            generation.execute('UPDATE rl_models SET model_json=? WHERE agent_id=?',
+                               (json.dumps({'marker': 'trained'}), aid))
+        stamp = process.agent_config_fingerprint(agent)
+        job_id = 'committed-before-parent-crash'
+        with patch.object(process, '_job_dir', return_value=self.fixture.fixture.root):
+            marker = process._resume_path(aid)
+            process._atomic_json(marker, dict(source=str(Path(self.store.path).resolve()),
+                                             state='running', job=dict(job_id=job_id, agent_id=aid)))
+            self.assertEqual(list(process.pending_training_agents(self.store)), [aid])
+            publish_generation(self.store, prepared, aid, stamp, process.agent_config_fingerprint, job_id=job_id)
+            self.assertTrue(generation_already_published(self.store, aid, job_id))
+            self.assertEqual(list(process.pending_training_agents(self.store)), [])
+            self.assertFalse(marker.exists())
+            self.assertEqual(self.store.get_model(aid)['marker'], 'trained')
+            # Replaying a receipt cannot replace the live model or discard new feedback.
+            self.store.save_model(aid, {'marker': 'newer'})
+            publish_generation(self.store, prepared, aid, stamp, process.agent_config_fingerprint, job_id=job_id)
+            self.assertEqual(self.store.get_model(aid)['marker'], 'newer')
+
     def test_14_generation_keeps_frozen_policy_without_rebinding_untrusted_env(self):
         from storage_budget import StorageBudget
         from settings import OPTIONS

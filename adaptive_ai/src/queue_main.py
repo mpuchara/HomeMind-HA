@@ -18,6 +18,49 @@ TRAINING_QUEUE = None
 _ADMISSION_LOCK = threading.Lock()
 
 
+def training_timing_report(profile):
+    """Export numeric counters only; traces, identifiers and timestamps stay local."""
+    def numbers(source, keys):
+        return {key: source[key] for key in keys if type(source.get(key)) in (int, float)}
+
+    process = profile.get('training_process') or {}
+    preparation = process.get('preparation') or {}
+    result = {
+        'contract': 'training_timing_report_v1',
+        'overall': numbers(profile, ('progress',)),
+        'recorder': numbers(profile.get('training_job_timings') or {}, (
+            'history_window_hours', 'recorder_refresh_seconds', 'recorder_coverage_hits',
+            'recorder_coverage_misses')),
+        'preparation': numbers(preparation, (
+            'elapsed_seconds', 'cpu_seconds', 'sqlite_seconds', 'sqlite_wait_seconds',
+            'lock_wait_seconds', 'throttle_seconds', 'commit_seconds', 'wal_peak_bytes',
+            'generation_scratch_bytes', 'payload_rows_fetched', 'unique_rows_copied',
+            'committed_batches', 'pending_batches', 'history_copy_rows_per_second',
+            'history_entities_done', 'history_entities_total', 'sqlite_busy_retries')),
+        'worker': numbers(process, (
+            'wall_seconds', 'cpu_seconds', 'peak_rss_mb', 'rss_mb', 'read_bytes',
+            'write_bytes', 'sqlite_busy_retries', 'storage_retry_attempt', 'memory_limit_mb')),
+        'phases': numbers(profile.get('training_phase_timings') or {}, (
+            'replay_seconds', 'replay_driver_rows_processed', 'rewarded_dwells',
+            'feature_snapshot_build_seconds', 'tiny_mlp_finalization_seconds',
+            'heldout_fold_seconds', 'qualification_seconds', 'benchmark_persist_seconds',
+            'policy_serialize_persist_seconds', 'finalization_seconds')),
+    }
+    if type(profile.get('completed')) is bool:
+        result['overall']['completed'] = profile['completed']
+    if result['worker'].get('peak_rss_mb') == 0.:
+        result['worker'].pop('peak_rss_mb')
+    recovery = process.get('history_recovery') or {}
+    if recovery:
+        result['preparation'].update(numbers(recovery, (
+            'preparation_wall_seconds', 'preparation_index_seconds', 'preparation_checkpoint_commit_seconds',
+            'preparation_cpu_seconds', 'skipped_records', 'sqlite_busy_retries', 'sqlite_busy_wait_seconds')))
+        result['preparation']['payload_rows_fetched_total'] = sum(
+            table.get('payload_rows_fetched', table.get('source_rows_scanned', 0))
+            for table in recovery.get('copy_tables', {}).values())
+    return result
+
+
 _original_initialize_runtime = core.initialize_runtime
 _original_shutdown_runtime = core.shutdown_runtime
 _original_status_payload = core.Handler.status_payload
@@ -288,12 +331,33 @@ def register_mutation_routes(registry):
             'error': 'Training request is no longer tracked; runtime may have restarted',
             'boot_id': service.boot_id})
 
+    def training_diagnostics(http, params):
+        manager = core.HISTORY
+        agent_id = params['agent_id']
+        session = manager.training_session_for(agent_id)
+        if session is None:
+            with manager.lock:
+                profile = manager.recent_training_profiles.get(agent_id)
+        else:
+            with session.lock:
+                profile = {
+                    'progress': session.progress, 'training_job_timings': session.training_job_timings,
+                    'training_phase_timings': session.training_phase_timings,
+                    'training_process': session.training_process_status,
+                }
+        if profile is None:
+            return http.send_json(404, {'error': 'No training timing report is available'})
+        return http.send_json(200, training_timing_report(profile))
+
     registry.register('POST', 'queue.training.request',
                       r'^/api/agents/(?P<agent_id>[^/]+)/training-requests$', training_request,
                       require_trusted=True, require_runtime=True, priority=180)
     registry.register('GET', 'queue.training.request_status',
                       r'^/api/training-requests/(?P<request_id>[A-Za-z0-9_-]{8,80})$', training_request_status,
                       require_trusted=True, require_runtime=False, priority=180)
+    registry.register('GET', 'queue.training.diagnostics',
+                      r'^/api/agents/(?P<agent_id>[^/]+)/training-diagnostics$', training_diagnostics,
+                      require_trusted=True, require_runtime=True, priority=180)
 
     def teach_rl(http, params, action):
         agent_id = params["agent_id"]

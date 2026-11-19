@@ -336,18 +336,54 @@ def descriptor_checksum(payload):
     return _digest(clean)
 
 
-def _process_start_token(pid):
-    """Return Linux process start ticks when available, otherwise None."""
+def _windows_process_start_token(pid):
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    file_time = ctypes.POINTER(wintypes.FILETIME)
+    kernel.GetProcessTimes.argtypes = (wintypes.HANDLE, file_time, file_time, file_time, file_time)
+    handle = kernel.OpenProcess(0x00101000, False, pid)  # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None
     try:
-        fields = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8").split()
-        return str(fields[21])
+        if kernel.WaitForSingleObject(handle, 0) != 258:  # WAIT_TIMEOUT: process is alive
+            return None
+        started, exited, cpu_kernel, cpu_user = (wintypes.FILETIME() for _ in range(4))
+        if kernel.GetProcessTimes(handle, started, exited, cpu_kernel, cpu_user):
+            return str((started.dwHighDateTime << 32) | started.dwLowDateTime)
+        return None
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _process_start_token(pid):
+    """Return the OS process creation token when available."""
+    try:
+        pid = int(pid)
+        if os.name == 'nt':
+            return _windows_process_start_token(pid)
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        return stat.rpartition(')')[2].split()[19]
     except (OSError, ValueError, IndexError):
         return None
 
 
 def _same_process_alive(pid, start_token=None):
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+        if pid <= 0:
+            return False
+        if os.name == 'nt':
+            # On Windows signal 0 is CTRL_C_EVENT, which sends a console signal.
+            current = _windows_process_start_token(pid)
+            return current is not None and (start_token is None or str(start_token) == current)
+        os.kill(pid, 0)
     except (OSError, ValueError):
         return False
     if start_token is None:
@@ -378,25 +414,11 @@ def _read_json(path, default=None):
         return default
 
 
-def _host_memory_mb(path="/proc/meminfo"):
-    """Return Linux MemTotal/MemAvailable in MB without importing psutil."""
-    result = {"total_mb": None, "available_mb": None}
-    try:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            key, _, raw = line.partition(":")
-            if key not in ("MemTotal", "MemAvailable"):
-                continue
-            value = raw.strip().split()
-            if not value:
-                continue
-            mb = float(value[0]) / 1024.0
-            if key == "MemTotal":
-                result["total_mb"] = mb
-            else:
-                result["available_mb"] = mb
-    except (OSError, ValueError):
-        pass
-    return result
+def _host_memory_mb():
+    """Reuse the runtime's effective host and container headroom calculation."""
+    from runtime_sqlite_cache import memory_headroom
+    total, available = memory_headroom()
+    return {"total_mb": total, "available_mb": available}
 
 
 def resolve_training_resource_profile(options=None, memory=None):
@@ -451,7 +473,7 @@ def resolve_training_resource_profile(options=None, memory=None):
     candidates = [ceiling]
     if isinstance(total_mb, (int, float)) and float(total_mb) > 0.0:
         candidates.append(max(floor, float(total_mb) * total_fraction))
-    if isinstance(available_mb, (int, float)) and float(available_mb) > 0.0:
+    if isinstance(available_mb, (int, float)) and float(available_mb) >= 0.0:
         available = float(available_mb)
         by_fraction = available * available_fraction
         by_reserve = max(floor, available - reserve)
@@ -1008,10 +1030,16 @@ def _resume_path(agent_id):
 
 
 def pending_training_agents(store):
+    from history_recovery import generation_already_published
     for path in _job_dir().glob('resume-*.json'):
         item=_read_json(path,{}) or {}
         if item.get('source')==str(Path(store.path).resolve()) and item.get('state') in ('running','waiting_wal','waiting_sqlite'):
-            yield str(item['job']['agent_id'])
+            job = item['job']
+            agent_id = str(job['agent_id'])
+            if generation_already_published(store, agent_id, job.get('job_id')):
+                path.unlink(missing_ok=True)
+            else:
+                yield agent_id
 
 
 def _retire_legacy_preparation(item):
@@ -1129,6 +1157,10 @@ def resume_deferred_training(history, agent_id):
     if item.get('source')!=str(Path(STORE.path).resolve()) or item.get('state') not in ('running','waiting_wal','waiting_sqlite','retry_preparation'):
         return False
     job=item['job']
+    from history_recovery import generation_already_published
+    if generation_already_published(STORE, agent_id, job.get('job_id')):
+        _resume_path(agent_id).unlink(missing_ok=True)
+        return False
     if item.get('state')=='retry_preparation':
         if bool(job.get('generation_rebuild'))!=bool(getattr(history,'training_generation_rebuild',False)):
             return False
@@ -1603,7 +1635,7 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
                 # backoff; do not rerun the already successful training.
                 with background_sqlite(STORE, retryable=False):
                     return publish_generation(STORE,result['generation_path'],agent_id,
-                        job['agent_fingerprint'],agent_config_fingerprint)
+                        job['agent_fingerprint'],agent_config_fingerprint,job_id=job['job_id'])
             run_storage_write(STORE,publish_once,
                 getattr(history,'stop_event',threading.Event()),getattr(history,'job_cancel_event',None),
                 busy_timeout=90.)
@@ -1724,10 +1756,6 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
         }
         return int(result.get("return_value") or 0)
     except Exception as exc:
-        if job.get('training_generation') and not isinstance(exc, WorkerSQLiteBusy):
-            STORE.event(agent_id,'warning','training_recovery_failed',
-                        str(exc),dict(agent_id=agent_id,previous_model_retained=True,
-                            trace=history.training_process_status.get('failure_trace') or traceback.format_exc(limit=8)))
         rollback_agent = agent_before
         rollback_model = model_before
         rollback_neural = neural_before

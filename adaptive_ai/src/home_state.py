@@ -240,7 +240,7 @@ class RoomBeliefModel:
         return math.exp(-math.log(2) * (age - stale_after) /
                         max(1e-6, float(params['half_life'])))
 
-    def _fuse_room(self, area, ts):
+    def _fuse_room(self, area, ts, *, include_evidence=True):
         rows, positive, calibrated, raw_activity, absence = [], [], [], [], []
         observability_terms, direct_active = [], []
         for eid in sorted(self.area_sources.get(area, ())):
@@ -289,23 +289,24 @@ class RoomBeliefModel:
                 elif role in {'radar_activity', 'auxiliary'}:
                     contribution = q * float(params['active']) * evidence_comm * fresh
                     raw_activity.append(contribution)
-            state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
-            rows.append({
-                'entity_id': eid,
-                'role': role,
-                'value_semantics': params['semantics'],
-                'available': available,
-                'communication_reliability': comm,
-                'communication_age_seconds': max(0.0, float(ts) - received_ts),
-                'event_age_seconds': max(0.0, float(ts) - event_ts),
-                'semantic_reliability': semantic_reliability,
-                'semantic_reliability_detail': copy.deepcopy(
-                    source.get('semantic_reliability_detail')
-                ),
-                'evidence_age_seconds': max(0.0, float(ts) - state_since),
-                'evidence_freshness': fresh,
-                'contribution': contribution,
-            })
+            if include_evidence:
+                state_since = self._source_timestamp(source, 'state_since_ts', event_ts)
+                rows.append({
+                    'entity_id': eid,
+                    'role': role,
+                    'value_semantics': params['semantics'],
+                    'available': available,
+                    'communication_reliability': comm,
+                    'communication_age_seconds': max(0.0, float(ts) - received_ts),
+                    'event_age_seconds': max(0.0, float(ts) - event_ts),
+                    'semantic_reliability': semantic_reliability,
+                    'semantic_reliability_detail': copy.deepcopy(
+                        source.get('semantic_reliability_detail')
+                    ),
+                    'evidence_age_seconds': max(0.0, float(ts) - state_since),
+                    'evidence_freshness': fresh,
+                    'contribution': contribution,
+                })
 
         remaining = 1.0
         for term in observability_terms:
@@ -668,7 +669,7 @@ class RoomBeliefModel:
                 self.area_sources.get(old_area, set()).discard(entity_id)
             self.area_sources.setdefault(area, set()).add(entity_id)
             if old_area and old_area != area:
-                prior = self._fuse_room(old_area, processing_ts)
+                prior = self._fuse_room(old_area, processing_ts, include_evidence=False)
                 old_slot = self.values.setdefault(
                     old_area, {'p': .5, 'arrival': None, 'departure': None}
                 )
@@ -676,7 +677,9 @@ class RoomBeliefModel:
                     p=prior['occupancy'], known=prior['known'],
                     observability=prior['observability'], uncertainty=prior['uncertainty']
                 )
-            belief = self._fuse_room(area, processing_ts)
+            # Observation updates consume the fused values and direct-active
+            # signal. Forecast still returns detached per-source diagnostics.
+            belief = self._fuse_room(area, processing_ts, include_evidence=False)
             slot = self.values.setdefault(
                 area, {'p': .5, 'arrival': None, 'departure': None}
             )

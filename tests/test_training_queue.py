@@ -119,9 +119,9 @@ class FakeHistory:
 
     def complete(self, agent_id, state='qualified', progress=1.0):
         with self.agent_jobs_lock:
+            self.store.agents[agent_id]['training_state'] = state
+            self.store.agents[agent_id]['training_progress'] = progress
             self.agent_jobs.discard(agent_id)
-        self.store.agents[agent_id]['training_state'] = state
-        self.store.agents[agent_id]['training_progress'] = progress
 
 
 class TrainingQueueTests(unittest.TestCase):
@@ -165,14 +165,46 @@ class TrainingQueueTests(unittest.TestCase):
     def test_incomplete_paused_job_is_reported_as_interrupted_not_finished(self):
         self.queue.enqueue('a', rebuild=True, reason='training')
         self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
-        self.history.complete('a', state='paused', progress=.32)
         self.store.agents['a']['benchmark_detail'] = {'reason': 'database is locked'}
+        self.history.complete('a', state='paused', progress=.32)
         self.assertTrue(self.wait_for(lambda: self.queue.status_for('a') is None))
         interrupted = [event for event in self.store.events if event[2] == 'training_queue_interrupted']
         self.assertEqual(len(interrupted), 1, self.store.events)
         self.assertIn('32%', interrupted[0][3])
         self.assertEqual(interrupted[0][4]['failure_reason'], 'database is locked')
         self.assertFalse(any(event[2] == 'training_queue_finished' for event in self.store.events))
+
+    def test_exhausted_sqlite_retry_releases_slot_without_reenqueuing(self):
+        self.queue.enqueue('a', rebuild=True)
+        self.queue.enqueue('b', rebuild=True)
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True)]))
+        self.store.agents['a']['benchmark_detail'] = {
+            'storage_pressure': True, 'storage_reason': 'sqlite_busy_exhausted'}
+        self.history.complete('a', state='paused', progress=None)
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', True), ('b', True)]))
+        self.assertIsNone(self.queue.status_for('a'))
+        self.assertTrue(any(event[2] == 'training_queue_interrupted' and event[0] == 'a'
+                            for event in self.store.events))
+
+    def test_shadow_model_with_all_replay_done_can_still_be_paused_for_control(self):
+        self.queue.enqueue('a')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', False)]))
+        self.history.complete('a', state='paused', progress=1.)
+        self.assertTrue(self.wait_for(lambda: any(event[2] == 'training_queue_finished'
+                                                 for event in self.store.events)))
+
+    def test_nonterminal_storage_failure_is_automatically_requeued_at_most_once(self):
+        self.queue.enqueue('a')
+        self.assertTrue(self.wait_for(lambda: len(self.history.started) == 1))
+        for attempt in (1, 2):
+            self.store.agents['a']['benchmark_detail'] = {
+                'storage_pressure': True, 'storage_reason': 'generation_capacity'}
+            self.history.complete('a', state='paused', progress=0.)
+            self.assertTrue(self.wait_for(lambda: sum(event[2] == 'training_queue_interrupted'
+                            for event in self.store.events) == attempt))
+            if attempt == 1:
+                self.assertTrue(self.wait_for(lambda: len(self.history.started) == 2))
+        self.assertIsNone(self.queue.status_for('a'))
 
     def test_busy_slot_queues_instead_of_rejecting(self):
         self.history.blocked = True

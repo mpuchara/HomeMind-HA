@@ -29,6 +29,18 @@ jobs:
           python -m unittest discover -s tests -p test_training_sqlite_busy_01514.py -v
       - name: Preparation cursor progress (large entity)
         run: python -m unittest discover -s tests -p test_training_preparation_telemetry_01515.py -v
+      - name: Feature fence and production training queue through HTTP with restart
+        run: |
+          python -m unittest discover -s tests -p test_training_feature_fence.py -v
+          python tools/validate_training_queue_e2e.py > training-queue-e2e.json
+          cat training-queue-e2e.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: training-queue-e2e-py${{ matrix.python }}
+          path: training-queue-e2e.json
+      - name: Paired room-observation timing and forecast parity
+        if: matrix.python == '3.11'
+        run: python tools/benchmark_room_observation.py
       - run: python -m unittest discover -s tests -v
       - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
         run: python tools/validate_training_0159.py
@@ -45,11 +57,19 @@ jobs:
       - name: Million-row selective preparation and full Shadow training comparison
         if: matrix.python == '3.11'
         run: python tools/benchmark_generation_preparation.py
+      - name: Same healthy archive and actual worker on 0.15.15 and candidate
+        if: matrix.python == '3.11'
+        run: >-
+          python tools/benchmark_generation_preparation.py
+          --reference e2991ecdbf744572e0f80d9a3db74d55b789064e
+          --output docs/benchmarks/generation-preparation-01516.json
       - uses: actions/upload-artifact@v4
         if: matrix.python == '3.11'
         with:
           name: generation-preparation-million-row
-          path: docs/benchmarks/generation-preparation-0159.json
+          path: |
+            docs/benchmarks/generation-preparation-0159.json
+            docs/benchmarks/generation-preparation-01516.json
       - name: Real WAL starvation, pressure resume and concurrent ingress evidence
         if: matrix.python == '3.11'
         run: python tools/validate_training_wal.py
@@ -349,7 +369,7 @@ jobs:
           PY
   pi_canary_package:
     name: Pi aarch64 canary / test ZIP (NOT RELEASE)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/training-0.15.15'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/training-full-audit-0.15.16'
     needs: [tests, image]
     runs-on: ubuntu-latest
     permissions:
@@ -369,10 +389,10 @@ jobs:
           config=Path("adaptive_ai/config.yaml").read_text()
           settings=Path("adaptive_ai/src/settings.py").read_text()
           dockerfile=Path("adaptive_ai/Dockerfile").read_text()
-          assert re.search(r'^version: "0\.15\.15"$', config, re.MULTILINE)
-          assert re.search(r'^APP_VERSION = "0\.15\.15"$', settings, re.MULTILINE)
-          assert "ARG BUILD_VERSION=0.15.15" in dockerfile
-          assert info["version"] == "0.15.15"
+          assert re.search(r'^version: "0\.15\.16"$', config, re.MULTILINE)
+          assert re.search(r'^APP_VERSION = "0\.15\.16"$', settings, re.MULTILINE)
+          assert "ARG BUILD_VERSION=0.15.16" in dockerfile
+          assert info["version"] == "0.15.16"
           assert info["release_status"].startswith("pi5-manual-validation-candidate")
           for name in ("universal_observer_enabled", "universal_action_observer_enabled", "universal_training_collector_enabled"):
               assert ("  "+name+": false") in config, name
@@ -385,25 +405,25 @@ jobs:
       - name: Build aarch64 image under QEMU (hardware Pi test still required)
         run: |
           docker buildx build --platform linux/arm64 --load \
-            --build-arg BUILD_VERSION=0.15.15 --build-arg BUILD_ARCH=aarch64 \
-            -t homemind-pi-canary:0.15.15 adaptive_ai
-          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.15.15 \
-            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.15.15"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
-          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.15.15)" = "arm64/aarch64/0.15.15"
-          python tools/smoke_image.py homemind-pi-canary:0.15.15
+            --build-arg BUILD_VERSION=0.15.16 --build-arg BUILD_ARCH=aarch64 \
+            -t homemind-pi-canary:0.15.16 adaptive_ai
+          docker run --rm --platform linux/arm64 --entrypoint python homemind-pi-canary:0.15.16 \
+            -c 'import platform, numpy, websockets, sqlite3, settings; assert platform.machine() in ("aarch64", "arm64"); assert settings.APP_VERSION == "0.15.16"; print("ARM64 import smoke", platform.machine(), numpy.__version__, sqlite3.sqlite_version)'
+          test "$(docker image inspect --format '{{.Architecture}}/{{index .Config.Labels "io.hass.arch"}}/{{index .Config.Labels "io.hass.version"}}' homemind-pi-canary:0.15.16)" = "arm64/aarch64/0.15.16"
+          python tools/smoke_image.py homemind-pi-canary:0.15.16
       - name: Package exact committed source and check all ZIP manifests
         run: |
           python tools/package_install_release.py
-          python tools/verify_pi_test_artifacts.py --expected-version 0.15.15
+          python tools/verify_pi_test_artifacts.py --expected-version 0.15.16
       - name: Upload manual-install candidate (no GitHub Release)
         uses: actions/upload-artifact@v4
         with:
-          name: HomeMind-HA-0.15.15-Pi-TEST-${{ github.sha }}
+          name: HomeMind-HA-0.15.16-Pi-TEST-${{ github.sha }}
           path: |
-            dist/HomeMind-HA-0.15.15-addon.zip
-            dist/HomeMind-HA-0.15.15-addon.zip.sha256
-            dist/HomeMind-HA-0.15.15-repository.zip
-            dist/HomeMind-HA-0.15.15-repository.zip.sha256
+            dist/HomeMind-HA-0.15.16-addon.zip
+            dist/HomeMind-HA-0.15.16-addon.zip.sha256
+            dist/HomeMind-HA-0.15.16-repository.zip
+            dist/HomeMind-HA-0.15.16-repository.zip.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

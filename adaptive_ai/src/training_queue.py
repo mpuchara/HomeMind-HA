@@ -364,7 +364,7 @@ class TrainingQueue(threading.Thread):
         self._resort_jobs_locked()
         return changed, old_priority
 
-    def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None):
+    def enqueue(self, agent_id, rebuild=False, reason="training", rebuild_reason=None, *, storage_retry=False):
         if self.stop_event.is_set():
             raise RuntimeError('Training queue is stopping')
         self.admission_phase('agent_state')
@@ -425,6 +425,7 @@ class TrainingQueue(threading.Thread):
             "priority": int(requested_priority),
             "priority_class": training_priority_class(requested_priority),
             "sequence": int(sequence),
+            "storage_retry": storage_retry,
         }
         with self.cv:
             # A second HTTP request may have queued the same agent while Control was
@@ -851,32 +852,32 @@ class TrainingQueue(threading.Thread):
             None if progress_raw is None
             else max(0.0, min(1.0, float(progress_raw)))
         )
-        interrupted = (
-            state in ("paused", "needs_retrain", "waiting")
-            and progress is not None and progress < 0.999
-        )
+        profile = (getattr(self.history, 'recent_training_profiles', {}) or {}).get(agent_id)
+        completed = (profile['completed'] if profile is not None
+                     else state in ('qualified', 'paused') and progress is not None and progress >= 0.999)
+        interrupted = not completed and state in ("paused", "needs_retrain", "waiting")
+        pressure_detail = (agent or {}).get('benchmark_detail') or {}
         detail = {
             "training_state": state,
             "training_progress": progress,
+            "completed": completed,
             "reason": job.get("reason"),
             "rebuild_reason": job.get("rebuild_reason"),
-            "failure_reason": ((agent or {}).get("benchmark_detail") or {}).get("reason"),
+            "failure_reason": pressure_detail.get("reason"),
             "cancel_requested": bool(cancelled),
         }
-        storage_interrupted = bool(
-            ((agent or {}).get('benchmark_detail') or {}).get('storage_pressure')
-        )
-        if (storage_interrupted and not cancelled and job.get('reason') != 'teach_rl'
-                and ((agent or {}).get('benchmark_detail') or {}).get('storage_reason') not in ('wal_retry_exhausted','wal_wait_timeout')):
-            pressure_detail = (agent or {}).get('benchmark_detail') or {}
+        terminal_storage_reasons = ('wal_retry_exhausted', 'wal_wait_timeout', 'sqlite_busy_exhausted')
+        if (interrupted and pressure_detail.get('storage_pressure') and not cancelled
+                and job.get('reason') != 'teach_rl' and not job.get('storage_retry')
+                and pressure_detail.get('storage_reason') not in terminal_storage_reasons):
             if (pressure_detail.get('storage_reason') == 'database_budget'
                     or 'database_budget' in str(pressure_detail.get('reason') or '')):
                 self.storage_retry_reason = 'database_budget'
                 self.storage_retry_after = time.monotonic() + 5.
-            reset_completed = bool(((agent or {}).get('benchmark_detail') or {}).get('rebuild_reset_completed'))
+            reset_completed = bool(pressure_detail.get('rebuild_reset_completed'))
             self.enqueue(agent_id, rebuild=bool(job.get('rebuild')) and not reset_completed,
                          reason=job.get('reason') or 'training',
-                         rebuild_reason=job.get('rebuild_reason'))
+                         rebuild_reason=job.get('rebuild_reason'), storage_retry=True)
         if cancelled:
             self.store.event(
                 agent_id, "info", "training_queue_active_cancelled",
@@ -884,11 +885,9 @@ class TrainingQueue(threading.Thread):
                 detail,
             )
         elif interrupted:
-            self.store.event(
-                agent_id, "warning", "training_queue_interrupted",
-                f"Training stopped at {progress:.0%}; slot released for the next queued job",
-                detail,
-            )
+            cursor = f' (saved replay cursor {progress:.0%})' if progress is not None else ''
+            self.store.event(agent_id, "info", "training_queue_interrupted",
+                             f"Training interrupted{cursor}; slot released for the next queued job", detail)
         else:
             self.store.event(
                 agent_id, "info", "training_queue_finished",
