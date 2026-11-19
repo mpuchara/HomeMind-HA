@@ -852,11 +852,15 @@ class TrainingQueue(threading.Thread):
             None if progress_raw is None
             else max(0.0, min(1.0, float(progress_raw)))
         )
-        interrupted = state in ("paused", "needs_retrain", "waiting")
+        profile = (getattr(self.history, 'recent_training_profiles', {}) or {}).get(agent_id)
+        completed = (profile['completed'] if profile is not None
+                     else state in ('qualified', 'paused') and progress is not None and progress >= 0.999)
+        interrupted = not completed and state in ("paused", "needs_retrain", "waiting")
         pressure_detail = (agent or {}).get('benchmark_detail') or {}
         detail = {
             "training_state": state,
             "training_progress": progress,
+            "completed": completed,
             "reason": job.get("reason"),
             "rebuild_reason": job.get("rebuild_reason"),
             "failure_reason": pressure_detail.get("reason"),

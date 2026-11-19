@@ -29,6 +29,14 @@ jobs:
           python -m unittest discover -s tests -p test_training_sqlite_busy_01514.py -v
       - name: Preparation cursor progress (large entity)
         run: python -m unittest discover -s tests -p test_training_preparation_telemetry_01515.py -v
+      - name: Feature fence and production training queue through HTTP with restart
+        run: |
+          python -m unittest discover -s tests -p test_training_feature_fence.py -v
+          python tools/validate_training_queue_e2e.py | tee training-queue-e2e.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: training-queue-e2e-py${{ matrix.python }}
+          path: training-queue-e2e.json
       - run: python -m unittest discover -s tests -v
       - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
         run: python tools/validate_training_0159.py
@@ -45,11 +53,19 @@ jobs:
       - name: Million-row selective preparation and full Shadow training comparison
         if: matrix.python == '3.11'
         run: python tools/benchmark_generation_preparation.py
+      - name: Same healthy archive and actual worker on 0.15.15 and candidate
+        if: matrix.python == '3.11'
+        run: >-
+          python tools/benchmark_generation_preparation.py
+          --reference e2991ecdbf744572e0f80d9a3db74d55b789064e
+          --output docs/benchmarks/generation-preparation-01516.json
       - uses: actions/upload-artifact@v4
         if: matrix.python == '3.11'
         with:
           name: generation-preparation-million-row
-          path: docs/benchmarks/generation-preparation-0159.json
+          path: |
+            docs/benchmarks/generation-preparation-0159.json
+            docs/benchmarks/generation-preparation-01516.json
       - name: Real WAL starvation, pressure resume and concurrent ingress evidence
         if: matrix.python == '3.11'
         run: python tools/validate_training_wal.py

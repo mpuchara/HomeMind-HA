@@ -675,6 +675,7 @@ class Preparation:
                         ready['resumed']=True
                         ready['generation_limit_bytes']=self.disk
                         self.finish_scratch()
+                        ready['preparation_resume_wall_seconds'] = time.monotonic() - self.started
                         self.dst.close()
                         os.replace(self.working,self.destination)
                         return ready
@@ -809,12 +810,15 @@ class Preparation:
                     report['gaps'].append(dict(entity_id=gap['entity_id'],start_ts=float(gap.get('start_ts',gap.get('start'))),
                         end_ts=float(gap.get('end_ts',gap.get('end'))),source='ha_recorder',
                         failure_reason='HISTORY_GAP_HTTP500' if not gap.get('failure_reason') or 'HTTP500' in gap.get('failure_reason','') else 'HISTORY_UNKNOWN',recovery_attempts=0))
+            index_seconds = 0.
             for item in self.schema:
                 if item['type']=='index':
                     self.begin_operation('Build index '+item['name'])
                     self.checkpoint()
+                    index_started = time.monotonic()
                     self.sql(self.dst,'execute',item['sql'].replace('CREATE INDEX ','CREATE INDEX IF NOT EXISTS ',1).replace('CREATE UNIQUE INDEX ','CREATE UNIQUE INDEX IF NOT EXISTS ',1))
                     self.dst.commit()
+                    index_seconds += time.monotonic() - index_started
                     self.end_operation()
             self.begin_operation('Count copied history')
             copied_records=self.sql(self.dst,'execute','SELECT COUNT(*) FROM entity_history').fetchone()[0]
@@ -825,6 +829,8 @@ class Preparation:
                 sqlite_wait_seconds=max(0.,self.sqlite_elapsed-self.sqlite_cpu-self.lock_wait),lock_wait_seconds=self.lock_wait,
                 generation_limit_bytes=self.disk, recovery_disk_limit_bytes=self.recovery_disk,
                 copy_tables=self.state['tables'],resumed=self.resumed,availability='PARTIAL' if report['gaps'] else 'HISTORY_OK')
+            report['preparation_index_seconds'] = index_seconds
+            report['preparation_checkpoint_commit_seconds'] = self.commit_seconds
             self.begin_operation('Finalize recovery projection and manifest')
             self.dst.execute('CREATE TABLE IF NOT EXISTS recovery_projection(id INTEGER PRIMARY KEY,lo REAL,hi REAL)')
             self.dst.execute('INSERT OR REPLACE INTO recovery_projection VALUES(1,NULL,NULL)')
@@ -853,6 +859,7 @@ class Preparation:
                 raise RecoveryUnavailable('Recovered generation failed quick_check')
             self.end_operation()
             self.finish_scratch()
+            report['preparation_wall_seconds'] = time.monotonic() - self.started
             self.emit('entity_history','complete',True)
         os.replace(self.working,self.destination)
         return report

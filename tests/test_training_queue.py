@@ -186,6 +186,13 @@ class TrainingQueueTests(unittest.TestCase):
         self.assertTrue(any(event[2] == 'training_queue_interrupted' and event[0] == 'a'
                             for event in self.store.events))
 
+    def test_shadow_model_with_all_replay_done_can_still_be_paused_for_control(self):
+        self.queue.enqueue('a')
+        self.assertTrue(self.wait_for(lambda: self.history.started == [('a', False)]))
+        self.history.complete('a', state='paused', progress=1.)
+        self.assertTrue(self.wait_for(lambda: any(event[2] == 'training_queue_finished'
+                                                 for event in self.store.events)))
+
     def test_nonterminal_storage_failure_is_automatically_requeued_at_most_once(self):
         self.queue.enqueue('a')
         self.assertTrue(self.wait_for(lambda: len(self.history.started) == 1))
