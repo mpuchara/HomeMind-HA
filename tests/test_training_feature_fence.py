@@ -68,7 +68,7 @@ class TrainingFeatureFenceTests(unittest.TestCase):
     def test_routine_journal_age_prune_waits_while_hard_limit_still_applies(self):
         self.record('frozen')
         boundary = self.freeze()
-        with protect_training_inputs(self.store):
+        with protect_training_inputs(self.store, self.owner):
             self.journal.prune(entity_id=RADAR)
             self.check(boundary)
             self.journal.global_event_limit = 0
@@ -77,6 +77,27 @@ class TrainingFeatureFenceTests(unittest.TestCase):
                 self.check(boundary)
         with self.store.conn() as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0], 0)
+
+    def test_global_cap_prefers_rows_outside_active_training_windows(self):
+        self.record('first')
+        first = self.freeze()
+        self.record('second', 40.0, received=41.0)
+        second_owner = self.create_agent('switch.second')
+        second = self.freeze(start=35.0, end=50.0, owner=second_owner)
+        self.record('stale')
+        stale = self.freeze(owner=self.create_agent('switch.stale'))
+        self.record('unrelated', entity='sensor.other', received=50.0)
+        self.record('late_inside_second', 43.0, received=51.0)
+        self.journal.global_event_limit = 2
+        with protect_training_inputs(self.store, self.owner), protect_training_inputs(self.store, second_owner):
+            self.journal.prune()
+            self.check(first)
+            self.check(second)
+            with self.assertRaisesRegex(RuntimeError, 'DELETE inside frozen feature window'):
+                self.check(stale)
+        with self.store.conn() as conn:
+            self.assertEqual({row[0] for row in conn.execute(
+                'SELECT event_key FROM feature_observation_events')}, {'first', 'second'})
 
     def test_independent_agent_windows_and_reused_rowids(self):
         self.record('before', 8.0)

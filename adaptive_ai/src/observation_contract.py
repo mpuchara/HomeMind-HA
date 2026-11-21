@@ -1304,7 +1304,7 @@ class FeatureJournal:
                 "_feature_received_time": float(row["received_time"])}
 
     def prune(self, entity_id=None):
-        from training_snapshot import retention_protected
+        from training_snapshot import feature_retention_filter, retention_protected
         now = float(self.clock())
         cutoff = now - self.retention_hours * 3600.0
         with self.store.lock, self.store.conn() as c:
@@ -1334,23 +1334,29 @@ class FeatureJournal:
                 total=int(row[0])
             else:
                 total = int(c.execute("SELECT COUNT(*) FROM feature_observation_events").fetchone()[0] or 0)
+            guard, owners = ('', ())
+            if total > self.global_event_limit:
+                guard, owners = feature_retention_filter(c, self.store)
             while total > self.global_event_limit:
-                excess = min(512,total-self.global_event_limit)
-                # Preserve the same priority: oldest unprotected rows first, then
-                # protected rows only when required by the hard global cap. The
-                # covering time index avoids reading/sorting every event payload.
+                excess = min(512, total-self.global_event_limit)
+                # Within each pass, prefer rows outside live evidence windows.
                 # rowid preserves insertion-order ties of the previous table scan.
-                doomed = c.execute("""SELECT event_key FROM feature_observation_events
-                    INDEXED BY idx_feature_obs_prune_cover WHERE protected_until<=?
-                    ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, excess)).fetchall()
-                remaining = excess - len(doomed)
-                if remaining:
-                    doomed += c.execute("""SELECT event_key FROM feature_observation_events
-                        INDEXED BY idx_feature_obs_prune_cover WHERE protected_until>?
-                        ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, remaining)).fetchall()
+                doomed = []
+                for comparison in ('<=', '>'):
+                    remaining = excess - len(doomed)
+                    if not remaining:
+                        break
+                    doomed.extend(c.execute(f"""SELECT event_key FROM feature_observation_events
+                        INDEXED BY idx_feature_obs_prune_cover WHERE protected_until{comparison}?{guard}
+                        ORDER BY received_time ASC,rowid ASC LIMIT ?""", (now, *owners, remaining)))
                 c.executemany("DELETE FROM feature_observation_events WHERE event_key=?", [(r[0],) for r in doomed])
-                if not doomed:break
-                total-=len(doomed)
+                total -= len(doomed)
+                if guard and len(doomed) < excess:
+                    # No other rows remain to evict; enforce the cap and let
+                    # the durable mutation guard invalidate the affected job.
+                    guard, owners = '', ()
+                elif not doomed:
+                    break
             retention_changed=getattr(self.store,'_universal_training_retention_changed',None)
             if retention_changed is not None and c.total_changes>observations_before:
                 retention_changed(c)

@@ -16,6 +16,7 @@ from storage import Store
 from storage_budget import StoragePressure
 from storage_recovery import StorageRecovery
 from storage_retention import StorageRetention
+from training_snapshot import capture, install, protect_training_inputs, validate
 
 
 class StorageRecoveryTests(unittest.TestCase):
@@ -100,6 +101,33 @@ class StorageRecoveryTests(unittest.TestCase):
         self.assertTrue(self.gc.active)
         self.drain()
         self.assertFalse(self.gc.active)
+
+    def test_preemptive_gc_spares_active_training_until_recording_pauses(self):
+        room = 'sensor.room'
+        owner = self.store.create_agent(support.agent(name='Test', target_entity='switch.target',
+                                                       input_entities=[room]))['id']
+        self.events(count=128)
+        with self.store.conn() as c:
+            c.execute('BEGIN IMMEDIATE')
+            install(c)
+            boundary = capture(c, self.now-7100, [room], start_ts=self.now-7300, owner=owner)
+        self.events(count=128, start=128)
+        self.gc.TABLES = ('feature_observation_events',)
+        with protect_training_inputs(self.store, owner):
+            self.pressure(.86)
+            self.assertEqual(self.store.storage_budget.snapshot()['level'], 'normal')
+            self.assertEqual(self.gc.step(self.now), 128)
+            self.assertEqual(self.count('feature_observation_events'), 128)
+            with self.store.conn() as c:
+                validate(c, boundary)
+
+            self.pressure(.95)
+            self.assertEqual(self.store.storage_budget.snapshot()['reason'], 'database_budget')
+            self.drain()
+            self.assertEqual(self.count('feature_observation_events'), 0)
+            with self.store.conn() as c:
+                with self.assertRaisesRegex(RuntimeError, 'DELETE inside frozen feature window'):
+                    validate(c, boundary)
 
     def test_live_feature_window_protects_matching_event_but_not_orphan_stamp(self):
         self.events(count=4, deadline=self.now+86400)

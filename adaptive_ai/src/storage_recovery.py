@@ -10,6 +10,7 @@ import time
 
 from settings import OPTIONS
 from sqlite_background import is_sqlite_busy
+from training_snapshot import FEATURE_EVENTS, feature_retention_filter, retention_protected
 
 
 class StorageRecovery:
@@ -179,19 +180,22 @@ class StorageRecovery:
                         # Slow microSD metadata reads must not consume every
                         # slice before even one bounded batch can make progress.
                         attempted += 1
-                        from training_snapshot import retention_protected
                         if not self.active and retention_protected(self.store,table):
                             exhausted.add(table)
                             continue
                         with self.store.conn() as c:
-                            expression = specs[table][0]
+                            expression, eligible, parameters = specs[table]
                             c.execute(f'CREATE INDEX IF NOT EXISTS idx_storage_retention_{table} ON {table}({expression})')
-                            if table == 'feature_observation_events' and 'idx_storage_window_start' in specs[table][1]:
-                                # Seek old intervals directly. Walking every recent
-                                # per-entity window for each orphan would be quadratic.
-                                c.execute('CREATE INDEX IF NOT EXISTS idx_storage_window_start ON feature_windows(start_time)')
+                            if table == FEATURE_EVENTS:
+                                if 'idx_storage_window_start' in eligible:
+                                    # Seek old intervals directly instead of walking all recent windows.
+                                    c.execute('CREATE INDEX IF NOT EXISTS idx_storage_window_start ON feature_windows(start_time)')
+                                if status['level'] == 'normal':
+                                    guard, owners = feature_retention_filter(c, self.store)
+                                    eligible += guard
+                                    parameters += owners
                             bound = cutoff / 86400 + 2440587.5 if table == 'events' else cutoff
-                            removed, count, next_cursor = self._batch(c, table, specs[table], bound)
+                            removed, count, next_cursor = self._batch(c, table, (expression, eligible, parameters), bound)
                         # Publish traversal/statistics only after the transaction commits.
                         if count < self.BATCH_ROWS or (table == 'feature_windows' and not removed):
                             self.cursors.pop(table, None)

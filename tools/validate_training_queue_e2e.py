@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'adaptive_ai' / 'src'
 RADAR = 'binary_sensor.kitchen_presence_moving_target'
 TARGETS = [f'switch.training_fixture_{index}' for index in range(3)]
+CAP_FROZEN = 'fixture-cap-frozen'
+CAP_DISPOSABLE = 'fixture-cap-disposable'
 
 
 def state(entity, value):
@@ -56,8 +58,8 @@ class RecorderStub(BaseHTTPRequestHandler):
 
 
 def serve(port_file):
-    # Only substitute the listener address. Startup, HTTP, queue, Engine,
-    # HistoryManager and process supervision are the shipped composition.
+    # Startup, HTTP, queue, Engine, HistoryManager and process supervision
+    # use the shipped composition. The fixture injects pressure before publish.
     import trial_queue_main
     core = trial_queue_main.core
     default_server = core.ThreadingHTTPServer
@@ -72,6 +74,8 @@ def serve(port_file):
             core.ENGINE.update_entity_registry(entries)
 
         core.prepare_engine_extensions = prepare_with_registry
+    if port_file.stem == 'restarted':
+        install_cap_probe(core, port_file.with_suffix('.cap.json'))
 
     def bind(_address, handler):
         listener = default_server(('127.0.0.1', 0), handler)
@@ -80,6 +84,48 @@ def serve(port_file):
 
     core.ThreadingHTTPServer = bind
     core.main()
+
+
+def install_cap_probe(core, receipt):
+    import history_recovery
+
+    publish = history_recovery.publish_generation
+
+    def publish_after_prune(store, generation_path, agent_id, *args, **kwargs):
+        if not receipt.exists() and store.get_agent_config(agent_id)['target_entity'] == TARGETS[2]:
+            journal = core.ENGINE.feature_journal
+            with store.lock, store.conn() as c:
+                frozen = c.execute('''SELECT event.event_time FROM feature_observation_events AS event
+                    JOIN __training_feature_windows AS fence USING(entity_id)
+                    WHERE fence.owner=? AND event.event_key=? AND event.rowid<=fence.boundary
+                      AND event.event_time BETWEEN fence.start_ts AND fence.end_ts
+                      AND fence.operation IS NULL''', (agent_id, CAP_FROZEN)).fetchone()
+                assert frozen, 'The cap probe must run while its radar observation is frozen'
+            disposable = 'sensor.training_retention_fixture'
+            stamp = frozen[0] + 1
+            journal.record(disposable, state(disposable, 'off'), event_time=stamp, received_time=stamp,
+                           source='ha_event', event_key=CAP_DISPOSABLE)
+            with store.lock:
+                with store.conn() as c:
+                    before = c.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0]
+                old_limit = journal.global_event_limit
+                try:
+                    journal.global_event_limit = before - 1
+                    journal.prune()
+                finally:
+                    journal.global_event_limit = old_limit
+                with store.conn() as c:
+                    after = c.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0]
+                    survivors = {row[0] for row in c.execute(
+                        'SELECT event_key FROM feature_observation_events WHERE event_key IN (?,?)',
+                        (CAP_FROZEN, CAP_DISPOSABLE))}
+                receipt.write_text(json.dumps({'evicted': before - after,
+                                               'frozen_row_retained': CAP_FROZEN in survivors,
+                                               'disposable_row_evicted': CAP_DISPOSABLE not in survivors}),
+                                   encoding='utf-8')
+        return publish(store, generation_path, agent_id, *args, **kwargs)
+
+    history_recovery.publish_generation = publish_after_prune
 
 
 def until(predicate, *, timeout=90):
@@ -199,6 +245,8 @@ def prepare_fixture(store, journal, rich):
     frozen_stamp = max(base+30, time.time()-6*3600)
     journal.record(RADAR, state(RADAR, 'on'), event_time=frozen_stamp, received_time=frozen_stamp,
                    source='ha_event', event_key='fixture-frozen')
+    journal.record(RADAR, state(RADAR, 'on'), event_time=frozen_stamp + 120, received_time=frozen_stamp + 120,
+                   source='ha_event', event_key=CAP_FROZEN)
     return ids[:3], states, frozen_stamp, {
         'agents': len(ids), 'entities': len(states), 'seeded_observations': 480*(len(targets)+1)+10000*len(context),
         'archive_window_hours': duration / 3600.,
@@ -272,6 +320,8 @@ def main(folder, recorder, rich=False):
             call(port, '/api/agents')
             http_latency.append((time.perf_counter()-began)*1000)
         completed(port, aid)
+        cap_probe = json.loads((folder / 'restarted.cap.json').read_text(encoding='utf-8'))
+        assert cap_probe == {'evicted': 1, 'frozen_row_retained': True, 'disposable_row_evicted': True}, cap_probe
         diagnostics = timings[-1]
         assert diagnostics['preparation']['payload_rows_fetched_total'] > 0, diagnostics
         assert diagnostics['phases']['replay_seconds'] > 0, diagnostics
@@ -284,7 +334,7 @@ def main(folder, recorder, rich=False):
     ordered = sorted(http_latency)
     percentiles = {f'p{pct}': ordered[math.ceil(pct / 100 * len(ordered)) - 1] for pct in (50, 95, 99)}
     print(json.dumps({'fixture': fixture, 'completed': successes, 'recorder_requests': recorder.recorder_requests,
-                      'control_requests': recorder.control_requests, 'http_ms': http_latency,
+                      'control_requests': recorder.control_requests, 'cap_probe': cap_probe, 'http_ms': http_latency,
                       'http_percentiles_ms': percentiles, 'jobs': timings}, indent=2))
 
 
