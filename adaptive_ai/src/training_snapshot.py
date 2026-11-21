@@ -8,6 +8,7 @@ it, including between processes or across a crash. No original payload is change
 import hashlib
 import json
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 
 ENTITY_PREFIX_TABLES = {'entity_history':'ts', 'feature_observation_events':'event_time',
@@ -34,19 +35,24 @@ def install_trigger(connection, name, sql, legacy=None):
 
 
 @contextmanager
-def protect_training_inputs(store):
+def protect_training_inputs(store, owner=None):
     """Coordinate routine retention with the supervised child; no held SQLite lock."""
     # Small scheduling fixtures and legacy read-only adapters own no retention.
     if not hasattr(store, 'lock'):
         yield
         return
     with store.lock:
-        store._training_input_readers = getattr(store, '_training_input_readers', 0)+1
+        readers = getattr(store, '_training_input_readers', None)
+        if readers is None:
+            readers = store._training_input_readers = Counter()
+        readers[owner] += 1
     try:
         yield
     finally:
         with store.lock:
-            store._training_input_readers -= 1
+            readers[owner] -= 1
+            if not readers[owner]:
+                del readers[owner]
 
 
 def retention_protected(store, table):
@@ -55,6 +61,20 @@ def retention_protected(store, table):
     return bool(getattr(store, '_training_input_readers', 0)) and (
         table in ENTITY_PREFIX_TABLES or table in AGENT_TABLES or
         table in ('home_checkpoints','adaptive_presence_checkpoints'))
+
+
+def feature_retention_filter(connection, store):
+    """Keep valid windows of supervised jobs out of routine eviction; caller holds Store.lock."""
+    owners = tuple(owner for owner in getattr(store, '_training_input_readers', ()) if owner is not None)
+    if not owners or not connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (FEATURE_FENCES,)).fetchone():
+        return '', ()
+    marks = ','.join('?' for _ in owners)
+    return (f' AND NOT EXISTS (SELECT 1 FROM {FEATURE_FENCES} AS fence '
+            f'WHERE fence.entity_id={FEATURE_EVENTS}.entity_id AND fence.owner IN ({marks}) '
+            f'AND {FEATURE_EVENTS}.rowid<=fence.boundary '
+            f'AND {FEATURE_EVENTS}.event_time BETWEEN fence.start_ts AND fence.end_ts '
+            'AND fence.operation IS NULL)', owners)
 
 
 def quote(name):

@@ -1290,7 +1290,7 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
     from storage import STORE
     from training_snapshot import protect_training_inputs
     if job.get('training_generation'):
-        with protect_training_inputs(STORE):
+        with protect_training_inputs(STORE, str(job['agent_id'])):
             return _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path)
     return _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path)
 
