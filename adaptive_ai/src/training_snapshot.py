@@ -10,7 +10,8 @@ import json
 import sqlite3
 import uuid
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
+from pathlib import Path
 
 from sqlite_background import is_sqlite_corruption
 
@@ -234,8 +235,21 @@ def _history_seed_floor(connection, entity, start_ts, upper):
     return float(row[0]) if row else -1e300
 
 
+def _history_seed_floors(connection, entities, start_ts, upper):
+    if not entities:
+        return []
+    filename = next(row[2] for row in connection.execute('PRAGMA database_list') if row[1] == 'main')
+    if not filename:
+        return [_history_seed_floor(connection, entity, start_ts, upper) for entity in entities]
+    # BEGIN IMMEDIATE already excludes changes to history. Read the keys on
+    # a separate connection so index damage cannot poison the ledger writer.
+    uri = Path(filename).resolve().as_uri() + '?mode=ro'
+    with closing(sqlite3.connect(uri, uri=True, timeout=.2)) as reader:
+        return [_history_seed_floor(reader, entity, start_ts, upper) for entity in entities]
+
+
 def capture(connection, end_ts, entities=None, entity_scopes=None, *, start_ts=None, owner=None):
-    """Caller owns a brief write transaction; no payload scan or throttle here."""
+    """Register a boundary under a write transaction with no pending archive payload writes."""
     bounds={}
     for name,epoch,_ in connection.execute('SELECT name,epoch,boundary FROM __training_prefix_versions').fetchall():
         # AUTOINCREMENT's durable high-water survives a corrupt final payload
@@ -266,8 +280,8 @@ def capture(connection, end_ts, entities=None, entity_scopes=None, *, start_ts=N
                     connection.execute(f'DELETE FROM {fences} WHERE NOT EXISTS '
                                        f'(SELECT 1 FROM agents WHERE id={fences}.owner)')
                 floor = float(start_ts)
-                lower = (_history_seed_floor(connection, entity, floor, upper)
-                         if table == HISTORY_EVENTS else floor for entity in selected)
+                lower = (_history_seed_floors(connection, selected, floor, upper)
+                         if table == HISTORY_EVENTS else [floor] * len(selected))
                 connection.executemany(
                     f'INSERT INTO {fences} VALUES(?,?,?,?,?,?,NULL)',
                     ((entity, owner, token, upper, lower_ts, float(end_ts))
