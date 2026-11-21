@@ -2018,6 +2018,7 @@ def worker_main(job_path):
                 float(job.get('sequence_target_end_ts', job['end_ts'])), options=OPTIONS,
                 agent_id=str(job['agent_id']),
                 rebuild=bool(job.get('generation_rebuild')),
+                restart_stale_history=True,
                 cancelled=lambda: bool(parent and not _same_process_alive(parent, job.get('parent_start_token'))),
                 progress=recovery_progress,
                 http_gaps=json.loads(STORE.meta_get('training_history_gaps_v1', '[]'))

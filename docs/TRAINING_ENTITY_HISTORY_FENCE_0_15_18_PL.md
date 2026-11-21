@@ -1,0 +1,11 @@
+# Wznowienie kopii historii w 0.15.18 TEST
+
+Log z instalacji z 21 listopada pokazuje 3 624 048 skopiowanych wierszy i około 2 godz. 47 min przygotowania jednego zadania. Przy wznowieniu worker odrzucił zapisany punkt kontrolny w `validate_retained_prefix` dla `entity_history` i zachował poprzedni model. Widoczny w interfejsie zapisany kursor 100% nie jest potwierdzeniem zakończonego treningu lub publikacji. Log nie identyfikuje instrukcji, która zmieniła źródło.
+
+W 0.15.17 licznik dla encji obejmował również zmiany sprzed rzeczywistego wejścia replayu. Test SQLite odtworzył błąd po usunięciu starej obserwacji i uzupełnieniu innej przez Recorder, choć żaden wiersz nie należał do wejścia. Nowa kontrola uwzględnia przedział replayu, granicę fizycznych identyfikatorów zapisanych przy zamrożeniu oraz najnowszą obserwację sprzed początku okna, którą replay wykorzystuje jako stan początkowy. Modyfikacja stanu początkowego, przesunięcie istniejącego wiersza do zakresu oraz zmiana lub usunięcie wiersza potrzebnego do replayu nadal unieważniają kopię. Jeśli przy zamrożeniu brakuje odczytywalnego stanu początkowego, kontrola zachowuje szerszy zakres dla tej encji.
+
+Jeśli worker odrzuci istniejący checkpoint z powodu `entity_history` już przy otwieraniu, może raz odtworzyć kopię tego samego przedziału według nowej granicy. Dotyczy to wyłącznie pliku roboczego zadania i jego plików SQLite. Archiwum źródłowe i poprzedni model pozostają dostępne. Zmiana danych podczas ponownej próby nadal przerywa zadanie. Punktów zapisanych na 0.15.17 nie reinterpretujemy przy użyciu nowych granic bez dowodu zgodności.
+
+Test kolejki uruchamia produkcyjny serwer HTTP i procesy workerów z symulowanym HA. Po dwóch treningach restartuje runtime, a przed publikacją trzeciego modelu zmienia starszą obserwację encji docelowej i wymusza retencję dziennika. Sprawdza ukończony trening w Shadow, trwały model, wcześniejsze modele i brak wysłanych poleceń do HA.
+
+Po utworzeniu kopii zapasowej danych dodatku zainstaluj paczkę lokalną, zachowując katalog danych. Sprawdź wersję i gotowość, po czym ponów trening tylko trzeciego agenta. Sukces potwierdza zapis nowego modelu w Shadow i zachowanie dwóch wcześniejszych modeli. Pierwsza próba po aktualizacji może ponownie przygotować historię, jeśli stary punkt kontrolny jest niezgodny.

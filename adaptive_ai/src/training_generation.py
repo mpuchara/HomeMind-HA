@@ -18,6 +18,7 @@ import time
 from history_recovery import CORRECT_TABLES, RecoveryUnavailable, quote, correct_fingerprint, correct_predicate
 from sqlite_background import is_sqlite_corruption, is_sqlite_busy
 from training_budget import TRAINING_BUDGET
+from training_snapshot import HISTORY_EVENTS, TrainingInputChanged
 from storage_budget import StoragePressure
 
 CONTRACT = 'training-history-generation-v7'
@@ -525,10 +526,17 @@ class Preparation:
             self.state['boundary']['tables'].pop('historical_experiences',None)
         return initial
 
+    def discard_checkpoint(self):
+        # Only the selected job's disposable copy and its SQLite sidecars.
+        for suffix in ('', '-journal', '-wal', '-shm'):
+            Path(str(self.working)+suffix).unlink(missing_ok=True)
+
     def run(self, http_gaps):
         self.destination.parent.mkdir(parents=True,exist_ok=True)
         if self.destination.exists():
             raise RecoveryUnavailable('Training generation already exists')
+        if self.working.is_symlink():
+            raise RecoveryUnavailable('Training preparation checkpoint is a symbolic link')
         if self.working.exists():
             try:
                 with closing(sqlite3.connect(self.working)) as old:
@@ -542,9 +550,7 @@ class Preparation:
             except ValueError:
                 reusable=False
             if not reusable:
-                # This is our disposable work file, never the original DB/WAL.
-                for suffix in ('','-journal','-wal','-shm'):
-                    Path(str(self.working)+suffix).unlink(missing_ok=True)
+                self.discard_checkpoint()
         from training_snapshot import install, capture, validate
         from storage_files import worker_storage_budget
         guard = worker_storage_budget()
@@ -1136,21 +1142,37 @@ class Preparation:
 
 
 def prepare_generation(source,destination,entities,start,end,*,options=None,cancelled=lambda:False,
-                       progress=lambda **kw:None,http_gaps=(),agent_id=None,rebuild=False):
-    # Retry only native lock contention. Every attempt closes its connections,
-    # and the next attempt validates the committed source fence/copy checkpoint.
-    # Do not keep a reader or writer open while sleeping.
+                       progress=lambda **kw:None,http_gaps=(),agent_id=None,rebuild=False,
+                       restart_stale_history=False):
+    # A retry closes its connections before waiting or opening another snapshot.
     entities=tuple(entities)
     deadline=None
     retries=0
     busy_wait_seconds=0.
+    restarted_history = False
     while True:
         preparation = Preparation(source,destination,entities,start,end,options,cancelled,progress,agent_id,rebuild)
         try:
             report=preparation.run(http_gaps)
             report['sqlite_busy_retries']=retries
             report['sqlite_busy_wait_seconds']=round(busy_wait_seconds,3)
+            if restarted_history:
+                report['stale_history_checkpoint_restarted'] = True
             return report
+        except TrainingInputChanged as exc:
+            if (not restart_stale_history or restarted_history or exc.table != HISTORY_EVENTS
+                    or preparation.failure_stage != 'validate_retained_prefix'):
+                raise
+            if cancelled():
+                raise InterruptedError('Training history restart cancelled') from exc
+            # This retained copy was rejected before any page was used. Capture
+            # a new boundary once. A mutation during the new attempt still fails.
+            preparation.discard_checkpoint()
+            restarted_history = True
+            message = 'Stale history checkpoint retired; rebuilding the same interval from a fresh snapshot'
+            progress(message=message, phase_detail='restart_stale_history', progress=None, work_done=0,
+                     preparation=dict(stage=message, rows_copied=0))
+            print('[training] ' + message, flush=True)
         except sqlite3.OperationalError as exc:
             if getattr(exc, 'sqlite_errorcode', 0) & 255 == sqlite3.SQLITE_FULL:
                 raise generation_pressure('sqlite_full', preparation.working,

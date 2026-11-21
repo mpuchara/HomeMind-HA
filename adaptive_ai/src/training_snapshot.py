@@ -7,14 +7,26 @@ it, including between processes or across a crash. No original payload is change
 """
 import hashlib
 import json
+import sqlite3
 import uuid
 from collections import Counter
 from contextlib import contextmanager
+
+from sqlite_background import is_sqlite_corruption
 
 ENTITY_PREFIX_TABLES = {'entity_history':'ts', 'feature_observation_events':'event_time',
                         'provenance_events':'event_time', 'provenance_history_links':'event_time'}
 FEATURE_EVENTS = 'feature_observation_events'
 FEATURE_FENCES = '__training_feature_windows'
+HISTORY_EVENTS = 'entity_history'
+HISTORY_FENCES = '__training_history_windows'
+WINDOWS = {FEATURE_EVENTS: ('feature', FEATURE_FENCES), HISTORY_EVENTS: ('history', HISTORY_FENCES)}
+
+
+class TrainingInputChanged(RuntimeError):
+    def __init__(self, table, reason):
+        self.table = table
+        super().__init__(f'Training input prefix changed: {table}; {reason}; previous model retained')
 
 
 def changed_columns(columns, excluded=()):
@@ -128,8 +140,11 @@ def install(connection):
             install_trigger(connection, name, sql, legacy)
         if table in ENTITY_PREFIX_TABLES:
             _install_entity_guard(connection, table, ENTITY_PREFIX_TABLES[table])
-        if {'entity_id', 'event_time'}.issubset(feature_columns):
-            _install_feature_window_guards(connection, feature_columns)
+        if table in WINDOWS:
+            columns = feature_columns or [r[1] for r in connection.execute('PRAGMA table_info('+quote(table)+')')]
+            stamp = ENTITY_PREFIX_TABLES[table]
+            if {'entity_id', stamp}.issubset(columns):
+                _install_window_guards(connection, table, stamp, columns)
 
 
 def _install_entity_guard(connection, table, stamp):
@@ -166,28 +181,29 @@ def _install_entity_guard(connection, table, stamp):
         install_trigger(connection, name, sql, legacy)
 
 
-def _install_feature_window_guards(connection, columns):
+def _install_window_guards(connection, table, stamp, columns):
     # One durable slot per owner, indexed by entity for the mutation hot path.
     # Retain only the first affecting operation. There is no per-event log.
-    connection.execute(f'CREATE TABLE IF NOT EXISTS {FEATURE_FENCES} ('
+    kind, fences = WINDOWS[table]
+    connection.execute(f'CREATE TABLE IF NOT EXISTS {fences} ('
                        'entity_id TEXT NOT NULL, owner TEXT NOT NULL, token TEXT NOT NULL, '
                        'boundary INTEGER NOT NULL, start_ts REAL NOT NULL, end_ts REAL NOT NULL, '
                        'operation TEXT, PRIMARY KEY(entity_id,owner)) WITHOUT ROWID')
-    connection.execute(f'CREATE INDEX IF NOT EXISTS __training_feature_windows_owner '
-                       f'ON {FEATURE_FENCES}(owner)')
-    bound = f"(SELECT boundary FROM __training_prefix_versions WHERE name='{FEATURE_EVENTS}')"
-    end = f"(SELECT end_ts FROM __training_prefix_versions WHERE name='{FEATURE_EVENTS}')"
+    connection.execute(f'CREATE INDEX IF NOT EXISTS {fences}_owner ON {fences}(owner)')
+    bound = f"(SELECT boundary FROM __training_prefix_versions WHERE name='{table}')"
+    end = f"(SELECT end_ts FROM __training_prefix_versions WHERE name='{table}')"
     for operation, versions in [('INSERT', ('NEW',)), ('DELETE', ('OLD',)), ('UPDATE', ('OLD', 'NEW'))]:
-        name = '__training_fence_feature_window_' + operation.lower()
-        possible = ' OR '.join(f'({v}.rowid<={bound} AND {v}.event_time<={end})' for v in versions)
+        name = f'__training_fence_{kind}_window_' + operation.lower()
+        possible = ' OR '.join(f'({v}.rowid<={bound} AND {v}.{stamp}<={end})' for v in versions)
         condition = f'({possible})'
         if operation == 'UPDATE':
-            condition += ' AND ' + changed_columns(columns, ('protected_until', 'mutation_revision'))
+            metadata = ('protected_until', 'mutation_revision') if table == FEATURE_EVENTS else ('mutation_revision',)
+            condition += ' AND ' + changed_columns(columns, metadata)
         entity_ids = ','.join(v+'.entity_id' for v in versions)
         members = ' OR '.join(f'(entity_id={v}.entity_id AND {v}.rowid<=boundary '
-                              f'AND {v}.event_time BETWEEN start_ts AND end_ts)' for v in versions)
-        sql = (f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {FEATURE_EVENTS} WHEN {condition} '
-               f"BEGIN UPDATE {FEATURE_FENCES} SET operation='{operation}' WHERE operation IS NULL "
+                              f'AND {v}.{stamp} BETWEEN start_ts AND end_ts)' for v in versions)
+        sql = (f'CREATE TRIGGER {quote(name)} AFTER {operation} ON {table} WHEN {condition} '
+               f"BEGIN UPDATE {fences} SET operation='{operation}' WHERE operation IS NULL "
                f'AND entity_id IN ({entity_ids}) AND ({members}); END')
         install_trigger(connection, name, sql)
 
@@ -200,9 +216,22 @@ def schema_manifest(connection, names=None):
         names=tables|{'agents','app_meta','entity_history_revision',
                       '__training_prefix_versions','__training_source_identity','__training_entity_prefix_versions'}
         names|={name for name in objects if name.startswith('__training_fence_')}
-        if FEATURE_FENCES in objects:
-            names.add(FEATURE_FENCES)
+        names |= {fences for _, fences in WINDOWS.values() if fences in objects}
     return {name:hashlib.sha256(objects[name].encode()).hexdigest() if objects.get(name) is not None else None for name in sorted(names)}
+
+
+def _history_seed_floor(connection, entity, start_ts, upper):
+    try:
+        row = connection.execute(
+            'SELECT ts FROM entity_history WHERE entity_id=? AND ts<? AND rowid<=? '
+            'ORDER BY ts DESC,id DESC LIMIT 1', (entity, start_ts, upper)).fetchone()
+    except sqlite3.DatabaseError as exc:
+        if not is_sqlite_corruption(exc):
+            raise
+        row = None
+    # If there is no known seed, any existing physical row moved before start
+    # could become one. Keep the conservative prefix on an unreadable index too.
+    return float(row[0]) if row else -1e300
 
 
 def capture(connection, end_ts, entities=None, entity_scopes=None, *, start_ts=None, owner=None):
@@ -229,17 +258,24 @@ def capture(connection, end_ts, entities=None, entity_scopes=None, *, start_ts=N
                 continue
             upper = bounds[table]['upper']
             selected = sorted(set((entity_scopes or {}).get(table, entities)))
-            if table == FEATURE_EVENTS and start_ts is not None and owner is not None:
+            if table in WINDOWS and start_ts is not None and owner is not None:
+                kind, fences = WINDOWS[table]
                 token = uuid.uuid4().hex
-                connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE owner=?', (owner,))
+                connection.execute(f'DELETE FROM {fences} WHERE owner=?', (owner,))
                 if connection.execute("SELECT 1 FROM sqlite_master WHERE name='agents' AND type='table'").fetchone():
-                    connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE NOT EXISTS '
-                                       f'(SELECT 1 FROM agents WHERE id={FEATURE_FENCES}.owner)')
+                    connection.execute(f'DELETE FROM {fences} WHERE NOT EXISTS '
+                                       f'(SELECT 1 FROM agents WHERE id={fences}.owner)')
+                floor = float(start_ts)
+                lower = (_history_seed_floor(connection, entity, floor, upper)
+                         if table == HISTORY_EVENTS else floor for entity in selected)
                 connection.executemany(
-                    f'INSERT INTO {FEATURE_FENCES} VALUES(?,?,?,?,?,?,NULL)',
-                    [(entity, owner, token, upper, float(start_ts), float(end_ts)) for entity in selected])
-                result['feature_window'] = dict(owner=owner, token=token, start_ts=float(start_ts),
-                                                count=len(selected))
+                    f'INSERT INTO {fences} VALUES(?,?,?,?,?,?,NULL)',
+                    ((entity, owner, token, upper, lower_ts, float(end_ts))
+                     for entity, lower_ts in zip(selected, lower)))
+                window = dict(owner=owner, token=token, count=len(selected))
+                if table == FEATURE_EVENTS:
+                    window['start_ts'] = floor
+                result[kind + '_window'] = window
                 continue
             connection.executemany(
                 'INSERT INTO __training_entity_prefix_versions VALUES(?,?,0,?,?) '
@@ -265,32 +301,38 @@ def validate(connection, boundary):
         row = current.get(table)
         if not row or row[1]<expected['upper'] or row[2]<boundary['end_ts']:
             raise RuntimeError('Training input prefix changed: '+table+'; previous model retained')
-        window = boundary.get('feature_window') if table == FEATURE_EVENTS else None
+        kind, fences = WINDOWS.get(table, (None, None))
+        window = boundary.get(kind + '_window') if kind else None
         if window is not None:
+            floor_filter = ' AND start_ts=?' if table == FEATURE_EVENTS else ''
+            floors = (window['start_ts'],) if floor_filter else ()
             rows = connection.execute(
-                f'SELECT operation FROM {FEATURE_FENCES} WHERE owner=? AND token=? AND boundary=? '
-                'AND start_ts=? AND end_ts=?',
-                (window['owner'], window['token'], expected['upper'], window['start_ts'], boundary['end_ts'])).fetchall()
-            operation = next((row[0] for row in rows if row[0] is not None), None)
+                f'SELECT operation,entity_id FROM {fences} WHERE owner=? AND token=? AND boundary=? '
+                f'AND end_ts=?{floor_filter}',
+                (window['owner'], window['token'], expected['upper'], boundary['end_ts'], *floors)).fetchall()
+            operation = next((row for row in rows if row[0] is not None), None)
             if operation is not None or len(rows) != window['count']:
-                reason = f'{operation} inside frozen feature window' if operation else 'window superseded'
-                raise RuntimeError(f'Training input prefix changed: {table}; {reason}; previous model retained')
+                reason = f'{operation[0]} inside frozen {kind} window' if operation else 'window superseded'
+                if table == HISTORY_EVENTS and operation:
+                    reason += '; entity=' + operation[1]
+                raise TrainingInputChanged(table, reason)
         elif table in scoped:
             actual = {r[0]:(int(r[1]),int(r[2]),float(r[3])) for r in connection.execute(
                 'SELECT entity_id,epoch,boundary,end_ts FROM __training_entity_prefix_versions WHERE table_name=?',(table,))}
             for entity,epoch in scoped[table].items():
                 value = actual.get(entity)
                 if not value or value[0]!=epoch or value[1]<expected['upper'] or value[2]<boundary['end_ts']:
-                    raise RuntimeError('Training input prefix changed: '+table+'; entity='+entity+'; previous model retained')
+                    raise TrainingInputChanged(table, 'entity='+entity)
         elif row[0]!=expected['epoch']:
             raise RuntimeError('Training input prefix changed: '+table+'; previous model retained')
 
 
-def release_feature_window(connection, boundary):
-    window = (boundary or {}).get('feature_window')
-    if window is not None:
-        connection.execute(f'DELETE FROM {FEATURE_FENCES} WHERE owner=? AND token=?',
-                           (window['owner'], window['token']))
+def release_training_windows(connection, boundary):
+    for kind, fences in WINDOWS.values():
+        window = (boundary or {}).get(kind + '_window')
+        if window is not None:
+            connection.execute(f'DELETE FROM {fences} WHERE owner=? AND token=?',
+                               (window['owner'], window['token']))
 
 
 def boundary_digest(boundary):

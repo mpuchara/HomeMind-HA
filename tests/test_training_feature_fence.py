@@ -6,7 +6,7 @@ from pathlib import Path
 import support
 from observation_contract import FeatureJournal
 from storage import Store
-from training_snapshot import capture, install, protect_training_inputs, release_feature_window, validate
+from training_snapshot import capture, install, protect_training_inputs, release_training_windows, validate
 
 
 RADAR = 'binary_sensor.kitchen_presence_moving_target'
@@ -126,7 +126,7 @@ class TrainingFeatureFenceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'window superseded'):
             self.check(old)
         with self.store.conn() as conn:
-            release_feature_window(conn, old)
+            release_training_windows(conn, old)
         self.check(new)
         with self.store.conn() as conn:
             conn.execute("UPDATE feature_observation_events SET event_time=10 WHERE event_key='before'")

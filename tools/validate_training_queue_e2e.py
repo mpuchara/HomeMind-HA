@@ -88,6 +88,19 @@ def serve(port_file):
 
 def install_cap_probe(core, receipt):
     import history_recovery
+    import training_process
+
+    run_attempt = training_process._run_isolated_training_attempt_impl
+
+    def run_with_old_history(history, start_ts, end_ts, job, job_path):
+        store = core.STORE
+        if store.get_agent_config(job['agent_id'])['target_entity'] == TARGETS[2]:
+            start = max(job['sequence_start_ts'], job['sequence_target_end_ts'] - 7 * 86400)
+            store.archive_batch([(TARGETS[2], stamp, 'off', {}, None, 'ha_history_full')
+                                 for stamp in (start - 120, start - 60)])
+        return run_attempt(history, start_ts, end_ts, job, job_path)
+
+    training_process._run_isolated_training_attempt_impl = run_with_old_history
 
     publish = history_recovery.publish_generation
 
@@ -95,18 +108,27 @@ def install_cap_probe(core, receipt):
         if not receipt.exists() and store.get_agent_config(agent_id)['target_entity'] == TARGETS[2]:
             journal = core.ENGINE.feature_journal
             with store.lock, store.conn() as c:
+                old_history = c.execute('''SELECT event.ts,event.state FROM entity_history AS event
+                    JOIN __training_history_windows AS fence USING(entity_id)
+                    WHERE fence.owner=? AND event.entity_id=? AND event.rowid<=fence.boundary
+                      AND event.ts<fence.start_ts AND fence.operation IS NULL ORDER BY event.ts LIMIT 1''',
+                    (agent_id, TARGETS[2])).fetchone()
+                assert old_history and old_history[1] == 'off', 'Expected an old row preceding the causal seed'
                 frozen = c.execute('''SELECT event.event_time FROM feature_observation_events AS event
                     JOIN __training_feature_windows AS fence USING(entity_id)
                     WHERE fence.owner=? AND event.event_key=? AND event.rowid<=fence.boundary
                       AND event.event_time BETWEEN fence.start_ts AND fence.end_ts
                       AND fence.operation IS NULL''', (agent_id, CAP_FROZEN)).fetchone()
                 assert frozen, 'The cap probe must run while its radar observation is frozen'
+            store.archive_upsert(TARGETS[2], old_history[0], 'on', source='ha_history_full')
             disposable = 'sensor.training_retention_fixture'
             stamp = frozen[0] + 1
             journal.record(disposable, state(disposable, 'off'), event_time=stamp, received_time=stamp,
                            source='ha_event', event_key=CAP_DISPOSABLE)
             with store.lock:
                 with store.conn() as c:
+                    assert c.execute('SELECT state FROM entity_history WHERE entity_id=? AND ts=?',
+                                     (TARGETS[2], old_history[0])).fetchone()[0] == 'on'
                     before = c.execute('SELECT COUNT(*) FROM feature_observation_events').fetchone()[0]
                 old_limit = journal.global_event_limit
                 try:
@@ -119,7 +141,7 @@ def install_cap_probe(core, receipt):
                     survivors = {row[0] for row in c.execute(
                         'SELECT event_key FROM feature_observation_events WHERE event_key IN (?,?)',
                         (CAP_FROZEN, CAP_DISPOSABLE))}
-                receipt.write_text(json.dumps({'evicted': before - after,
+                receipt.write_text(json.dumps({'older_history_updated': True, 'evicted': before - after,
                                                'frozen_row_retained': CAP_FROZEN in survivors,
                                                'disposable_row_evicted': CAP_DISPOSABLE not in survivors}),
                                    encoding='utf-8')
@@ -321,7 +343,8 @@ def main(folder, recorder, rich=False):
             http_latency.append((time.perf_counter()-began)*1000)
         completed(port, aid)
         cap_probe = json.loads((folder / 'restarted.cap.json').read_text(encoding='utf-8'))
-        assert cap_probe == {'evicted': 1, 'frozen_row_retained': True, 'disposable_row_evicted': True}, cap_probe
+        assert cap_probe == {'older_history_updated': True, 'evicted': 1, 'frozen_row_retained': True,
+                             'disposable_row_evicted': True}, cap_probe
         diagnostics = timings[-1]
         assert diagnostics['preparation']['payload_rows_fetched_total'] > 0, diagnostics
         assert diagnostics['phases']['replay_seconds'] > 0, diagnostics
