@@ -172,8 +172,8 @@ def publish_generation(store, path, agent_id, expected_fingerprint, fingerprint,
         if conn.execute("SELECT 1 FROM trained.sqlite_master WHERE name='tiny_mlp_shadow_models'").fetchone():
             conn.execute("DELETE FROM tiny_mlp_shadow_models WHERE agent_id=?", (agent_id,))
             conn.execute("INSERT INTO tiny_mlp_shadow_models SELECT * FROM trained.tiny_mlp_shadow_models WHERE agent_id=?", (agent_id,))
-        from training_snapshot import release_feature_window
-        release_feature_window(conn, boundary)
+        from training_snapshot import release_training_windows
+        release_training_windows(conn, boundary)
         if job_id:
             conn.execute('INSERT OR REPLACE INTO __training_published_jobs VALUES(?,?)', (agent_id, job_id))
     store.touch_agent_index()
