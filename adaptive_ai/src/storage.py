@@ -335,7 +335,37 @@ class Store:
                 self._connection_session.busy_timeout_ms = previous
 
     @contextmanager
+    def correct_label_transaction(self):
+        """Publish a Correct point and all its journal effects as one write."""
+        if not self.lock.acquire(timeout=0.25):
+            raise sqlite3.OperationalError("database is locked")
+        try:
+            with self.background_sqlite(retryable=False), self.conn() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                callbacks = []
+                self._connection_session.correct_label = (connection, callbacks)
+                try:
+                    yield
+                finally:
+                    del self._connection_session.correct_label
+        finally:
+            self.lock.release()
+        for callback in callbacks:
+            callback()
+
+    def after_correct_label_commit(self, callback):
+        transaction = getattr(self._connection_session, "correct_label", None)
+        if transaction is None:
+            callback()
+        else:
+            transaction[1].append(callback)
+
+    @contextmanager
     def conn(self):
+        correct_label = getattr(self._connection_session, "correct_label", None)
+        if correct_label is not None:
+            yield correct_label[0]
+            return
         borrowed = getattr(self._connection_session, "connection", None)
         reuse = borrowed is not None and not borrowed.in_transaction
         busy_timeout_ms = getattr(self._connection_session, "busy_timeout_ms", None)

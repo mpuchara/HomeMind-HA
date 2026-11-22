@@ -1,9 +1,9 @@
 {
-  "version": "0.15.18",
+  "version": "0.15.19",
   "release_date": "2026-11-22",
-  "base_version": "0.15.17",
-  "base_commit": "e8f3ef7155ef6299cf4b175dd627fbd8e33e92a2",
-  "release_status": "pi5-manual-validation-candidate-training-history-fence",
+  "base_version": "0.15.18",
+  "base_commit": "c97bb9e1d4dd69bccd491ad4083e9ffbd0e84e22",
+  "release_status": "pi5-manual-validation-candidate-correct-integrity",
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",

@@ -32,7 +32,7 @@ class JournaledRLTeaching(RLTeaching):
     def _insert_label(self, agent, desired, timestamp, previous, *, source,
                       generation_id=None, decision_id=None, episode_id=None,
                       error_kind="state", scope="similar_context", states=None,
-                      temporal=None, feedback_id=None):
+                      temporal=None, feedback_id=None, policy=None, signature=None):
         timestamp = float(timestamp)
         if not math.isfinite(timestamp) or timestamp <= 0 or timestamp > time.time() + 2:
             raise ValueError("Nieprawidłowy czas próbki")
@@ -43,7 +43,7 @@ class JournaledRLTeaching(RLTeaching):
             states, temporal, policy = self.engine.teaching.point_context(
                 self.engine, agent, timestamp
             )
-        else:
+        elif policy is None:
             policy = self.engine.policy(agent)
         current = target_value(states.get(agent["target_entity"]), agent["target_property"])
         if current is None:
@@ -52,7 +52,7 @@ class JournaledRLTeaching(RLTeaching):
         if not target_state:
             raise ValueError("Brak stanu urządzenia w wybranej chwili")
         desired = _manual_value(agent, target_state, desired)
-        sig = teaching_signature(policy, states, temporal, timestamp)
+        sig = signature if signature is not None else teaching_signature(policy, states, temporal, timestamp)
         if not sig:
             raise ValueError("Niepełny kontekst czujników w tej chwili")
 
@@ -110,7 +110,7 @@ class JournaledRLTeaching(RLTeaching):
                 },
             )
 
-        self.store.event(
+        self.store.after_correct_label_commit(lambda: self.store.event(
             agent["id"], "info", "teach_rl_label_added",
             f"Teach RL label added: Desired {desired}",
             {
@@ -118,7 +118,7 @@ class JournaledRLTeaching(RLTeaching):
                 "feedback_id": journal_row.get("feedback_id") if journal_row else None,
                 "source": source,
             },
-        )
+        ))
         result = {
             "ok": True, "label_id": label_id, "sample_ts": timestamp,
             "desired_value": float(desired), "previous_desired": previous,
@@ -149,12 +149,12 @@ class JournaledRLTeaching(RLTeaching):
     def add_feedback_label(self, agent, desired, sample_ts, *, previous_desired=None,
                            source="correct", generation_id=None, decision_id=None,
                            episode_id=None, error_kind="state", scope="similar_context",
-                           states=None, temporal=None, feedback_id=None):
+                           states=None, temporal=None, feedback_id=None, policy=None, signature=None):
         result = self._insert_label(
             agent, desired, sample_ts, previous_desired, source=source,
             generation_id=generation_id, decision_id=decision_id, episode_id=episode_id,
             error_kind=error_kind, scope=scope, states=states, temporal=temporal,
-            feedback_id=feedback_id,
+            feedback_id=feedback_id, policy=policy, signature=signature,
         )
         return result
 

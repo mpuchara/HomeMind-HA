@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import time
 
+from agent_candidate_lineage import config_fingerprint, model_metadata
+from agent_correct_generation_history import _resolve_history_generation
 from agent_workflow_actions import _resolve_generation
+from teaching import signature as teaching_signature
 from manual_feedback import _manual_value
 from manual_feedback_unified import latest_feedback_since
 from teaching_rl import fingerprint as rl_fingerprint
@@ -69,7 +72,7 @@ def _retire_same_correct_point(manager, agent, sample_ts):
     if journal is not None and feedback_id:
         # No inverse update.  If this old point had already reached a Candidate, the
         # journal records rebuild_pending; the next Correct commit coalesces fresh truth.
-        journal.undo(str(feedback_id), engine=manager.engine, candidate_manager=None)
+        journal.undo(str(feedback_id), candidate_manager=None)
     else:
         with manager.store.lock, manager.store.conn() as c:
             c.execute(
@@ -82,11 +85,13 @@ def _retire_same_correct_point(manager, agent, sample_ts):
 def _mark_correct_candidate(manager, generation, agent, result):
     journal = getattr(manager.engine, "manual_feedback_journal", None)
     child_generation_id = result.get("child_generation_id") if isinstance(result, dict) else None
-    if journal is None or not child_generation_id:
+    label_ids = (result or {}).get("correct_label_ids") or ()
+    if journal is None or not child_generation_id or not label_ids:
         return []
+    placeholders = ",".join("?" for _ in label_ids)
     with manager.store.conn() as c:
         rows = c.execute(
-            """SELECT DISTINCT j.feedback_id
+            f"""SELECT DISTINCT j.feedback_id
                FROM teaching_rl_labels l
                JOIN manual_feedback_effects e
                  ON e.ref_type='teach_rl_label' AND e.ref_id=CAST(l.id AS TEXT)
@@ -95,8 +100,9 @@ def _mark_correct_candidate(manager, generation, agent, result):
                  AND j.undone_ts IS NULL AND j.application_status!='conflict'
                  AND j.source='correct'
                  AND (j.generation_id=? OR j.generation_id IS NULL)
+                 AND l.id IN ({placeholders})
                ORDER BY j.created_ts""",
-            (str(agent["id"]), rl_fingerprint(agent), str(generation["generation_id"])),
+            (str(agent["id"]), rl_fingerprint(agent), str(generation["generation_id"]), *label_ids),
         ).fetchall()
     feedback_ids = []
     for raw in rows:
@@ -161,7 +167,13 @@ def install(manager):
         if journal is None or not callable(getattr(service, "add_feedback_label", None)):
             return original_add(ref, desired, sample_ts)
 
-        generation, agent = _resolve_generation(manager, ref)
+        generation, agent = _resolve_history_generation(manager, ref)
+        if generation.get("lifecycle_state") in {"discarded", "pruned", "promoted"}:
+            raise ValueError("Generation model is no longer retained")
+        initial_model = manager.store.get_model(agent["id"])
+        if initial_model is None:
+            raise ValueError("Generation has no usable model")
+        initial_identity = model_metadata(initial_model)["model_identity"]
         point = manager.workflow_correct_point(ref, float(sample_ts))
         if point.get("desired") is None:
             raise ValueError("This generation has no observed prediction at that moment; a gap cannot be corrected")
@@ -171,20 +183,31 @@ def install(manager):
         # It is user-interactive work, so do not let a different agent's historical replay
         # consume the same Pi core while we reconstruct it.
         TRAINING_BUDGET.request_interactive_window(2.0, reason="correct_label")
-        states, temporal, _ = manager.engine.teaching.point_context(
+        states, temporal, policy = manager.engine.teaching.point_context(
             manager.engine, agent, float(sample_ts)
         )
         target_state = states.get(agent["target_entity"])
         if not target_state:
             raise ValueError("Target state unavailable at the selected moment")
         normalized = _manual_value(agent, target_state, desired)
-        _retire_same_correct_point(manager, agent, sample_ts)
-        result = service.add_feedback_label(
-            agent, normalized, float(sample_ts),
-            previous_desired=float(point["desired"]), source="correct",
-            generation_id=generation["generation_id"], error_kind="state",
-            scope="similar_context", states=states, temporal=temporal,
-        )
+        signature = teaching_signature(policy, states, temporal, float(sample_ts))
+        with manager.store.correct_label_transaction():
+            current_generation, current_agent = _resolve_history_generation(manager, ref)
+            current_model = manager.store.get_model(agent["id"])
+            if (current_generation.get("lifecycle_state") in {"discarded", "pruned", "promoted"}
+                    or current_generation["generation_id"] != generation["generation_id"]
+                    or current_generation["generation_number"] != generation["generation_number"]
+                    or config_fingerprint(current_agent) != config_fingerprint(agent)
+                    or model_metadata(current_model)["model_identity"] != initial_identity):
+                raise ValueError("Generation changed while preparing the Correct point; select it again")
+            _retire_same_correct_point(manager, agent, sample_ts)
+            result = service.add_feedback_label(
+                agent, normalized, float(sample_ts),
+                previous_desired=float(point["desired"]), source="correct",
+                generation_id=generation["generation_id"], error_kind="state",
+                scope="similar_context", states=states, temporal=temporal,
+                policy=policy, signature=signature,
+            )
         result = dict(result or {})
         result["generation_id"] = generation["generation_id"]
         result["parent_model_unchanged"] = True
@@ -207,7 +230,7 @@ def install(manager):
             "ui_message": journal.ui_summary(feedback),
         }
 
-    def correct_commit(ref, request_id=None):
+    def correct_commit(ref, request_id=None, **options):
         generation, agent = _resolve_generation(manager, ref)
         # The durable Correct queue owns request_id idempotency. This adapter must
         # preserve that public workflow signature when wrapping agent_workflow_actions.
@@ -216,7 +239,7 @@ def install(manager):
         # raw persisted JSON here: Store-owned bookkeeping fields (_history_watermark,
         # _benchmark_counts) may legitimately change without changing the policy, and
         # rolling those changes back would discard valid concurrent runtime bookkeeping.
-        result = original_commit(ref, request_id=request_id)
+        result = original_commit(ref, request_id=request_id, **options)
         feedback_ids = _mark_correct_candidate(manager, generation, agent, result)
         if feedback_ids:
             result = dict(result)

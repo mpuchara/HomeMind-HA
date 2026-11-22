@@ -62,7 +62,52 @@ def model_checksum(raw):
 
 def verify_model_checksum(raw):
     expected = (raw or {}).get("model_checksum")
-    return True if not expected else str(expected) == model_checksum(raw)
+    if not expected or str(expected) == model_checksum(raw):
+        return True
+    try:
+        return _verify_legacy_schema_evolution(raw, str(expected))
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _verify_legacy_schema_evolution(raw, expected):
+    """Verify the exact pre-JSON representation used by older Correct migration."""
+    if (raw.get("policy_backend") != LEGACY_DEFAULT_BACKEND
+            or not (raw.get("selection_meta") or {}).get("schema_evolution")):
+        return False
+    # Only schema migration exported the classifier's numeric feature keys
+    # directly. Reconstruct those keys and verify the original stored digest.
+    # The normal JSON verification remains authoritative for all other fields.
+    heads = {}
+    converted = False
+    for horizon, head in (raw.get("heads") or {}).items():
+        classifier = head.get("binary_state_classifier")
+        if classifier is None:
+            heads[horizon] = head
+            continue
+        restored = dict(classifier)
+        for field in ("rows", "recent"):
+            if field not in classifier:
+                continue
+            groups = []
+            for group in classifier[field]:
+                rows = []
+                for row in group:
+                    features = {}
+                    for key, value in row["x"].items():
+                        if (not isinstance(key, str) or len(key) > 10
+                                or not key.isascii() or not key.isdecimal()):
+                            return False
+                        index = int(key)
+                        if str(index) != key or not 0 < index < classifier["dims"]:
+                            return False
+                        features[index] = value
+                        converted = True
+                    rows.append({**row, "x": features})
+                groups.append(rows)
+            restored[field] = groups
+        heads[horizon] = {**head, "binary_state_classifier": restored}
+    return converted and model_checksum({**raw, "heads": heads}) == expected
 
 
 def backend_id(raw):

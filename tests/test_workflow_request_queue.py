@@ -87,6 +87,45 @@ class WorkflowRequestQueueTests(unittest.TestCase):
         finally:
             recovered.stop()
 
+    def test_worker_survives_an_external_sqlite_writer_during_claim(self):
+        import sqlite3
+        import time
+
+        self.queue.enqueue_correct("root:abc", "busy")
+        writer = sqlite3.connect(self.store.path)
+        try:
+            writer.execute("BEGIN IMMEDIATE")
+            self.queue.start()
+            # The claim connection's 250 ms busy window expires while we hold
+            # the independent SQLite writer. The durable row stays accepted.
+            time.sleep(0.4)
+            self.assertTrue(self.queue.is_alive())
+            self.assertEqual(self.queue.status("busy")["state"], STATE_ACCEPTED)
+            self.commit.assert_not_called()
+            writer.rollback()
+            deadline = time.monotonic() + 4.0
+            while self.queue.status("busy")["state"] != STATE_DONE:
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.025)
+            self.commit.assert_called_once_with("root:abc", request_id="busy")
+        finally:
+            writer.close()
+            self.queue.stop()
+            self.queue.join(4.0)
+
+    def test_transient_busy_during_orchestration_reuses_the_same_request(self):
+        import sqlite3
+
+        response = self.commit.return_value
+        self.commit.side_effect = [sqlite3.OperationalError("database is locked"), response]
+        self.queue.enqueue_correct("root:abc", "retry-busy")
+        self.assertTrue(self.queue.process_once())
+        self.assertEqual(self.queue.status("retry-busy")["state"], STATE_ACCEPTED)
+        self.assertTrue(self.queue.process_once())
+        self.assertEqual(self.queue.status("retry-busy")["state"], STATE_DONE)
+        self.assertEqual([call.kwargs["request_id"] for call in self.commit.call_args_list],
+                         ["retry-busy", "retry-busy"])
+
     def test_failed_orchestration_is_visible_and_does_not_lose_request(self):
         self.commit.side_effect = ValueError("Add at least one Correct point")
         self.queue.enqueue_correct("root:abc", "req-4")
@@ -126,7 +165,12 @@ class WorkflowRequestUiContractTests(unittest.TestCase):
         workflow = source.index("manager = install_agent_workflow_actions(")
         request_queue = source.index("manager = install_workflow_request_queue(")
         self.assertLess(workflow, request_queue)
-        self.assertIn("legacy_http=False", source[request_queue:request_queue + 120])
+        self.assertIn("legacy_http=False, start_worker=False", source[request_queue:request_queue + 120])
+        fast = self.source("fast_queue_main.py")
+        self.assertIn('if not getattr(core, "_final_explicit_http_only", False):\n        candidates.start()', fast)
+        final_guards = source.index("manager = install_performance_f22_order_guard(manager)")
+        self.assertLess(final_guards, source.index("manager.workflow_requests.start()"))
+        self.assertLess(final_guards, source.index("manager.start()"))
 
 
 if __name__ == "__main__":

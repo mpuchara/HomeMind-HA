@@ -78,6 +78,9 @@ class ManualFeedbackJournal:
             self._listeners.append(callback)
 
     def _notify(self, *agent_ids):
+        self.store.after_correct_label_commit(lambda: self._publish_change(agent_ids))
+
+    def _publish_change(self, agent_ids):
         ids = tuple(str(x) for x in agent_ids if x)
         revisions = getattr(self.store, "_manual_feedback_revisions", None)
         if isinstance(revisions, dict):

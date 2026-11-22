@@ -16,6 +16,8 @@ import time
 import uuid
 from urllib.parse import unquote, urlsplit
 
+from sqlite_background import connection_session, is_sqlite_busy
+
 
 CONTRACT_VERSION = 1
 ACTION_CORRECT = "correct"
@@ -126,8 +128,16 @@ class WorkflowRequestQueue(threading.Thread):
         ref = str(generation_ref or "").strip()
         if not ref:
             raise ValueError("generation reference is required")
+        existing = self.status(rid)
+        if existing is not None:
+            if existing["action"] != ACTION_CORRECT or existing["generation_ref"] != ref:
+                raise ValueError("request_id already belongs to a different workflow request")
+            return existing
+
         now = time.time()
-        payload = json.dumps({"generation_ref": ref}, separators=(",", ":"))
+        read_parent = getattr(self.manager, "workflow_correct_parent_token", None)
+        parent = read_parent(ref) if callable(read_parent) else None
+        payload = json.dumps({"generation_ref": ref, "parent": parent}, separators=(",", ":"))
         with self.store.lock, self.store.conn() as c:
             existing = c.execute(
                 "SELECT * FROM agent_workflow_requests WHERE request_id=?",
@@ -162,15 +172,16 @@ class WorkflowRequestQueue(threading.Thread):
         return result
 
     def _claim_next(self):
-        now = time.time()
-        with self.store.lock, self.store.conn() as c:
+        with self.store.conn() as c:
             row = c.execute(
                 """SELECT * FROM agent_workflow_requests
                    WHERE state=? ORDER BY created_ts,request_id LIMIT 1""",
                 (STATE_ACCEPTED,),
             ).fetchone()
-            if row is None:
-                return None
+        if row is None:
+            return None
+        now = time.time()
+        with self.store.background_sqlite(retryable=False), self.store.lock, self.store.conn() as c:
             updated = c.execute(
                 """UPDATE agent_workflow_requests
                    SET state=?,started_ts=COALESCE(started_ts,?),updated_ts=?
@@ -184,30 +195,60 @@ class WorkflowRequestQueue(threading.Thread):
         claimed["started_ts"] = claimed.get("started_ts") or now
         return claimed
 
-    def _finish(self, request_id, *, state, result=None, error=None):
-        now = time.time()
+    def _finish(self, request_id, *, state, result=None, error=None, has_parent=False):
         raw = json.dumps(result or {}, separators=(",", ":"), default=str)
-        with self.store.lock, self.store.conn() as c:
-            c.execute(
-                """UPDATE agent_workflow_requests
-                   SET state=?,result_json=?,error=?,finished_ts=?,updated_ts=?
-                   WHERE request_id=?""",
-                (state, raw, None if error is None else str(error), now, now, str(request_id)),
-            )
+        while not self.stop_event.is_set():
+            try:
+                with self.store.background_sqlite(retryable=False), self.store.lock, self.store.conn() as c:
+                    now = time.time()
+                    if state == STATE_FAILED and has_parent:
+                        c.execute(
+                            """UPDATE agent_correct_operations SET status='failed'
+                               WHERE operation_id=? AND status='prepared'""", (request_id,)
+                        )
+                    c.execute(
+                        """UPDATE agent_workflow_requests
+                           SET state=?,result_json=?,error=?,finished_ts=?,updated_ts=?
+                           WHERE request_id=? AND state=?""",
+                        (state, raw, error, None if state == STATE_ACCEPTED else now,
+                         now, request_id, STATE_PROCESSING),
+                    )
+                return True
+            except Exception as exc:
+                if not is_sqlite_busy(exc):
+                    raise
+                self.stop_event.wait(0.25)
+        # Restart recovery will re-admit the processing row if shutdown interrupted
+        # acknowledgement. The same operation ID replays an already-committed result.
+        return False
 
     def process_once(self):
         row = self._claim_next()
         if row is None:
             return False
         rid = row["request_id"]
+        parent = _json(row.get("payload_json")).get("parent")
+        options = {"admitted_parent": parent} if parent is not None else {}
         try:
             if str(row.get("action")) != ACTION_CORRECT:
                 raise ValueError(f"Unsupported workflow action: {row.get('action')}")
-            result = self.manager.workflow_correct_commit(
-                str(row["generation_ref"]), request_id=rid
-            )
-            self._finish(rid, state=STATE_DONE, result=result)
-            try:
+            with connection_session(self.store):
+                result = self.manager.workflow_correct_commit(
+                    str(row["generation_ref"]), request_id=rid, **options
+                )
+        except Exception as exc:
+            if is_sqlite_busy(exc):
+                self._finish(rid, state=STATE_ACCEPTED)
+                self.stop_event.wait(0.25)
+                return True
+            error = f"{type(exc).__name__}: {exc}"
+            if self._finish(rid, state=STATE_FAILED, error=error, has_parent=parent is not None):
+                self.store.event(
+                    None, "error", "workflow_request_failed", f"Durable Correct request failed: {error}",
+                    {"request_id": rid, "generation_ref": row["generation_ref"]},
+                )
+        else:
+            if self._finish(rid, state=STATE_DONE, result=result):
                 self.store.event(
                     None, "info", "workflow_request_done",
                     "Durable Correct request created/coalesced a child Candidate",
@@ -217,18 +258,6 @@ class WorkflowRequestQueue(threading.Thread):
                         "child_generation_id": (result or {}).get("child_generation_id"),
                     },
                 )
-            except Exception:
-                pass
-        except Exception as exc:
-            self._finish(rid, state=STATE_FAILED, error=f"{type(exc).__name__}: {exc}")
-            try:
-                self.store.event(
-                    None, "error", "workflow_request_failed",
-                    f"Durable Correct request failed: {type(exc).__name__}: {exc}",
-                    {"request_id": rid, "generation_ref": row.get("generation_ref")},
-                )
-            except Exception:
-                pass
         return True
 
     def run(self):
@@ -237,7 +266,13 @@ class WorkflowRequestQueue(threading.Thread):
             # found by SELECT; an admission after an empty SELECT sets the event
             # and wakes the wait. Clearing after wait could lose that notification.
             self.wake_event.clear()
-            progressed = self.process_once()
+            try:
+                progressed = self.process_once()
+            except Exception as exc:
+                if not is_sqlite_busy(exc):
+                    raise
+                self.stop_event.wait(0.25)
+                continue
             if progressed:
                 continue
             if self.stop_event.is_set():
@@ -271,11 +306,14 @@ def register_routes(registry, manager):
         try:
             payload = http.read_json()
             payload = payload if isinstance(payload, dict) else {}
-            accepted = queue.enqueue_correct(ref, payload.get("request_id"))
+            with connection_session(getattr(queue, "store", None)):
+                accepted = queue.enqueue_correct(ref, payload.get("request_id"))
             return http.send_json(202, accepted)
         except ValueError as exc:
             return http.send_json(409, {"error": str(exc)})
         except Exception as exc:
+            if is_sqlite_busy(exc):
+                return http.send_json(503, {"error": "SQLite is busy; retry this Correct request ID"})
             return http.send_json(
                 500,
                 {

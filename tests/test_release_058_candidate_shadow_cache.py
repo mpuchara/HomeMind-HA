@@ -17,7 +17,8 @@ class Release058CandidateShadowCacheTests(unittest.TestCase):
     def test_conservative_correct_can_finish_without_finish_build_if_ready(self):
         correct = (ROOT / "adaptive_ai/src/agent_candidate_conservative_correct.py").read_text(encoding="utf-8")
         block = correct.split("    def start_build(row):", 1)[1].split("    def finish_build_if_ready(row):", 1)[0]
-        self.assertIn("_persist_gate(manager, fresh, gate)", block)
+        self.assertIn("_persist_gate(manager, row, gate, build_revision=build_revision)", block)
+        self.assertIn("state='queued',dirty=1", block)
         self.assertIn("return True", block)
         self.assertIn("state='building'", block)
 

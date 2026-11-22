@@ -1,3 +1,10 @@
+# 0.15.19 — Correct interactivity and Candidate integrity (TEST ONLY)
+
+- Mark points immediately and keep the chart in place while reading point details or saving labels.
+- Write a Correct label and the associated feedback journal atomically. Report SQLite contention as a retryable response.
+- Sign migrated classifier data in its persisted JSON representation. Verify affected older models against their original checksum.
+- Bind durable Correct to the selected parent's model and configuration. Keep saved labels available after a failed build.
+
 # 0.15.16 — Frozen training observation window (TEST ONLY)
 
 - Retention-only protection updates no longer invalidate historical feature observations.

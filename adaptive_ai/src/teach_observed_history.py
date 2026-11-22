@@ -80,13 +80,14 @@ def _recorded_rows(store, engine, agent_id, start, end):
             (str(agent_id), float(start)),
         ).fetchone()
         rows = [dict(seed)] if seed else []
-        rows.extend(
-            dict(r) for r in c.execute(
-                "SELECT ts,current,desired FROM decision_history "
-                "WHERE agent_id=? AND ts>? AND ts<=? ORDER BY ts",
-                (str(agent_id), float(start), float(end)),
-            ).fetchall()
-        )
+        if start < end:
+            rows.extend(
+                dict(r) for r in c.execute(
+                    "SELECT ts,current,desired FROM decision_history "
+                    "WHERE agent_id=? AND ts>? AND ts<=? ORDER BY ts",
+                    (str(agent_id), float(start), float(end)),
+                )
+            )
 
     # A freshly displayed card value can still be in Teaching's non-blocking write buffer.
     # Merge both bounded snapshots so opening Correct immediately after observing the card
