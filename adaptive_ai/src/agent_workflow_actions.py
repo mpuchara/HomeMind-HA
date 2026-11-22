@@ -595,7 +595,7 @@ def register_read_routes(registry, manager):
             end = float((query.get("end") or [now])[0])
             compact_raw = str((query.get("compact") or ["0"])[0]).strip().lower()
             compact = compact_raw in {"1", "true", "yes", "on"}
-            with connection_session(manager.store):
+            with connection_session(getattr(manager, "store", None)):
                 history = manager.workflow_correct_history(
                     unquote(params["ref"]), start, end, compact=compact
                 )
@@ -607,7 +607,7 @@ def register_read_routes(registry, manager):
         try:
             query = parse_qs(urlsplit(http.path).query)
             ts = float((query.get("ts") or [time.time()])[0])
-            with connection_session(manager.store):
+            with connection_session(getattr(manager, "store", None)):
                 point = manager.workflow_correct_point(unquote(params["ref"]), ts)
             return http.send_json(200, point)
         except (TypeError, ValueError) as exc:
@@ -666,7 +666,7 @@ def register_mutation_routes(registry, manager):
             if action == "autonomous":
                 return http.send_json(202, manager.workflow_autonomous(ref))
             if action == "correct-label":
-                with connection_session(manager.store):
+                with connection_session(getattr(manager, "store", None)):
                     label = manager.workflow_add_correct_label(
                         ref, payload.get("desired_value"), payload.get("sample_ts")
                     )

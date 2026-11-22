@@ -177,7 +177,7 @@ class FinalCompositionMutationOwnershipTests(unittest.TestCase):
             root,
         )
         self.assertIn(
-            "install_workflow_request_queue(manager, legacy_http=False)",
+            "install_workflow_request_queue(manager, legacy_http=False, start_worker=False)",
             root,
         )
         self.assertIn(

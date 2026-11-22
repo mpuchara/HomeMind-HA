@@ -306,7 +306,7 @@ def register_routes(registry, manager):
         try:
             payload = http.read_json()
             payload = payload if isinstance(payload, dict) else {}
-            with connection_session(queue.store):
+            with connection_session(getattr(queue, "store", None)):
                 accepted = queue.enqueue_correct(ref, payload.get("request_id"))
             return http.send_json(202, accepted)
         except ValueError as exc:
