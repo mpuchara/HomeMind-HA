@@ -226,7 +226,10 @@ def prepare_engine_extensions():
     core.ENGINE.teaching.candidate_feedback_listener = _teaching_feedback
     core.ENGINE.rl_teaching.candidate_feedback_listener = _teach_rl_feedback
 
-    candidates.start()
+    # Standalone fast composition owns its worker. The shipped root waits for
+    # the durable Correct and final build guards before resuming retained work.
+    if not getattr(core, "_final_explicit_http_only", False):
+        candidates.start()
     core.STORE.event(
         None, "info", "manual_feedback_ready",
         "Manual correction feedback path ready",

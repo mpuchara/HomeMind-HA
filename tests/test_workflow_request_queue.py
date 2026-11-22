@@ -165,7 +165,12 @@ class WorkflowRequestUiContractTests(unittest.TestCase):
         workflow = source.index("manager = install_agent_workflow_actions(")
         request_queue = source.index("manager = install_workflow_request_queue(")
         self.assertLess(workflow, request_queue)
-        self.assertIn("legacy_http=False", source[request_queue:request_queue + 120])
+        self.assertIn("legacy_http=False, start_worker=False", source[request_queue:request_queue + 120])
+        fast = self.source("fast_queue_main.py")
+        self.assertIn('if not getattr(core, "_final_explicit_http_only", False):\n        candidates.start()', fast)
+        final_guards = source.index("manager = install_performance_f22_order_guard(manager)")
+        self.assertLess(final_guards, source.index("manager.workflow_requests.start()"))
+        self.assertLess(final_guards, source.index("manager.start()"))
 
 
 if __name__ == "__main__":

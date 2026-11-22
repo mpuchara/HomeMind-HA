@@ -282,7 +282,7 @@ class RuntimeCompositionRoot:
                 manager, legacy_get=False, legacy_post=False
             )
         with startup_scope(self.core, 'final.install_workflow_request_queue'):
-            manager = install_workflow_request_queue(manager, legacy_http=False)
+            manager = install_workflow_request_queue(manager, legacy_http=False, start_worker=False)
         # The optimized generation-aware Correct reader used to exist only as tested
         # library code and was never bound into the shipped final composition. Install
         # it after the durable workflow queue so the established request-queue ordering
@@ -467,6 +467,11 @@ class RuntimeCompositionRoot:
             "Final runtime composition root and explicit promotion/feedback contracts are active",
             self.contracts,
         )
+        # Recovered requests and builds see the full set of generation fences
+        # and Correct handlers before either scheduler can claim work.
+        with startup_scope(self.core, 'final.start_candidate_workers'):
+            manager.workflow_requests.start()
+            manager.start()
         self._prepared_engine_ids.add(key)
 
     def descriptor(self):
