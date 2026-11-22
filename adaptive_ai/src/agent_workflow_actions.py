@@ -12,14 +12,16 @@ fresh child. Candidate actions are policy-only and never call Home Assistant ser
 """
 import json
 import math
+import threading
 import time
 import uuid
-from sqlite_background import is_sqlite_busy
+from sqlite_background import connection_session, is_sqlite_busy
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
 from manual_context_learning import observe as observe_manual_context
 from manual_feedback import UI_USER_ID, _manual_value
+from policy_backend import verify_model_checksum
 from teaching_rl import fingerprint as rl_fingerprint
 
 from agent_candidate_lineage import (
@@ -593,12 +595,11 @@ def register_read_routes(registry, manager):
             end = float((query.get("end") or [now])[0])
             compact_raw = str((query.get("compact") or ["0"])[0]).strip().lower()
             compact = compact_raw in {"1", "true", "yes", "on"}
-            return http.send_json(
-                200,
-                manager.workflow_correct_history(
+            with connection_session(manager.store):
+                history = manager.workflow_correct_history(
                     unquote(params["ref"]), start, end, compact=compact
-                ),
-            )
+                )
+            return http.send_json(200, history)
         except (TypeError, ValueError) as exc:
             return http.send_json(404, {"error": str(exc)})
 
@@ -606,9 +607,9 @@ def register_read_routes(registry, manager):
         try:
             query = parse_qs(urlsplit(http.path).query)
             ts = float((query.get("ts") or [time.time()])[0])
-            return http.send_json(
-                200, manager.workflow_correct_point(unquote(params["ref"]), ts)
-            )
+            with connection_session(manager.store):
+                point = manager.workflow_correct_point(unquote(params["ref"]), ts)
+            return http.send_json(200, point)
         except (TypeError, ValueError) as exc:
             return http.send_json(404, {"error": str(exc)})
 
@@ -665,12 +666,11 @@ def register_mutation_routes(registry, manager):
             if action == "autonomous":
                 return http.send_json(202, manager.workflow_autonomous(ref))
             if action == "correct-label":
-                return http.send_json(
-                    200,
-                    manager.workflow_add_correct_label(
+                with connection_session(manager.store):
+                    label = manager.workflow_add_correct_label(
                         ref, payload.get("desired_value"), payload.get("sample_ts")
-                    ),
-                )
+                    )
+                return http.send_json(200, label)
             if action == "correct-undo":
                 return http.send_json(200, manager.workflow_undo_correct_label(ref))
             if action == "change-decision":
@@ -719,6 +719,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
 
     ensure_workflow_tables(manager.store)
     _install_candidate_teaching_overlay(manager)
+    manager._correct_creation = threading.local()
 
     original_start = manager._start_build
     original_finish = manager._finish_build_if_ready
@@ -752,6 +753,22 @@ def install(manager, *, legacy_get=True, legacy_post=True):
         return _create_or_coalesce_child(
             manager, generation, AUTONOMOUS_REASON, "autonomous", allow_coalesce=False
         )
+
+    def workflow_is_explicit_correct(row):
+        if str(row.get("reason") or "") != CORRECT_REASON:
+            return False
+        with manager.store.conn() as c:
+            operation = c.execute(
+                """SELECT detail_json FROM agent_correct_operations
+                   WHERE candidate_id=? AND status='committed'
+                   ORDER BY created_ts DESC LIMIT 1""",
+                (row["candidate_id"],),
+            ).fetchone()
+        if operation is None:
+            return False
+        detail = _json(operation["detail_json"])
+        return (detail.get("parent_model_identity") is not None
+                and detail.get("feedback_revision") == row.get("feedback_revision"))
 
     def workflow_correct_parent_token(ref):
         from agent_correct_generation_history import _resolve_history_generation
@@ -819,6 +836,8 @@ def install(manager, *, legacy_get=True, legacy_post=True):
         _preflight_child(manager, generation, allow_coalesce=True)
         retry_failed_child = _failed_correct_child(manager, generation)
         selected_parent = parent_token(generation, agent)
+        if not verify_model_checksum(manager.store.get_model(agent["id"])):
+            raise ValueError("NEEDS_RETRAIN: policy model checksum mismatch in Correct parent")
         if admitted_parent is not None and admitted_parent != selected_parent:
             raise ValueError("Correct parent changed after admission; retry on the current generation")
 
@@ -872,9 +891,14 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             )
         try:
             with manager.lock:
-                result = _create_or_coalesce_child(
-                    manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
-                )
+                manager._correct_creation.defer_snapshot = True
+                try:
+                    result = _create_or_coalesce_child(
+                        manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
+                    )
+                finally:
+                    del manager._correct_creation.defer_snapshot
+                feedback_revision = (manager._candidate_row(agent["id"]) or {}).get("feedback_revision")
             child_generation_id = (result or {}).get("child_generation_id")
             child_generation = (
                 lineage_row(manager.store, generation_id=str(child_generation_id))
@@ -892,6 +916,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                         time.time(),
                         json.dumps({
                             "label_count": len(label_ids),
+                            "feedback_revision": feedback_revision,
                             "coalesced": bool((result or {}).get("coalesced")),
                             "action_id": (result or {}).get("action_id"),
                             "label_cutoff_ts": now,
@@ -903,6 +928,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             result = dict(result or {})
             result["correct_operation_id"] = operation_id
             result["correct_label_ids"] = list(label_ids)
+            manager.wake_event.set()
             return result
         except Exception as exc:
             with manager.store.lock, manager.store.conn() as c:
@@ -1159,6 +1185,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
     manager.workflow_subject = workflow_subject
     manager.workflow_correct_inventory = lambda generation, agent: _correct_label_counts(manager, generation, agent)
     manager.workflow_autonomous = workflow_autonomous
+    manager.workflow_is_explicit_correct = workflow_is_explicit_correct
     manager.workflow_correct_parent_token = workflow_correct_parent_token
     manager.workflow_correct_commit = workflow_correct_commit
     manager.workflow_change_decision = workflow_change_decision

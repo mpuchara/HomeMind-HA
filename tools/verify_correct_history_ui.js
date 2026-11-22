@@ -11,7 +11,7 @@ const dialogs=[],requests=[],timers=new Map();let counter=0,reply;
 const payload=path=>{const u=new URL(path,'http://fixture/'),id=u.pathname.split('/')[3],start=Number(u.searchParams.get('start')),end=Number(u.searchParams.get('end'));
  return {generation_id:'root:'+id,generation_number:3,generation_type:'live',agent:{id,name:'Observed '+id,target_property:'power',min_value:0,max_value:1},chart_mode:'live',start,end,series:{current:{label:'Current',pairs:[[start,0],[end,1]]},live_desired:{label:'Live Desired',pairs:[[start,0],[end,0]]}},labels:[],gaps:[],policy_replay_used:false};};
 reply=async path=>({ok:true,json:async()=>payload(path)});
-const c={console,URL,Date,Map,Set,Promise,lastAgents:[{id:'a',name:'Lamp',min_value:0,max_value:1,target_property:'power'}],
+const c={console,URL,Date,Map,Set,Promise,AbortController,lastAgents:[{id:'a',name:'Lamp',min_value:0,max_value:1,target_property:'power'}],
  document:{hidden:false,createElement:()=>new Dialog(),body:{append:d=>dialogs.push(d)},querySelectorAll:()=>[]},
  setTimeout:(fn,ms)=>{timers.set(++counter,{fn,ms});return counter;},clearTimeout:id=>timers.delete(id),
  sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},alert(){throw Error('Unexpected alert');},
@@ -32,5 +32,36 @@ const settle=async()=>{for(let i=0;i<15;i++)await Promise.resolve();};
  const old=d.querySelector('[data-retry]').onclick();await settle();d.close();
  reply=async path=>({ok:true,json:async()=>payload(path)});await c.openWorkflowCorrect('b');release();await old;
  assert.match(d.querySelector('[data-title]').textContent,/Observed b/);assert.equal(requests.filter(r=>r.path.endsWith('/status')).length,0);assert.ok(requests.every(r=>r.method==='GET'));
+ const chart=d.querySelector('[data-chart]'),hit=chart.querySelector('[data-hit]');
+ let pointResolvers=[];
+ reply=path=>new Promise(resolve=>pointResolvers.push(()=>{
+   const ts=Number(new URL(path,'http://fixture/').searchParams.get('ts'));
+   resolve({ok:true,json:async()=>({ts,current:0,desired:1,live_desired:1,context_complete:true})});
+ }));
+ const originalChart=chart.innerHTML;
+ const marker=d.querySelector('[data-point-marker]');
+ const click=clientX=>{
+   hit.onpointerdown({clientX,pointerId:1});hit.onpointerup({clientX,pointerId:1});
+ };
+ const markStarted=performance.now();click(220);
+ const markerMs=performance.now()-markStarted;
+ assert.equal(marker.attrs.visibility,'visible','Selection must be visible before any HTTP response');
+ const firstX=marker.attrs.x1;click(610);
+ assert.notEqual(marker.attrs.x1,firstX);
+ assert.equal(chart.innerHTML,originalChart);
+ pointResolvers[1]();await settle();
+ const latestTime=d.querySelector('[data-time]').value;
+ assert.equal(d.querySelector('[data-save]').disabled,false);
+ pointResolvers[0]();await settle();
+ assert.equal(d.querySelector('[data-time]').value,latestTime);
+ assert.equal(chart.innerHTML,originalChart,'Point resolution must keep existing series');
+ reply=async()=>({ok:true,json:async()=>({label_id:42,sample_ts:Date.parse(latestTime)/1000,desired_value:0})});
+ const savesBefore=requests.length;
+ await d.querySelector('[data-point]').onsubmit({preventDefault(){}});
+ assert.equal(requests.length,savesBefore+1,'Save must not reload history');
+ assert.equal(requests.at(-1).method,'POST');
+ assert.match(chart.innerHTML,/data-series="correct"/);
+ assert.equal(marker.attrs.visibility,'hidden');
+ console.log(JSON.stringify({marker_ms:markerMs,immediate_point:true,late_reply_ignored:true,no_history_reload_after_save:true}));
  console.log(JSON.stringify({chart_without_status:true,rendered_svg:true,coalesced_retry:true,last_chart_preserved_on_error:true,reconnect:true,stale_view_ignored:true,no_mutations:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});

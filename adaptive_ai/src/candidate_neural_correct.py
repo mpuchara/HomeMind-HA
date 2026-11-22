@@ -798,7 +798,7 @@ def install(manager):
             # Ridge shadow snapshot remains available as lifecycle/fallback metadata, but
             # the neural child always starts from the exact selected neural parent model.
             candidate = conservative._copy_parent_snapshot(
-                manager, parent["id"], candidate["id"]
+                manager, parent["id"], candidate["id"], validate_correct=conservative._explicit_correct(manager, row)
             )
             # Keep the exact selected parent generation as the source of truth
             # for Manual Correct labels. _sync_feedback still mirrors them to the child

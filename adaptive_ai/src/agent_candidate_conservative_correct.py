@@ -31,6 +31,11 @@ _CANDIDATE_WORK_KEY = "candidate_correct_work"
 _BUDGET_THREAD_NAME = "adaptive-ai-index-candidate-correct"
 
 
+def _explicit_correct(manager, row):
+    check = getattr(manager, "workflow_is_explicit_correct", None)
+    return callable(check) and check(row)
+
+
 def _set_candidate_work(manager, parent_id, **fields):
     parent_id = str(parent_id)
     with manager.lock:
@@ -127,7 +132,8 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id, *, validate_correct=
             raise ValueError("Correct parent changed after admission; retry on the current generation")
 
     with store.lock, store.conn() as c:
-        c.execute("BEGIN IMMEDIATE")
+        if validate_correct:
+            c.execute("BEGIN IMMEDIATE")
         parent = c.execute("SELECT * FROM agents WHERE id=?", (str(parent_id),)).fetchone()
         candidate = c.execute("SELECT * FROM agents WHERE id=?", (str(candidate_id),)).fetchone()
         model = c.execute(
@@ -615,7 +621,8 @@ def install(manager):
 
     def create_candidate(parent):
         row = original_create(parent)
-        if row and manager.store.get_model(parent["id"]) is not None:
+        deferred = getattr(getattr(manager, "_correct_creation", None), "defer_snapshot", False)
+        if row and not deferred and manager.store.get_model(parent["id"]) is not None:
             _copy_parent_snapshot(manager, parent["id"], row["candidate_id"])
         return manager._candidate_row(parent["id"]) or row
 
@@ -673,7 +680,7 @@ def install(manager):
             )
 
             candidate = _copy_parent_snapshot(
-                manager, parent["id"], candidate["id"], validate_correct=(reason == "teach_train")
+                manager, parent["id"], candidate["id"], validate_correct=_explicit_correct(manager, row)
             )
             _set_candidate_work(
                 manager, parent["id"], state="active", phase="syncing_feedback", progress=0.12

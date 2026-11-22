@@ -16,6 +16,8 @@ import time
 import uuid
 from urllib.parse import unquote, urlsplit
 
+from sqlite_background import connection_session, is_sqlite_busy
+
 
 CONTRACT_VERSION = 1
 ACTION_CORRECT = "correct"
@@ -214,9 +216,10 @@ class WorkflowRequestQueue(threading.Thread):
                 raise ValueError(f"Unsupported workflow action: {row.get('action')}")
             parent = _json(row.get("payload_json")).get("parent")
             options = {"admitted_parent": parent} if parent is not None else {}
-            result = self.manager.workflow_correct_commit(
-                str(row["generation_ref"]), request_id=rid, **options
-            )
+            with connection_session(self.store):
+                result = self.manager.workflow_correct_commit(
+                    str(row["generation_ref"]), request_id=rid, **options
+                )
             self._finish(rid, state=STATE_DONE, result=result)
             try:
                 self.store.event(
@@ -288,11 +291,14 @@ def register_routes(registry, manager):
         try:
             payload = http.read_json()
             payload = payload if isinstance(payload, dict) else {}
-            accepted = queue.enqueue_correct(ref, payload.get("request_id"))
+            with connection_session(queue.store):
+                accepted = queue.enqueue_correct(ref, payload.get("request_id"))
             return http.send_json(202, accepted)
         except ValueError as exc:
             return http.send_json(409, {"error": str(exc)})
         except Exception as exc:
+            if is_sqlite_busy(exc):
+                return http.send_json(503, {"error": "SQLite is busy; retry this Correct request ID"})
             return http.send_json(
                 500,
                 {

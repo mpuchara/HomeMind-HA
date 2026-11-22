@@ -1140,8 +1140,13 @@ def install(core, manager):
             # route that copied snapshot through the existing isolated historical rebuild
             # under the current schema. The Live model keeps serving unchanged until an
             # explicit Promote swaps in a validated Candidate.
-            raw_model = manager.store.get_model(str(row["parent_agent_id"]))
-            if raw_model is not None and not verify_model_checksum(raw_model):
+            explicit = conservative._explicit_correct(manager, row)
+            raw_model = (
+                manager.store.get_model(str(row["parent_agent_id"]))
+                if explicit
+                else manager.store.get_model(str(row.get("candidate_id") or ""))
+            )
+            if explicit and raw_model is not None and not verify_model_checksum(raw_model):
                 manager._fail(row, "NEEDS_RETRAIN: policy model checksum mismatch in Correct parent")
                 return True
             if raw_model is not None and not _stable_model_schema_compatible(raw_model):
