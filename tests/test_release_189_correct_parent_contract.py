@@ -100,6 +100,48 @@ class InstalledCorrectContractTests(unittest.TestCase):
         new_x = {0: 1., 17: .7, 29: .2, 127: 1.}
         self.assertAlmostEqual(classifier.score(old_x), new.heads[1].state_classifier.score(new_x))
 
+    def test_migrated_classifier_passes_after_sqlite_round_trip(self):
+        h = fixture.ConservativeCandidateTests("test_candidate_clone_is_exact_parent_snapshot_before_fine_tune")
+        h.setUp()
+        self.addCleanup(h.tearDown)
+        parent = policy.MultiHorizonPolicy(h.parent, {}, {}, set(), model=current_model())
+        for action in (0, 1):
+            parent.heads[1].update(action, {5: .8, 17: .7, 127: .6}, 1.)
+        original = parent.serialize()
+        migrated = evolution.migrate_model_schema(
+            original, ["sensor.new", "sensor.stationary", "sensor.moving"]
+        )
+        h.store.save_model(h.parent["id"], migrated)
+        persisted = h.store.get_model(h.parent["id"])
+        self.assertEqual(persisted["model_checksum"], model_checksum(persisted))
+        policy.MultiHorizonPolicy(h.parent, {}, {}, set(), model=persisted)
+
+        # Recreate the historical digest before SQLite normalized numeric keys.
+        legacy = copy.deepcopy(migrated)
+        for head in legacy["heads"].values():
+            classifier = head.get("binary_state_classifier") or {}
+            for field in ("rows", "recent"):
+                for group in classifier.get(field, ()):
+                    for row in group:
+                        row["x"] = {int(index): value for index, value in row["x"].items()}
+        legacy["model_checksum"] = model_checksum(legacy)
+        self.assertNotEqual(legacy["model_checksum"], migrated["model_checksum"])
+        h.store.save_model(h.parent["id"], legacy)
+        persisted = h.store.get_model(h.parent["id"])
+        self.assertTrue(verify_model_checksum(persisted))
+        policy.MultiHorizonPolicy(h.parent, {}, {}, set(), model=persisted)
+
+        for mutate in (
+            lambda raw: raw["heads"]["1"]["b"][0].__setitem__(1, 123.),
+            lambda raw: raw["heads"]["1"]["binary_state_classifier"]["rows"][0][0]["x"].clear(),
+            lambda raw: raw["schema"]["entities"].reverse(),
+        ):
+            corrupt = copy.deepcopy(persisted)
+            mutate(corrupt)
+            self.assertFalse(verify_model_checksum(corrupt))
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                policy.MultiHorizonPolicy(h.parent, {}, {}, set(), model=corrupt)
+
     def _recovery_fixture(self, state="insufficient_evidence"):
         h = fixture.ConservativeCandidateTests("test_candidate_clone_is_exact_parent_snapshot_before_fine_tune")
         h.setUp()

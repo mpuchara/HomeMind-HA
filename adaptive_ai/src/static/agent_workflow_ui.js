@@ -111,14 +111,16 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
   document.body.append(dialog);
   let subject=null,ref=null,range=null,data=null,selected=null,requestSeq=0;
   let followLive=false,liveTimer=null,historyReads=0,viewEpoch=0;
-  let historyFlight=null;
+  let historyFlight=null,pointRequest=null,selectedTs=null;
+  let mutationBusy=false;
+  const pollingDelay=attempt=>Math.min(2500,500*2**Math.min(attempt,3));
   function setFollowLive(enabled){
     if(followLive&&!enabled)++requestSeq;
     followLive=!!enabled;
     if(liveTimer!=null){clearTimeout(liveTimer);liveTimer=null;}
     const button=dialog.querySelector('[data-live]');
     if(button){button.textContent=followLive?'Na żywo · ON':'Na żywo';button.setAttribute('aria-pressed',String(followLive));}
-    if(followLive&&dialog.open)liveTimer=setTimeout(refreshChartLive,1000);
+    if(followLive&&dialog.open)liveTimer=setTimeout(refreshChartLive,2500);
   }
   async function refreshChartLive(){
     if(liveTimer!=null)clearTimeout(liveTimer);
@@ -129,11 +131,16 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       range={start:end-width,end};
       await load(true);
     }
-    if(dialog.open&&followLive&&liveTimer==null)liveTimer=setTimeout(refreshChartLive,1000);
+    if(dialog.open&&followLive&&liveTimer==null)liveTimer=setTimeout(refreshChartLive,2500);
   }
 
   const error=e=>{const n=dialog.querySelector('[data-error]');if(n)n.textContent=e?.message||String(e);else notifyError(e);};
-  const setBusy=busy=>dialog.querySelectorAll('button,input').forEach(el=>{if(!el.hasAttribute('data-close'))el.disabled=!!busy;});
+  function setBusy(busy){
+    mutationBusy=busy;
+    dialog.querySelectorAll('button,input').forEach(el=>{if(!el.hasAttribute('data-close'))el.disabled=!!busy;});
+    dialog.querySelector('[data-save]').disabled=busy||!selected?.context_complete;
+    dialog.querySelector('[data-undo]').disabled=busy||!(data?.labels||[]).length;
+  }
 
   function shell(){
     dialog.innerHTML=`<div class="teach-head"><h2 data-title>Correct: ${html(subject.name)} · Gen ${subject.generation_number}</h2><button class="ghost" data-close>Zamknij</button></div>
@@ -204,7 +211,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
           ?'Correct jest zapisany trwale. Backend jest chwilowo zajęty; sprawdzę ponownie…'
           :`Sprawdzam trwałe żądanie Correct ${requestId.slice(0,8)}…`;
       }
-      await sleep(500);
+      await sleep(pollingDelay(attempt));
     }
     if(!seen&&postFailed&&missing>=10){
       clearRequest(ref);
@@ -252,7 +259,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
         }
         if(state?.state==='failed'){clearRequest(key);throw Error(state.error||'Nie udało się utworzyć Candidate');}
         if(button&&state?.state==='processing')button.textContent='Candidate: tworzę…';
-        await sleep(500);
+        await sleep(pollingDelay(attempt));
       }
       alert('Żądanie Candidate jest zapisane. Po odświeżeniu ponowne użycie przycisku sprawdzi ten sam request ID.');
     }catch(e){notifyError(e);}
@@ -261,6 +268,7 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
 
   window.openWorkflowCorrect=async generationRef=>{
     setFollowLive(false);++requestSeq;++viewEpoch;
+    pointRequest?.abort();pointRequest=null;selectedTs=null;mutationBusy=false;
     ref=String(generationRef);subject=provisionalSubject(ref);
     const end=Date.now()/1000;range={start:end-600,end};selected=null;data=null;shell();dialog.showModal();
     const pending=pendingRequest(ref);
@@ -327,14 +335,35 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
     }catch(e){if(seq===requestSeq&&dialog.open){error(e);dialog.querySelector('[data-status]').textContent='Nie udało się odczytać historii. Użyj „Połącz ponownie”; ostatni wykres pozostaje widoczny.';}}finally{historyReads--;}
   }
 
+  function markPoint(){
+    const marker=dialog.querySelector('[data-point-marker]');
+    if(!marker)return;
+    const start=Number(data.start??range.start),end=Number(data.end??range.end);
+    const visible=selectedTs!=null&&selectedTs>=start&&selectedTs<=end;
+    if(visible){
+      const x=50+930*(selectedTs-start)/Math.max(1,end-start);
+      marker.setAttribute('x1',x);marker.setAttribute('x2',x);
+    }
+    marker.setAttribute('visibility',visible?'visible':'hidden');
+  }
+
   async function inspect(ts){
+    if(mutationBusy)return;
     setFollowLive(false);
     if(!Number.isFinite(ts)){error(Error('Wybierz poprawny moment'));return;}
-    selected=null;dialog.querySelector('[data-save]').disabled=true;dialog.querySelector('[data-error]').textContent='';
+    pointRequest?.abort();
+    const request=new AbortController(),epoch=viewEpoch;
+    pointRequest=request;
+    selected=null;selectedTs=ts;markPoint();
+    dialog.querySelector('[data-time]').value=local(ts);
+    dialog.querySelector('[data-save]').disabled=true;
+    dialog.querySelector('[data-error]').textContent='';
+    const info=dialog.querySelector('[data-point-info]');
+    info.textContent='Odczytuję wybrany punkt…';
     try{
-      const p=await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-point?ts=${ts}`);
-      selected=p;dialog.querySelector('[data-time]').value=local(p.ts);
-      const info=dialog.querySelector('[data-point-info]');
+      const p=await api(`api/agent-workflow/${encodeURIComponent(ref)}/correct-point?ts=${ts}`,{signal:request.signal});
+      if(pointRequest!==request||epoch!==viewEpoch||!dialog.open)return;
+      selected=p;
       if(p.gap||p.desired==null){info.textContent=`Current: ${fmt(subject,p.current)} · Selected generation Desired: GAP — tej generacji nie wolno tu korygować przez wymyśloną predykcję.`;return;}
       if(p.generation_type==='candidate'){
         info.textContent=`Current: ${fmt(subject,p.current)} · ${p.parent_desired_label||'Parent Desired'}: ${fmt(subject,p.parent_desired)} · ${p.candidate_desired_label||'Candidate Desired'}: ${fmt(subject,p.candidate_desired)}${p.confidence==null?'':` · Candidate confidence ${(Number(p.confidence)*100).toFixed(1)}%`}${p.context_complete?'':' · niepełny kontekst'}`;
@@ -343,19 +372,32 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       }
       const input=dialog.querySelector('[data-value]');input.min=subject.min_value;input.max=subject.max_value;input.value=subject.target_property==='power'?(Number(p.desired)>=.5?0:1):p.desired;
       dialog.querySelector('[data-save]').disabled=!(p.current!=null&&p.context_complete&&p.desired!=null);
-      draw();
-    }catch(e){error(e);}
+    }catch(e){if(pointRequest===request&&epoch===viewEpoch&&dialog.open&&e.name!=='AbortError')error(e);}
+    finally{if(pointRequest===request)pointRequest=null;}
   }
 
   async function save(ev){
     ev.preventDefault();if(!selected)return;
     const desired=Number(dialog.querySelector('[data-value]').value);if(!Number.isFinite(desired)){error(Error('Podaj poprawne Desired'));return;}
+    const epoch=viewEpoch,point=selected;
     setBusy(true);
-    try{await post(ref,'correct-label',{sample_ts:selected.ts,desired_value:desired});selected=null;await load();}
-    catch(e){error(e);}finally{setBusy(false);}
+    try{
+      const saved=await post(ref,'correct-label',{sample_ts:point.ts,desired_value:desired});
+      if(epoch!==viewEpoch||!dialog.open)return;
+      selected=null;selectedTs=null;markPoint();
+      if(saved.label_id!=null&&data){
+        data.labels=(data.labels||[]).filter(row=>Math.abs(Number(row.sample_ts)-point.ts)>=.001);
+        data.labels.push({id:saved.label_id,sample_ts:saved.sample_ts,desired:saved.desired_value});
+        ++requestSeq;
+        draw();
+      }
+      dialog.querySelector('[data-status]').textContent=saved.ui_message||
+        'Punkt Correct zapisany. Możesz zaznaczyć następny.';
+    }catch(e){if(epoch===viewEpoch&&dialog.open)error(e);}
+    finally{if(epoch===viewEpoch&&dialog.open)setBusy(false);}
   }
 
-  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;await load();}catch(e){error(e);}finally{setBusy(false);}}
+  async function undo(){setBusy(true);try{await post(ref,'correct-undo');selected=null;selectedTs=null;await load();}catch(e){error(e);}finally{setBusy(false);}}
 
   function draw(){
     const box=dialog.querySelector('[data-chart]');if(!box||!data)return;
@@ -380,8 +422,9 @@ Parent pozostaje bez zmian. Wynik przejdzie offline gate i Shadow A/B; nie dosta
       rendered.push(`<path data-series="current" d="${currentPath}" fill="none" stroke="${COLORS.current}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
     const labels=(data.labels||[]).filter(r=>Number(r.sample_ts)>=start&&Number(r.sample_ts)<=end).map(r=>`<circle data-series="correct" cx="${x(r.sample_ts)}" cy="${y(r.desired)}" r="5" fill="${COLORS.correct}"><title>Correct ${html(r.desired)}</title></circle>`).join('');
-    const chosen=selected&&selected.ts>=start&&selected.ts<=end?`<line x1="${x(selected.ts)}" x2="${x(selected.ts)}" y1="35" y2="305" stroke="#fff" opacity=".35"/>`:'';
+    const chosen='<line data-point-marker y1="35" y2="305" stroke="#fff" opacity=".6" visibility="hidden"/>';
     box.innerHTML=`<svg viewBox="0 0 1030 350" role="img" aria-label="Correct direct-parent generation history chart" tabindex="0">${axis}${times}${rendered.join('')}${labels}${chosen}<rect data-selection x="50" y="25" width="0" height="285" fill="#9aa0a6" fill-opacity="0.28" stroke="#d4d7da" stroke-opacity="0.75" visibility="hidden"/><rect data-hit x="50" y="25" width="930" height="285" fill="transparent" style="cursor:crosshair;touch-action:none"/></svg>`;
+    markPoint();
     const svg=box.querySelector('svg'),hit=box.querySelector('[data-hit]'),selection=box.querySelector('[data-selection]');let down=null;
     const fraction=ev=>{const r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)*1030/r.width;return Math.max(0,Math.min(1,(px-50)/930));};
     const hideSelection=()=>selection.setAttribute('visibility','hidden');

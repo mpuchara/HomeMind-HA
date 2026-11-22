@@ -126,8 +126,16 @@ class WorkflowRequestQueue(threading.Thread):
         ref = str(generation_ref or "").strip()
         if not ref:
             raise ValueError("generation reference is required")
+        existing = self.status(rid)
+        if existing is not None:
+            if existing["action"] != ACTION_CORRECT or existing["generation_ref"] != ref:
+                raise ValueError("request_id already belongs to a different workflow request")
+            return existing
+
         now = time.time()
-        payload = json.dumps({"generation_ref": ref}, separators=(",", ":"))
+        read_parent = getattr(self.manager, "workflow_correct_parent_token", None)
+        parent = read_parent(ref) if callable(read_parent) else None
+        payload = json.dumps({"generation_ref": ref, "parent": parent}, separators=(",", ":"))
         with self.store.lock, self.store.conn() as c:
             existing = c.execute(
                 "SELECT * FROM agent_workflow_requests WHERE request_id=?",
@@ -200,11 +208,14 @@ class WorkflowRequestQueue(threading.Thread):
         if row is None:
             return False
         rid = row["request_id"]
+        parent = None
         try:
             if str(row.get("action")) != ACTION_CORRECT:
                 raise ValueError(f"Unsupported workflow action: {row.get('action')}")
+            parent = _json(row.get("payload_json")).get("parent")
+            options = {"admitted_parent": parent} if parent is not None else {}
             result = self.manager.workflow_correct_commit(
-                str(row["generation_ref"]), request_id=rid
+                str(row["generation_ref"]), request_id=rid, **options
             )
             self._finish(rid, state=STATE_DONE, result=result)
             try:
@@ -220,6 +231,12 @@ class WorkflowRequestQueue(threading.Thread):
             except Exception:
                 pass
         except Exception as exc:
+            if parent is not None:
+                with self.store.lock, self.store.conn() as c:
+                    c.execute(
+                        """UPDATE agent_correct_operations SET status='failed'
+                           WHERE operation_id=? AND status='prepared'""", (rid,)
+                    )
             self._finish(rid, state=STATE_FAILED, error=f"{type(exc).__name__}: {exc}")
             try:
                 self.store.event(

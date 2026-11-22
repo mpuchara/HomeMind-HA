@@ -687,8 +687,11 @@ class AgentCandidateManager(threading.Thread):
     def _fail(self, row, error):
         now = time.time()
         with self.store.lock, self.store.conn() as c:
-            c.execute("UPDATE agent_candidates SET state='failed',last_error=?,updated_ts=? WHERE parent_agent_id=?",
-                      (str(error), now, row["parent_agent_id"]))
+            c.execute(
+                """UPDATE agent_candidates SET state='failed',last_error=?,updated_ts=?
+                   WHERE parent_agent_id=? AND candidate_id=? AND discard_requested=0""",
+                (str(error), now, row["parent_agent_id"], row["candidate_id"]),
+            )
         self.store.event(row["parent_agent_id"], "error", "agent_candidate_failed", str(error),
                          {"candidate_id": row.get("candidate_id")})
 

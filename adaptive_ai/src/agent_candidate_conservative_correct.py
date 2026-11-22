@@ -17,6 +17,7 @@ import math
 import time
 import uuid
 
+from policy_backend import verify_model_checksum
 from settings import OPTIONS, iso_now
 from telemetry import HEAVY_JOBS
 from training_budget import TRAINING_BUDGET
@@ -89,7 +90,7 @@ def _ensure_gate_column(store):
             c.execute("ALTER TABLE agent_candidates ADD COLUMN offline_gate_json TEXT NOT NULL DEFAULT '{}'")
 
 
-def _copy_parent_snapshot(manager, parent_id, candidate_id):
+def _copy_parent_snapshot(manager, parent_id, candidate_id, *, validate_correct=False):
     """Replace a hidden surrogate with an exact persisted snapshot of its Live parent.
 
     ``rl_models.model_json`` is copied byte-for-byte so policy weights, schema,
@@ -99,7 +100,34 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
     own physical control.
     """
     store = manager.store
+    expected_raw = None
+    if validate_correct:
+        from agent_candidate_lineage import config_fingerprint, model_metadata
+        with store.conn() as c:
+            source = c.execute("SELECT model_json FROM rl_models WHERE agent_id=?", (str(parent_id),)).fetchone()
+            operation = None
+            if getattr(manager, "_agent_workflow_actions_installed", False):
+                operation = c.execute(
+                    """SELECT detail_json FROM agent_correct_operations
+                       WHERE candidate_id=? AND status='committed'
+                       ORDER BY created_ts DESC LIMIT 1""",
+                    (str(candidate_id),),
+                ).fetchone()
+        if source is None:
+            raise ValueError("Correct parent model is unavailable")
+        expected_raw = source["model_json"]
+        decoded = json.loads(expected_raw)
+        if not verify_model_checksum(decoded):
+            raise ValueError("NEEDS_RETRAIN: policy model checksum mismatch in Correct parent snapshot")
+        expected = _json(operation["detail_json"]) if operation else {}
+        if expected.get("parent_model_identity") and (
+            model_metadata(decoded)["model_identity"] != expected["parent_model_identity"]
+            or config_fingerprint(store.get_agent_config(parent_id)) != expected["parent_config_fingerprint"]
+        ):
+            raise ValueError("Correct parent changed after admission; retry on the current generation")
+
     with store.lock, store.conn() as c:
+        c.execute("BEGIN IMMEDIATE")
         parent = c.execute("SELECT * FROM agents WHERE id=?", (str(parent_id),)).fetchone()
         candidate = c.execute("SELECT * FROM agents WHERE id=?", (str(candidate_id),)).fetchone()
         model = c.execute(
@@ -109,6 +137,12 @@ def _copy_parent_snapshot(manager, parent_id, candidate_id):
             raise RuntimeError("Live or Candidate agent disappeared before snapshot")
         if not model:
             raise RuntimeError("Live policy snapshot is unavailable; train Live before Correct")
+        if validate_correct and (
+            model["model_json"] != expected_raw
+            or (expected.get("parent_config_fingerprint")
+                and config_fingerprint(store._agent_dict(parent)) != expected["parent_config_fingerprint"])
+        ):
+            raise ValueError("Correct parent changed during snapshot; retry on the current generation")
 
         # Future schema/config columns automatically participate in the snapshot unless
         # they are identity/runtime-safety fields.
@@ -531,20 +565,25 @@ def _offline_gate(parent, parent_stats, candidate_stats, teach_report=None):
     }
 
 
-def _persist_gate(manager, row, gate, *, passed_state="comparing"):
+def _persist_gate(manager, row, gate, *, passed_state="comparing", build_revision=None):
     state = passed_state if gate.get("passed") else (
         "insufficient_evidence" if gate.get("status") == "insufficient_evidence" else "offline_blocked"
     )
     now = time.time()
     with manager.store.lock, manager.store.conn() as c:
-        c.execute(
+        updated = c.execute(
             """UPDATE agent_candidates SET state=?,offline_gate_json=?,build_finished_ts=?,
-               comparison_started_ts=?,updated_ts=? WHERE parent_agent_id=?""",
+               comparison_started_ts=?,updated_ts=? WHERE parent_agent_id=?
+               AND candidate_id=? AND discard_requested=0
+               AND (? IS NULL OR (state='building' AND feedback_revision=? AND dirty=0))""",
             (
                 state, json.dumps(gate, separators=(",", ":")), now,
                 now if gate.get("passed") else None, now, str(row["parent_agent_id"]),
+                str(row["candidate_id"]), build_revision, build_revision,
             ),
-        )
+        ).rowcount
+    if not updated:
+        return None
     manager.runtime.pop(str(row["parent_agent_id"]), None)
     level = "info" if gate.get("passed") else "warning"
     manager.store.event(
@@ -611,13 +650,17 @@ def install(manager):
         now = time.time()
         try:
             with manager.store.lock, manager.store.conn() as c:
-                c.execute(
+                claimed = c.execute(
                     """UPDATE agent_candidates SET state='building',build_revision=?,dirty=0,
                        build_started_ts=?,build_finished_ts=NULL,comparison_started_ts=NULL,
                        comparison_json='{}',offline_gate_json='{}',last_error=NULL,updated_ts=?
-                       WHERE parent_agent_id=?""",
-                    (build_revision, now, now, str(row["parent_agent_id"])),
-                )
+                       WHERE parent_agent_id=? AND candidate_id=? AND state='queued'
+                       AND feedback_revision=? AND discard_requested=0""",
+                    (build_revision, now, now, str(row["parent_agent_id"]),
+                     str(row["candidate_id"]), build_revision),
+                ).rowcount
+                if not claimed:
+                    return False
             _set_candidate_work(
                 manager, parent["id"], state="active", phase="snapshot",
                 progress=0.05, started_ts=now, blocked_by=None,
@@ -629,7 +672,9 @@ def install(manager):
                  "build_revision": build_revision, "backend": "candidate_worker"},
             )
 
-            candidate = _copy_parent_snapshot(manager, parent["id"], candidate["id"])
+            candidate = _copy_parent_snapshot(
+                manager, parent["id"], candidate["id"], validate_correct=(reason == "teach_train")
+            )
             _set_candidate_work(
                 manager, parent["id"], state="active", phase="syncing_feedback", progress=0.12
             )
@@ -675,12 +720,16 @@ def install(manager):
             gate = _offline_gate(parent, parent_stats, candidate_stats, report)
 
             fresh = manager._candidate_row(parent["id"]) or row
-            if int(fresh.get("feedback_revision") or 0) > build_revision or int(fresh.get("dirty") or 0):
+            if _persist_gate(manager, row, gate, build_revision=build_revision) is None:
                 with manager.store.lock, manager.store.conn() as c:
-                    c.execute(
-                        "UPDATE agent_candidates SET state='queued',dirty=1,updated_ts=? WHERE parent_agent_id=?",
-                        (time.time(), str(parent["id"])),
-                    )
+                    requeued = c.execute(
+                        """UPDATE agent_candidates SET state='queued',dirty=1,updated_ts=?
+                           WHERE parent_agent_id=? AND candidate_id=? AND state='building'
+                           AND discard_requested=0""",
+                        (time.time(), str(parent["id"]), str(candidate["id"])),
+                    ).rowcount
+                if not requeued:
+                    return True
                 _set_candidate_work(
                     manager, parent["id"], state="queued", phase="new_feedback",
                     progress=0.0, blocked_by=None,
@@ -694,7 +743,6 @@ def install(manager):
                 manager.wake_event.set()
                 return True
 
-            _persist_gate(manager, fresh, gate)
             _set_candidate_work(
                 manager, parent["id"], state="done", phase="complete", progress=1.0,
                 finished_ts=time.time(), labels_done=report.get("labels_applied"),
@@ -709,8 +757,9 @@ def install(manager):
             )
             return True
         except Exception as exc:
+            failed_phase = _candidate_work(manager, parent["id"]).get("phase")
             _set_candidate_work(
-                manager, parent["id"], state="failed", phase="failed", progress=0.0,
+                manager, parent["id"], state="failed", phase="failed", failed_phase=failed_phase, progress=0.0,
                 error=f"{type(exc).__name__}: {exc}", finished_ts=time.time(),
             )
             manager._fail(row, f"{type(exc).__name__}: {exc}")

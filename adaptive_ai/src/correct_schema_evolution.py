@@ -648,8 +648,11 @@ def migrate_model_schema(raw_model, new_entities, evolution_meta=None):
     # unchanged would persist the old checksum and make the newly evolved Candidate
     # fail closed on its very next load. Rebuild the common backend envelope only after
     # every semantic mutation is complete.
+    # Sparse classifier indices are integers in memory. Seal the actual JSON
+    # representation, whose object keys are strings sorted lexicographically.
+    from runtime_background_compute import roundtrip
     return serialize_backend_model(
-        raw,
+        roundtrip(raw),
         policy_backend=MultiHorizonPolicy.BACKEND,
         backend_version=int(MultiHorizonPolicy.VERSION),
     )
@@ -1137,7 +1140,10 @@ def install(core, manager):
             # route that copied snapshot through the existing isolated historical rebuild
             # under the current schema. The Live model keeps serving unchanged until an
             # explicit Promote swaps in a validated Candidate.
-            raw_model = manager.store.get_model(str(row.get("candidate_id") or ""))
+            raw_model = manager.store.get_model(str(row["parent_agent_id"]))
+            if raw_model is not None and not verify_model_checksum(raw_model):
+                manager._fail(row, "NEEDS_RETRAIN: policy model checksum mismatch in Correct parent")
+                return True
             if raw_model is not None and not _stable_model_schema_compatible(raw_model):
                 now = time.time()
                 detail = _schema_contract_detail(raw_model)

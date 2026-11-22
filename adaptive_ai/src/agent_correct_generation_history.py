@@ -138,7 +138,7 @@ def _current_rows(manager, agent, start, end, recorded=()):
                 "ORDER BY ts,id",
                 (entity_id, start, end),
             ).fetchall()
-        ]
+        ] if start < end else []
 
     # Snapshot both sides of the SQL read, as for Desired: archive batching must
     # not make Current arrive seconds later or lose a row during a concurrent flush.
@@ -273,17 +273,18 @@ def _live_observed_history(manager, generation, agent, start, end):
     }
 
 
-def _observed_generation_at(manager, generation, timestamp):
+def _observed_generation_at(manager, generation, timestamp, recorded=None):
     if callable(getattr(manager, "generation_decision_at", None)):
         row = manager.generation_decision_at(generation["generation_id"], float(timestamp))
         if row:
             return dict(row)
     if generation.get("generation_type") == "live":
-        rows = _recorded_rows(
-            manager.store, manager.engine, generation["agent_id"],
-            float(timestamp), float(timestamp),
-        )
-        desired = _desired_at(rows, float(timestamp))
+        if recorded is None:
+            recorded = _recorded_rows(
+                manager.store, manager.engine, generation["agent_id"],
+                float(timestamp), float(timestamp),
+            )
+        desired = _desired_at(recorded, float(timestamp))
         if desired is not None:
             return {"ts": float(timestamp), "desired": desired, "confidence": None}
     return None
@@ -459,10 +460,16 @@ def build_correct_point(manager, ref, timestamp, legacy_point):
     TRAINING_BUDGET.request_interactive_window(1.0, reason="correct_point")
     generation, agent = _resolve_history_generation(manager, ref)
     timestamp = float(timestamp)
-    observed = _observed_generation_at(manager, generation, timestamp)
+    if not math.isfinite(timestamp):
+        raise ValueError("Invalid Correct point timestamp")
     parent = observed_parent = None
-    recorded = _recorded_rows(manager.store, manager.engine, agent['id'], timestamp, timestamp) if generation.get('generation_type') == 'live' else ()
-    if generation.get('generation_type') != 'live':
+    live = generation.get("generation_type") == "live"
+    recorded = (
+        _recorded_rows(manager.store, manager.engine, agent["id"], timestamp, timestamp)
+        if live else None
+    )
+    observed = _observed_generation_at(manager, generation, timestamp, recorded=recorded)
+    if not live:
         parent_id = generation.get('parent_generation_id')
         parent = lineage_row(manager.store, generation_id=parent_id) if parent_id else None
         if not parent:

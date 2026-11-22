@@ -612,10 +612,22 @@ def _resolve_correction_base(manager, parent_id):
     }
 
 
-def _stable_copy_parent_snapshot(manager, parent_id, candidate_id):
-    base = _resolve_correction_base(manager, parent_id)
+def _stable_copy_parent_snapshot(manager, parent_id, candidate_id, *, validate_correct=False):
+    if validate_correct:
+        from agent_candidate_lineage import _row
+        direct = _row(manager.store, agent_id=parent_id) or {}
+        base = {
+            "agent_id": str(parent_id),
+            "generation_id": direct.get("generation_id"),
+            "generation_number": direct.get("generation_number"),
+            "reason": "explicit_correct_direct_parent",
+            "direct_parent_agent_id": str(parent_id),
+            "root_agent_id": direct.get("root_agent_id") or str(parent_id),
+        }
+    else:
+        base = _resolve_correction_base(manager, parent_id)
     result = _BASE_COPY_PARENT_SNAPSHOT(
-        manager, str(base["agent_id"]), str(candidate_id)
+        manager, str(base["agent_id"]), str(candidate_id), validate_correct=validate_correct
     )
     runtime = getattr(manager, "_correct_margin_base_by_candidate", None)
     if runtime is None:

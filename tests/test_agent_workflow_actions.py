@@ -230,6 +230,89 @@ class AgentWorkflowActionTests(unittest.TestCase):
             )
             return int(row.lastrowid)
 
+    def test_durable_correct_rejects_parent_changed_before_processing(self):
+        from workflow_request_queue import WorkflowRequestQueue
+
+        queue = WorkflowRequestQueue(self.manager, start_worker=False)
+        parent_id = self.root["id"]
+        self.add_correct_label(self.root)
+        queue.enqueue_correct(parent_id, "parent-changed")
+        replacement = {**self.model(parent_id), "model_revision": "retrained", "weights": {"root": 2}}
+        self.store.save_model(parent_id, replacement)
+        replacement = self.model(parent_id)
+        self.assertTrue(queue.process_once())
+        self.assertEqual(queue.status("parent-changed")["state"], "failed")
+        self.assertIn("parent changed", queue.status("parent-changed")["error"])
+        self.assertIsNone(self.manager._candidate_row(parent_id))
+        self.assertEqual(len(self.rl.labels(parent_id)), 1)
+        self.assertEqual(self.model(parent_id), replacement)
+
+    def test_failed_correct_snapshot_can_retry_same_child_without_new_label(self):
+        from workflow_request_queue import WorkflowRequestQueue
+
+        queue = WorkflowRequestQueue(self.manager, start_worker=False)
+        parent_id = self.root["id"]
+        label_id = self.add_correct_label(self.root)
+        queue.enqueue_correct(parent_id, "original")
+        self.assertTrue(queue.process_once())
+        original = queue.status("original")["result"]
+        row = self.manager._candidate_row(parent_id)
+        replacement = {**self.model(parent_id), "model_revision": "retrained", "weights": {"root": 2}}
+        self.store.save_model(parent_id, replacement)
+        replacement = self.model(parent_id)
+        self.assertTrue(self.manager._start_build(row))
+        failed = self.manager._candidate_row(parent_id)
+        self.assertEqual(failed["state"], "failed")
+        self.assertIn("parent changed", failed["last_error"])
+        self.assertEqual(self.model(parent_id), replacement)
+        self.assertEqual(queue.enqueue_correct(parent_id, "original")["result"], original)
+        queue.enqueue_correct(parent_id, "retry")
+        self.assertTrue(queue.process_once())
+        retried = queue.status("retry")["result"]
+        self.assertEqual(retried["child_generation_id"], original["child_generation_id"])
+        self.assertEqual(retried["correct_label_ids"], [label_id])
+        self.assertEqual(self.manager._candidate_row(parent_id)["state"], "queued")
+        self.assertEqual(len(self.rl.labels(parent_id)), 1)
+
+    def test_correct_label_journal_rolls_back_on_busy_and_replaces_one_point(self):
+        import sqlite3
+        from unittest.mock import patch
+        from manual_feedback_contract import ManualFeedbackJournal
+        from manual_feedback_rl import JournaledRLTeaching
+        from manual_feedback_workflow import install as install_journal_workflow
+
+        parent_id = self.root["id"]
+        sample_ts = time.time() - 5
+        self.engine.manual_feedback_journal = ManualFeedbackJournal(self.store)
+        self.engine.rl_teaching = JournaledRLTeaching(self.store, self.engine)
+        self.teaching.point_context = Mock(return_value=(
+            self.engine.state_map, {}, self.engine.policy(self.root)
+        ))
+        self.manager.workflow_correct_point = Mock(return_value={
+            "current": 0., "desired": 0., "context_complete": True,
+        })
+        install_journal_workflow(self.manager)
+        with patch("manual_feedback_workflow.teaching_signature", return_value={"presence": 1.}):
+            first = self.manager.workflow_add_correct_label(parent_id, 1., sample_ts)
+            writer = sqlite3.connect(self.store.path)
+            try:
+                writer.execute("BEGIN IMMEDIATE")
+                with self.assertRaisesRegex(sqlite3.OperationalError, "database is locked"):
+                    self.manager.workflow_add_correct_label(parent_id, 0., sample_ts)
+            finally:
+                writer.close()
+            self.assertEqual([r["id"] for r in self.engine.rl_teaching.labels(parent_id)], [first["label_id"]])
+
+            journal = self.engine.manual_feedback_journal
+            with patch.object(journal, "link", side_effect=sqlite3.OperationalError("database is locked")):
+                with self.assertRaises(sqlite3.OperationalError):
+                    self.manager.workflow_add_correct_label(parent_id, 0., sample_ts)
+            self.assertIsNone(journal.get(first["feedback_id"])["undone_ts"])
+            replacement = self.manager.workflow_add_correct_label(parent_id, 0., sample_ts)
+            self.assertEqual([r["id"] for r in self.engine.rl_teaching.labels(parent_id)], [replacement["label_id"]])
+            self.assertIsNotNone(journal.get(first["feedback_id"])["undone_ts"])
+            self.assertIsNone(self.manager._candidate_row(parent_id))
+
     def test_live_autonomous_creates_child_without_clear_learning_and_preserves_parent(self):
         before = self.model(self.root["id"])
         original_clear = self.store.clear_learning

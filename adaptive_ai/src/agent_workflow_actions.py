@@ -14,6 +14,7 @@ import json
 import math
 import time
 import uuid
+from sqlite_background import is_sqlite_busy
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from context import target_value
@@ -132,6 +133,8 @@ def _resolve_generation(manager, ref):
     generation = _sync_live_generation_metadata(manager, generation)
     if not generation:
         raise ValueError("Agent generation not found")
+    if generation.get("lifecycle_state") in {"discarded", "pruned", "promoted"}:
+        raise ValueError("Generation model is no longer retained")
     agent_id = generation.get("agent_id")
     if not agent_id or not manager.store.get_agent_config(str(agent_id)):
         raise ValueError("Generation model is no longer retained")
@@ -203,17 +206,19 @@ def _coalesce_child(manager, parent_generation, child_generation, reason):
     now = time.time()
     state = "building" if str(edge.get("state") or "") == "building" else "queued"
     with manager.store.lock, manager.store.conn() as c:
-        c.execute(
+        changed = c.execute(
             """UPDATE agent_candidates SET
                  feedback_revision=feedback_revision+1,dirty=1,state=?,reason=?,queued_ts=?,
                  comparison_json='{}',offline_gate_json='{}',last_error=NULL,
                  discard_requested=0,updated_ts=?
-               WHERE parent_agent_id=? AND candidate_id=?""",
+               WHERE parent_agent_id=? AND candidate_id=? AND discard_requested=0""",
             (
                 state, str(reason), now, now,
                 str(parent_generation["agent_id"]), str(child_generation["agent_id"]),
             ),
-        )
+        ).rowcount
+        if not changed:
+            raise ValueError("Existing child is being discarded")
         c.execute(
             """UPDATE agent_candidate_generations
                SET lifecycle_state=?,comparison_json='{}',updated_ts=? WHERE generation_id=?""",
@@ -356,6 +361,15 @@ def _correct_history(manager, generation, agent, start, end):
     return history
 
 
+def _failed_correct_child(manager, generation):
+    candidate_row = getattr(manager, "_candidate_row", None)
+    if not callable(candidate_row):
+        return False
+    edge = candidate_row(generation["agent_id"]) or {}
+    return (edge.get("reason") == CORRECT_REASON and edge.get("state") == "failed"
+            and not edge.get("discard_requested"))
+
+
 def _correct_label_counts(manager, generation, agent):
     """Read-only Correct inventory for the selected direct-parent generation.
 
@@ -366,14 +380,15 @@ def _correct_label_counts(manager, generation, agent):
     fp = rl_fingerprint(agent)
     with manager.store.conn() as c:
         previous = c.execute(
-            """SELECT committed_ts FROM agent_correct_operations
+            """SELECT COALESCE(json_extract(detail_json,'$.label_cutoff_ts'),committed_ts) AS label_cutoff
+               FROM agent_correct_operations
                WHERE parent_generation_id=? AND status='committed'
                ORDER BY committed_ts DESC,created_ts DESC LIMIT 1""",
             (str(generation["generation_id"]),),
         ).fetchone()
         cutoff = (
-            float(previous["committed_ts"])
-            if previous and previous["committed_ts"] is not None else None
+            float(previous["label_cutoff"])
+            if previous and previous["label_cutoff"] is not None else None
         )
         # Candidate models inherit the parent's Teach labels with historical
         # created_ts values. Inherited examples belong to cumulative training,
@@ -391,7 +406,10 @@ def _correct_label_counts(manager, generation, agent):
         ).fetchone()
     return {
         "correct_labels_total": int(counts["total"]),
-        "correct_labels_pending": int(counts["pending"]),
+        "correct_labels_pending": (
+            int(counts["total"]) if _failed_correct_child(manager, generation)
+            else int(counts["pending"])
+        ),
     }
 
 
@@ -666,6 +684,8 @@ def register_mutation_routes(registry, manager):
         except ValueError as exc:
             return http.send_json(409, {"error": str(exc)})
         except Exception as exc:
+            if action == "correct-label" and is_sqlite_busy(exc):
+                return http.send_json(503, {"error": "SQLite is busy; retry saving this Correct point"})
             return http.send_json(
                 500,
                 {
@@ -733,11 +753,28 @@ def install(manager, *, legacy_get=True, legacy_post=True):
             manager, generation, AUTONOMOUS_REASON, "autonomous", allow_coalesce=False
         )
 
-    def workflow_correct_commit(ref, request_id=None):
+    def workflow_correct_parent_token(ref):
+        from agent_correct_generation_history import _resolve_history_generation
+        generation, agent = _resolve_history_generation(manager, ref)
+        if generation.get("lifecycle_state") in {"discarded", "pruned", "promoted"}:
+            raise ValueError("Generation model is no longer retained")
+        return parent_token(generation, agent)
+
+    def parent_token(generation, agent):
+        model = manager.store.get_model(agent["id"])
+        if model is None:
+            raise ValueError("Generation has no usable model")
+        return {
+            "generation_id": str(generation["generation_id"]),
+            "generation_number": int(generation["generation_number"]),
+            "parent_model_identity": model_metadata(model)["model_identity"],
+            "parent_config_fingerprint": config_fingerprint(agent),
+        }
+
+    def workflow_correct_commit(ref, request_id=None, *, admitted_parent=None):
         generation, agent = _resolve_generation(manager, ref)
         fp = rl_fingerprint(agent)
         operation_id = str(request_id or uuid.uuid4())
-        now = time.time()
 
         # A durable request may be replayed after a crash between Candidate creation
         # and workflow-request completion. Return the already committed operation
@@ -780,57 +817,49 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                     }
 
         _preflight_child(manager, generation, allow_coalesce=True)
+        retry_failed_child = _failed_correct_child(manager, generation)
+        selected_parent = parent_token(generation, agent)
+        if admitted_parent is not None and admitted_parent != selected_parent:
+            raise ValueError("Correct parent changed after admission; retry on the current generation")
 
         # A Correct operation consists of labels created/edited since the preceding
         # committed Correct operation on this exact generation. The first post-upgrade
         # operation adopts existing active labels for backward compatibility.
-        with manager.store.conn() as c:
+        with manager.store.lock, manager.store.conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            now = time.time()
             previous = c.execute(
-                """SELECT committed_ts FROM agent_correct_operations
+                """SELECT COALESCE(json_extract(detail_json,'$.label_cutoff_ts'),committed_ts) AS label_cutoff
+               FROM agent_correct_operations
                    WHERE parent_generation_id=? AND status='committed'
                    ORDER BY committed_ts DESC,created_ts DESC LIMIT 1""",
                 (str(generation["generation_id"]),),
             ).fetchone()
-            cutoff = float(previous["committed_ts"]) if previous and previous["committed_ts"] is not None else None
-            if cutoff is None:
-                label_rows = c.execute(
-                    """SELECT id FROM teaching_rl_labels
-                       WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
-                       ORDER BY id""",
-                    (str(agent["id"]), fp),
-                ).fetchall()
-            else:
-                label_rows = c.execute(
-                    """SELECT id FROM teaching_rl_labels
-                       WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=? AND created_ts>?
-                       ORDER BY id""",
-                    (str(agent["id"]), fp, cutoff),
-                ).fetchall()
-            label_ids = [int(row["id"]) for row in label_rows]
-
-        if not label_ids:
-            # Preserve compatibility for legacy/direct callers that may intentionally
-            # reapply the cumulative label set without the durable UI request flow.
-            if request_id is None:
-                with manager.store.conn() as c:
-                    label_ids = [
-                        int(row["id"]) for row in c.execute(
-                            """SELECT id FROM teaching_rl_labels
-                               WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
-                               ORDER BY id""",
-                            (str(agent["id"]), fp),
-                        ).fetchall()
-                    ]
+            cutoff = float(previous["label_cutoff"]) if previous and previous["label_cutoff"] is not None else None
+            if generation.get("generation_type") == "candidate" and not retry_failed_child:
+                born = float(generation["created_ts"])
+                cutoff = max(born, cutoff) if cutoff is not None else born
+            if retry_failed_child:
+                cutoff = None
+            label_sql = """SELECT id FROM teaching_rl_labels
+                           WHERE agent_id=? AND undone_ts IS NULL AND fingerprint=?
+                             AND (? IS NULL OR created_ts>?) AND created_ts<=?
+                           ORDER BY id"""
+            label_ids = [int(row["id"]) for row in c.execute(
+                label_sql, (str(agent["id"]), fp, cutoff, cutoff, now)
+            )]
+            if not label_ids and request_id is None:
+                label_ids = [int(row["id"]) for row in c.execute(
+                    label_sql, (str(agent["id"]), fp, None, None, now)
+                )]
             if not label_ids:
                 raise ValueError("Add at least one new Correct point before creating the child Candidate")
-
-        with manager.store.lock, manager.store.conn() as c:
             c.execute(
                 """INSERT OR REPLACE INTO agent_correct_operations
                    (operation_id,root_agent_id,parent_generation_id,parent_agent_id,
                     child_generation_id,candidate_id,label_ids_json,created_ts,
                     committed_ts,status,detail_json)
-                   VALUES(?,?,?,?,NULL,NULL,?,?,NULL,'prepared','{}')""",
+                   VALUES(?,?,?,?,NULL,NULL,?,?,NULL,'prepared',?)""",
                 (
                     operation_id,
                     str(generation["root_agent_id"]),
@@ -838,12 +867,14 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                     str(agent["id"]),
                     json.dumps(label_ids, separators=(",", ":")),
                     now,
+                    json.dumps(selected_parent),
                 ),
             )
         try:
-            result = _create_or_coalesce_child(
-                manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
-            )
+            with manager.lock:
+                result = _create_or_coalesce_child(
+                    manager, generation, CORRECT_REASON, "correct", allow_coalesce=True
+                )
             child_generation_id = (result or {}).get("child_generation_id")
             child_generation = (
                 lineage_row(manager.store, generation_id=str(child_generation_id))
@@ -863,6 +894,8 @@ def install(manager, *, legacy_get=True, legacy_post=True):
                             "label_count": len(label_ids),
                             "coalesced": bool((result or {}).get("coalesced")),
                             "action_id": (result or {}).get("action_id"),
+                            "label_cutoff_ts": now,
+                            **selected_parent,
                         }, separators=(",", ":")),
                         operation_id,
                     ),
@@ -926,7 +959,21 @@ def install(manager, *, legacy_get=True, legacy_post=True):
         return child
 
     def start_build(row):
-        if str(row.get("reason") or "") != AUTONOMOUS_REASON:
+        reason = str(row.get("reason") or "")
+        if reason == CORRECT_REASON:
+            with manager.store.conn() as c:
+                prepared = c.execute(
+                    """SELECT 1 FROM agent_correct_operations
+                       WHERE parent_agent_id=? AND status='prepared' LIMIT 1""",
+                    (row["parent_agent_id"],),
+                ).fetchone()
+            if prepared:
+                return False
+            fresh = manager._candidate_row(row["parent_agent_id"])
+            if not fresh or fresh["candidate_id"] != row["candidate_id"] or fresh["state"] != "queued":
+                return False
+            row = fresh
+        if reason != AUTONOMOUS_REASON:
             return original_start(row)
         queue = manager._queue()
         if queue is None:
@@ -1112,6 +1159,7 @@ def install(manager, *, legacy_get=True, legacy_post=True):
     manager.workflow_subject = workflow_subject
     manager.workflow_correct_inventory = lambda generation, agent: _correct_label_counts(manager, generation, agent)
     manager.workflow_autonomous = workflow_autonomous
+    manager.workflow_correct_parent_token = workflow_correct_parent_token
     manager.workflow_correct_commit = workflow_correct_commit
     manager.workflow_change_decision = workflow_change_decision
     manager.workflow_correct_history = lambda ref, start, end, compact=False: _correct_history(
