@@ -3,6 +3,7 @@ import copy
 import json
 import subprocess
 import sys
+import time
 import unittest
 from unittest.mock import Mock
 
@@ -230,11 +231,25 @@ def integration():
                            VALUES(?,?,?,?,?,?,?,?,NULL)""",
                            (agent["id"], history_id, "2026-10-13T00:00:00+00:00", action, action,
                             1., 1., json.dumps(features)))
+        from agent_candidate_lineage import install as install_lineage
+        from agent_workflow_actions import install as install_workflow
+        from workflow_request_queue import WorkflowRequestQueue
+
+        install_lineage(h.manager)
         evolution.install(h.core, h.manager)
-        status = h.manager.enqueue(agent["id"], "feedback")
+        install_workflow(h.manager, legacy_get=False, legacy_post=False)
+        queue = WorkflowRequestQueue(h.manager, start_worker=False)
+        started = time.perf_counter()
+        accepted = queue.enqueue_correct(agent["id"], "sqlite-correct")
+        assert accepted["state"] == "accepted"
+        assert queue.process_once()
+        request = queue.status("sqlite-correct")
+        assert request["state"] == "done", request
+        row = h.manager._candidate_row(agent["id"])
+        assert row["state"] == "queued", row
         original = h.store.get_model(agent["id"])
-        assert h.store.get_model(status["candidate_id"]) == original
-        h.manager._start_build(h.manager._candidate_row(agent["id"]))
+        assert h.manager._start_build(row)
+        ready_ms = (time.perf_counter() - started) * 1000
         status = h.manager.status(agent["id"])
         child = h.engine.policy(h.store.get_agent_config(status["candidate_id"]))
         empty_predictions = [child.predict({0: 1., 5: 0., 17: i / 5.})[0]["value"] for i in range(5)]
@@ -244,11 +259,14 @@ def integration():
             "empty_predictions": empty_predictions,
             "parent_unchanged": original == h.store.get_model(agent["id"]),
             "historical_rebuild_calls": h.queue.enqueue.call_count,
+            "candidate_state": status["state"],
+            "request_to_shadow_eligible_ms": round(ready_ms, 3),
             "gate": status["offline_gate"],
         }
         receipt["passed"] = bool(before_prediction == 0. and receipt["candidate_corrected_prediction"] == 1.
                                  and empty_predictions == [0.] * 5 and receipt["parent_unchanged"]
-                                 and not receipt["historical_rebuild_calls"] and receipt["gate"]["passed"])
+                                 and not receipt["historical_rebuild_calls"] and receipt["gate"]["passed"]
+                                 and receipt["candidate_state"] == "comparing")
         print(json.dumps(receipt))
         assert receipt["passed"], receipt
     finally:

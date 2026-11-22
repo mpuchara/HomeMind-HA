@@ -42,6 +42,7 @@ jobs:
       - name: Paired room-observation timing and forecast parity
         if: matrix.python == '3.11'
         run: python tools/benchmark_room_observation.py
+      - run: node tools/verify_correct_history_ui.js
       - run: python -m unittest discover -s tests -v
       - name: Pagination, 25-agent rich checkpoint worker and pinned 0.15.8 comparison
         run: python tools/validate_training_0159.py
