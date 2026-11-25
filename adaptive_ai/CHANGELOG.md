@@ -1,3 +1,9 @@
+# 0.15.23 — RAM-first worker status transport (TEST ONLY)
+
+- On Linux with verified /dev/shm tmpfs, each supervised worker gets its own private bounded status mailbox. Parent reads the newest atomic status; existing UI cadence and watchdog progress tokens stay unchanged.
+- Persist first status, stage transitions, completion, a status checkpoint at least every 30 seconds while updates arrive, and final pending status before the result. On RAM transport failure or unsupported platform, use the previous guarded disk status path.
+- Keep job descriptors, rollback data, result files, recovery generations, publication guards and storage admission for durable writes unchanged. No model rebuild. Predecessor CI must pass before deployment.
+
 # 0.15.22 — Adaptive context checkpoint durability (TEST ONLY)
 
 - Save adaptive presence restart metadata and historical replay checkpoint in one guarded SQLite transaction, including the existing checkpoint retention operation.
