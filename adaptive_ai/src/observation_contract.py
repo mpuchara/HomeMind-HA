@@ -1233,7 +1233,8 @@ class FeatureJournal:
                                  WHERE start<=event.event_time AND end>=event.event_time))
                             WHERE entity_id IN ({marks}) AND event_time>=? AND event_time<=?
                               AND EXISTS(SELECT 1 FROM protection
-                                  WHERE start<=event.event_time AND end>=event.event_time)''', params)
+                                  WHERE start<=event.event_time AND end>=event.event_time
+                                    AND expiry>event.protected_until)''', params)
             self._prune_window_owners(c, sorted(set(row['agent_id'] for row in prepared)))
         return len(prepared)
 
