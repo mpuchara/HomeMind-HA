@@ -1,10 +1,11 @@
 {
-  "version": "0.14.184",
-  "release_date": "2026-10-12",
-  "base_version": "0.14.183",
-  "base_commit": "e1d434e9cf45f641e962c9e65c95e1f95cde4a3d",
-  "release_status": "fourteen-day-training-and-retention",
-  "release_validation_tests_passed": 2202,
+  "version": "0.14.185",
+  "release_date": "2026-11-25",
+  "base_version": "0.14.184",
+  "base_commit": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
+  "release_status": "storage-write-amplification-fix-validation-pending",
+  "release_validation_tests_passed": null,
+  "release_validation_tests_expected": 2206,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
