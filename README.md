@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.15.20 TEST
+# HomeMind-HA / Adaptive AI 0.15.21 TEST
+
+Storage Health: read-only write-rate telemetry from the existing maintenance worker. Latest baseline is validated 0.15.20 (`codex/storage-wear-0.15.20`).
 
 Development base: `codex/correct-integrity-20261122` (0.15.19), not the older `main`. Storage wear fixes preserve the latest Correct and training integrity mechanisms. Manual Pi acceptance pending.
 

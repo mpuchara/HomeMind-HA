@@ -34,6 +34,22 @@
     const sqlite=status.sqlite||dbg.sqlite||{};
     const recovery=sqlite.storage_retention?.recovery||{};
     const budget=sqlite.storage_budget||{};
+    const wal=sqlite.wal_checkpoint||{};
+    const health=wal.write_health||{};
+    const training=status.history?.training_process||{};
+    const mib=value=>value==null||!Number.isFinite(Number(value))?'—':(Number(value)/1048576).toLocaleString(undefined,{maximumFractionDigits:2})+' MiB';
+    const rate=value=>value==null?'—':mib(value)+' / h';
+    const storageHealth=Object.keys(health).length?`
+      <div class="history-timing"><b>Storage Health</b><span>RAM only · Linux I/O accounting, not physical SD wear</span></div>
+      <div class="history-grid runtime-debug-grid">
+        <div><b>${health.available&&!health.stale?rate(health.recent_write_bytes_per_hour):'—'}</b><span>runtime writes · up to 5 min</span></div>
+        <div><b>${health.available&&!health.stale?rate(health.hour_write_bytes_per_hour):'—'}</b><span>runtime writes · up to 60 min</span></div>
+        <div><b>${mib(health.observed_write_bytes)}</b><span>observed writes since valid baseline</span></div>
+        <div><b>${mib(wal.wal_bytes)}</b><span>WAL allocated · not bytes written</span></div>
+        <div><b>${mib(training.write_bytes)}</b><span>training process · latest reported cumulative counter</span></div>
+      </div>
+      <div class="history-meta"><span>${health.available&&!health.stale?'Sample age '+Number(health.sample_age_seconds??0).toFixed(0)+' s · '+Number(health.recent_window_seconds??0).toFixed(0)+' s recent coverage':'Write counter unavailable or stale; no rate inferred.'}</span>
+      <span>Runtime accounting can include reaped children; active workers are not a complete separate total. Do not add these counters. Restart resets the observation window.</span></div>`:'';
     const audit=status.provenance_queue?.events?.audit_health||dbg.event_audit_health||(status.engine||dbg.engine)?.deferred_persistence?.provenance?.events?.audit_health||{};
     const corruptionNotice=audit.paused
       ?`<div class="notice" role="alert">SQLite reports database corruption. Raw event audit recording is paused; ${Number(audit.retained_events||0)} accepted events remain in RAM and ${Number(audit.skipped_events||0)} new audit events are gaps. Live delivery avoids this failed audit writer. Preserve a backup and check the database offline; increasing disk/RAM budgets or model Rebuild will not repair it.</div>`:'';
@@ -60,6 +76,7 @@
       ${corruptionNotice}
       ${storageNotice}
       ${cleanupNotice}
+      ${storageHealth}
       <div class="history-grid runtime-debug-grid">
         <div><b>${ms(metric.recent_p95_ms)}</b><span>event → intent p95 · last 60 s</span></div>
         <div><b>${ms(metric.p95_ms)}</b><span>event → intent p95 · retained telemetry</span></div>

@@ -1,3 +1,9 @@
+# 0.15.21 — Storage Health (TEST ONLY)
+
+- Read Linux process write_bytes and cancelled_write_bytes at most once per 30 seconds in the existing WAL maintenance worker. No additional worker, SQL, filesystem writes or persistent metric history.
+- Diagnostics shows rolling write rates (5/60 min), observed write bytes, allocated WAL and the existing training worker counter. Missing/stale samples are explicit; these are OS accounting values, not NAND wear or a complete add-on total.
+- Preserve checkpoint scheduling, write admission, model integrity, replay fences and all retention settings. No Rebuild.
+
 # 0.15.20 — Storage wear fixes on 0.15.19 (TEST ONLY)
 
 - Keep the existing advanced archive and FeatureJournal no-op suppression and pointwise protection segments; additionally suppress redundant updates on the compatibility window path.
