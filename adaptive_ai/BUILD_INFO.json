@@ -1,9 +1,15 @@
 {
-  "version": "0.15.19",
-  "release_date": "2026-11-22",
-  "base_version": "0.15.18",
-  "base_commit": "c97bb9e1d4dd69bccd491ad4083e9ffbd0e84e22",
-  "release_status": "pi5-manual-validation-candidate-correct-integrity",
+  "version": "0.15.20",
+  "release_date": "2026-11-25",
+  "base_version": "0.15.19",
+  "base_commit": "47ef5def4f9f88882eec6fa12f5eaee93d3cf1a5",
+  "release_status": "pi5-manual-validation-candidate-storage-wear",
+  "storage_wear_port": {
+    "source_prs": [383, 384],
+    "archive_and_feature_journal": "retain newer existing optimized implementation; add regression tests",
+    "provenance": "native guarded bulk upsert, skip unchanged event/link/processed updates",
+    "validation": "pending exact-commit CI and physical Pi acceptance"
+  },
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",

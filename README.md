@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.14.199
+# HomeMind-HA / Adaptive AI 0.15.20 TEST
+
+Development base: `codex/correct-integrity-20261122` (0.15.19), not the older `main`. Storage wear fixes preserve the latest Correct and training integrity mechanisms. Manual Pi acceptance pending.
 
 0.14.199: współdzielenie połączeń writerów, mniej odczytów zdarzeń Shadow, bezpieczne odzyskiwanie WAL i odświeżanie registry bez zbędnej przebudowy kontekstu. [Opis zmian](docs/RELEASE_0_14_199_PL.md).
 

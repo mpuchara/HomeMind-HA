@@ -1,3 +1,9 @@
+# 0.15.20 — Storage wear fixes on 0.15.19 (TEST ONLY)
+
+- Keep the existing advanced archive and FeatureJournal no-op suppression and pointwise protection segments; additionally suppress redundant updates on the compatibility window path.
+- Skip unchanged durable Provenance events, history links and processed markers without changing merge precedence, bulk writer admission, error recovery or RAM deduplication.
+- Port seven targeted tests from PRs #383 and #384. Preserve training fences, Correct integrity, Candidate, observation timestamps, retention settings and existing models. No rebuild requested.
+
 # 0.15.19 — Correct interactivity and Candidate integrity (TEST ONLY)
 
 - Mark points immediately and keep the chart in place while reading point details or saving labels.
