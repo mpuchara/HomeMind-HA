@@ -1151,7 +1151,14 @@ class Store:
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
                      source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
-                     mutation_revision=excluded.mutation_revision""",
+                     mutation_revision=excluded.mutation_revision
+                   WHERE entity_history.state IS NOT excluded.state
+                       OR entity_history.attributes_json IS NOT
+                          (CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END)
+                       OR entity_history.context_user_id IS NOT
+                          COALESCE(excluded.context_user_id, entity_history.context_user_id)
+                       OR entity_history.source IS NOT
+                          (CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END)""",
                 (
                     entity_id, float(ts), None if state is None else str(state),
                     attrs, user_id, source, revision,
@@ -1196,7 +1203,18 @@ class Store:
                      attributes_json=CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END,
                      context_user_id=COALESCE(excluded.context_user_id, entity_history.context_user_id),
                      source=CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END,
-                     mutation_revision=excluded.mutation_revision""",
+                     mutation_revision=excluded.mutation_revision
+                   WHERE entity_history.state IS NOT excluded.state
+                       OR entity_history.attributes_json IS NOT
+                          (CASE WHEN excluded.attributes_json!='{}' THEN excluded.attributes_json ELSE entity_history.attributes_json END)
+                       OR entity_history.context_user_id IS NOT
+                          COALESCE(excluded.context_user_id, entity_history.context_user_id)
+                       OR entity_history.source IS NOT
+                          (CASE WHEN excluded.source='ha_history_full' THEN excluded.source ELSE entity_history.source END)
+                       OR entity_history.received_ts IS NOT
+                          (CASE WHEN entity_history.source='live' THEN entity_history.received_ts
+                                WHEN excluded.source='live' THEN excluded.received_ts
+                                ELSE COALESCE(entity_history.received_ts, excluded.received_ts) END)""",
                 versioned,
             )
         return len(packed)
