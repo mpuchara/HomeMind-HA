@@ -3,7 +3,10 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import support
@@ -84,6 +87,42 @@ class TrainingStatusTransportTests(unittest.TestCase):
         self.assertEqual(self.persist.call_count, 2)
         self.assertEqual(json.loads(self.disk.read_text())["progress"], .1)
 
+    def test_pending_snapshot_is_detached_and_oversized_ram_payload_falls_back(self):
+        self.publish(0, 0.)
+        nested = {"rows": [1]}
+        self.publish(1, .1, nested=nested)
+        nested["rows"].append(2)
+        self.writer.flush()
+        self.assertEqual(json.loads(self.disk.read_text())["nested"], {"rows": [1]})
+        self.publish(2, .2, data="x" * transport.MAX_RAM_PAYLOAD)
+        self.assertIsNone(self.writer.volatile)
+        self.assertEqual(json.loads(self.disk.read_text())["progress"], .2)
+
+    def test_worker_status_wrappers_keep_progress_and_eta_in_ram(self):
+        job = {"status_path": str(self.disk), "train_kwargs": {"progress_lo": .01},
+               "training_generation": True}
+        with patch("training_process.time.monotonic", side_effect=lambda: self.now):
+            _worker_boot_status(job, "prepare", stage="history_recovery", transport=self.writer,
+                                preparation={"query_key": "sensor.a", "current_cursor": 1})
+            self.now = 2.
+            _worker_boot_status(job, "prepare", stage="history_recovery", transport=self.writer,
+                                preparation={"query_key": "sensor.a", "current_cursor": 2})
+            self.assertEqual(latest_status(self.disk, self.ram)[1]["preparation"]["current_cursor"], 2)
+            self.assertEqual(self.persist.call_count, 1)
+            h = SimpleNamespace(phase="training", progress=.2, message="replay",
+                                phase_detail="replay", set_status=lambda **kw: None)
+            h.status = lambda: {"phase": h.phase, "progress": h.progress, "eta_seconds": 120.}
+            _worker_status_writer(h, self.disk, preparation_fraction=.1, transport=self.writer)
+            self.now = 4.
+            h.set_status()
+            self.now = 6.
+            h.progress = .3
+            h.set_status()
+            _, status = latest_status(self.disk, self.ram)
+            self.assertAlmostEqual(status["progress"], .37)
+            self.assertEqual(status["eta_seconds"], 120.)
+            self.assertEqual(self.persist.call_count, 2)
+
     def test_mailbox_is_private_per_job_and_removed_after_scope(self):
         if not transport._verified_tmpfs():
             self.skipTest("verified tmpfs not available")
@@ -94,6 +133,14 @@ class TrainingStatusTransportTests(unittest.TestCase):
                 self.assertNotEqual(first, second)
                 with patch.dict(os.environ, {transport.STATUS_ENV: str(first)}):
                     self.assertEqual(transport.worker_status_path(), first)
-                first.write_text("{}")
+                # Verify a fresh child can resolve and publish to the exact mailbox.
+                env = dict(os.environ)
+                env[transport.STATUS_ENV] = str(first)
+                env["PYTHONPATH"] = str(Path(transport.__file__).parent)
+                subprocess.run([sys.executable, "-c",
+                    "from training_status_transport import worker_status_path; "
+                    "worker_status_path().write_text('{\"progress\":0.5}')"],
+                    env=env, check=True, timeout=10)
+                self.assertEqual(json.loads(first.read_text()), {"progress": .5})
             self.assertFalse(second.parent.exists())
         self.assertFalse(first.parent.exists())

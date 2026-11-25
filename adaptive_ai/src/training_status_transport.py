@@ -79,7 +79,12 @@ def latest_status(durable, volatile=None, *, previous=None):
         if token == previous:
             return previous, None
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            limit = MAX_RAM_PAYLOAD if path == Path(volatile or durable) and volatile is not None else 16 * 1024 * 1024
+            with path.open("rb") as stream:
+                raw = stream.read(limit+1)
+            if len(raw) > limit:
+                continue
+            payload = json.loads(raw)
             if isinstance(payload, dict):
                 return token, payload
         except (OSError, ValueError):
@@ -116,6 +121,7 @@ class StatusWriter:
             os.replace(temp, self.volatile)
         finally:
             temp.unlink(missing_ok=True)
+        return data
 
     def publish(self, payload, token, *, force=False):
         now = self.clock()
@@ -127,7 +133,7 @@ class StatusWriter:
         if due:
             self._persist(payload, token, now)
         try:
-            self._write_ram(payload)
+            encoded = self._write_ram(payload)
         except OSError:
             # Retire the volatile path after the first failure; no repeated
             # allocation attempts under RAM pressure. Disk admission remains in force.
@@ -140,7 +146,9 @@ class StatusWriter:
                 pass
             return
         if not due:
-            self.pending = (payload, token)
+            # Keep the exact published snapshot; HistoryManager may mutate nested
+            # counters between this update and the final durable flush.
+            self.pending = (json.loads(encoded), token)
 
     def flush(self):
         if self.pending is not None:
