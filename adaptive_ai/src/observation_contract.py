@@ -897,7 +897,10 @@ class FeatureJournal:
                        ON CONFLICT(event_key) DO UPDATE SET
                          received_time=MIN(feature_observation_events.received_time,excluded.received_time),
                          protected_until=MAX(feature_observation_events.protected_until,excluded.protected_until),
-                         quality=MAX(feature_observation_events.quality,excluded.quality)""",
+                         quality=MAX(feature_observation_events.quality,excluded.quality)
+                       WHERE excluded.received_time < feature_observation_events.received_time
+                          OR excluded.protected_until > feature_observation_events.protected_until
+                          OR excluded.quality > feature_observation_events.quality""",
                     (
                         row["event_key"], CONTRACT_VERSION, row["entity_id"],
                         row["event_time"], row["received_time"], row["state"],
@@ -960,11 +963,17 @@ class FeatureJournal:
                     "INSERT OR IGNORE INTO feature_window_entities(window_id,entity_id) VALUES(?,?)",
                     [(row["window_id"], eid) for eid in row["entities"]],
                 )
+            # Preserve window/link insertion order and retention semantics.
+            # Apply the latest expiry first, so overlapping windows in this
+            # transaction cannot repeatedly rewrite the same observation.
+            for row in sorted(prepared, key=lambda item: item["protected_until"], reverse=True):
                 placeholders = ",".join("?" for _ in row["entities"])
                 c.execute(
                     f"""UPDATE feature_observation_events SET protected_until=MAX(protected_until,?)
-                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?""",
-                    [row["protected_until"], *row["entities"], row["start"], row["end"]],
+                        WHERE entity_id IN ({placeholders}) AND event_time>=? AND event_time<=?
+                          AND protected_until<?""",
+                    [row["protected_until"], *row["entities"], row["start"], row["end"],
+                     row["protected_until"]],
                 )
             for agent_id in sorted(set(row["agent_id"] for row in prepared)):
                 stale = c.execute(

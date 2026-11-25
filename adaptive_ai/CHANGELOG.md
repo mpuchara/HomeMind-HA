@@ -1,3 +1,8 @@
+## 0.14.185
+- Identyczny wynik scalenia historii nie aktualizuje wiersza ani jego rewizji. Zachowane liczniki przyjętych rekordów i globalny generator rewizji.
+- Feature Journal pomija aktualizacje bez zmiany czasu odebrania, jakości lub ochrony. Okna dowodowe zachowują identyfikatory, powiązania i retencję; maksymalny termin ochrony nakładany jest najpierw.
+- Bez zmiany próbkowania, treningu v26, modeli, Correct, Candidate, konfiguracji WAL i 14-dniowej historii. Bez Rebuild.
+
 ## 0.14.166
 - Import odpowiedzi Recorder zapisuje najwyżej 128 wierszy w jednej transakcji. Każda partia zwalnia SQLite i Store.lock przed przerwą budżetu treningu.
 - Jedno połączenie na import zachowuje osobne commit/rollback. Zapisany fragment przetrwa anulowanie lub późniejszy błąd; ponowienie uzupełnia dane istniejącym UPSERT.
