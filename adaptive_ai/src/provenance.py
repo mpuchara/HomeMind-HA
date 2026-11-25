@@ -260,12 +260,17 @@ class ProvenanceJournal:
                          origin=CASE WHEN provenance_events.origin='unknown' AND excluded.origin!='unknown'
                                      THEN excluded.origin ELSE provenance_events.origin END,
                          state_json=COALESCE(provenance_events.state_json,excluded.state_json),
-                         processed_time=COALESCE(provenance_events.processed_time,excluded.processed_time)""",
+                         processed_time=COALESCE(provenance_events.processed_time,excluded.processed_time)
+                       WHERE excluded.received_time < provenance_events.received_time
+                          OR (provenance_events.origin='unknown' AND excluded.origin!='unknown')
+                          OR (provenance_events.state_json IS NULL AND excluded.state_json IS NOT NULL)
+                          OR (provenance_events.processed_time IS NULL AND excluded.processed_time IS NOT NULL)""",
                     packed,
                 )
                 c.executemany(
                     """INSERT INTO provenance_history_links(entity_id,event_time,event_id)
-                       VALUES(?,?,?) ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id""",
+                       VALUES(?,?,?) ON CONFLICT(entity_id,event_time) DO UPDATE SET event_id=excluded.event_id
+                       WHERE provenance_history_links.event_id IS NOT excluded.event_id""",
                     links,
                 )
             return len(rows)
@@ -419,7 +424,7 @@ class ProvenanceJournal:
                 return
         with self.store.lock, self.store.conn() as c:
             c.execute(
-                "UPDATE provenance_events SET processed_time=COALESCE(processed_time,?) WHERE event_id=?",
+                "UPDATE provenance_events SET processed_time=COALESCE(processed_time,?) WHERE event_id=? AND processed_time IS NULL",
                 (processed_time, event_id),
             )
 

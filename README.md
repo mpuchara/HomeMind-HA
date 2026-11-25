@@ -1,6 +1,8 @@
-# HomeMind-HA / Adaptive AI 0.14.185
+# HomeMind-HA / Adaptive AI 0.14.186
 
-0.14.185: ograniczenie zbędnych aktualizacji historii i okien dowodowych bez zmiany kontraktu uczenia ani retencji. Weryfikacja CI wymagana przed wydaniem.
+0.14.186: pomijanie niezmienionych aktualizacji Provenance z zachowaniem wszystkich rzeczywistych zmian dowodów i pochodzenia zdarzeń.
+
+0.14.185: ograniczenie zbędnych aktualizacji historii i okien dowodowych bez zmiany kontraktu uczenia ani retencji. CI wersji 0.14.185 zakończyło się powodzeniem przed merge.
 
 0.14.184: okres historii treningowej i retencja wydłużone z 10 do 14 dni, także po aktualizacji istniejących instalacji. [Opis wydania](docs/RELEASE_0_14_184_PL.md).
 

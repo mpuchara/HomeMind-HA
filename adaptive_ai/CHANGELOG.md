@@ -1,3 +1,8 @@
+## 0.14.186
+- Provenance pomija aktualizacje niezmienionego wyniku scalenia zdarzenia i powiązania historii. Zachowane wcześniejszy czas odebrania, wzbogacenie origin/state/processed oraz kolejność powiązań.
+- Powtórne oznaczenie wcześniej przetworzonego zdarzenia w bazie nie aktualizuje wiersza.
+- Bez zmian w deduplikacji RAM, potwierdzeniach HA, ACK, fizycznym sterowaniu, retencji, historii Correct, treningu v26 i modelach. Bez Rebuild.
+
 ## 0.14.185
 - Identyczny wynik scalenia historii nie aktualizuje wiersza ani jego rewizji. Zachowane liczniki przyjętych rekordów i globalny generator rewizji.
 - Feature Journal pomija aktualizacje bez zmiany czasu odebrania, jakości lub ochrony. Okna dowodowe zachowują identyfikatory, powiązania i retencję; maksymalny termin ochrony nakładany jest najpierw.

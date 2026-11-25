@@ -1,11 +1,11 @@
 {
-  "version": "0.14.185",
+  "version": "0.14.186",
   "release_date": "2026-11-25",
-  "base_version": "0.14.184",
-  "base_commit": "91c7343324d38a1922bfed6486b4ef6dd7a3ba06",
-  "release_status": "storage-write-amplification-fix-validation-pending",
+  "base_version": "0.14.185",
+  "base_commit": "2634050a22a8002901fc60a4964a9b056e0607b5",
+  "release_status": "provenance-noop-write-fix-validation-pending",
   "release_validation_tests_passed": null,
-  "release_validation_tests_expected": 2206,
+  "release_validation_tests_expected": 2209,
   "release_014140": {
     "scope": "inventory_and_remove_remaining_shipped_feature_Handler_fallbacks_for_Candidate_Live_and_manual_feedback_transport",
     "explicit_routes": "manual_feedback.js, candidate_ui.js, candidate_preference_ui.js, /api/candidates, Candidate Teach-RL status/train, generation history/comparison, /api/candidate-live, /api/live and Candidate discard",
