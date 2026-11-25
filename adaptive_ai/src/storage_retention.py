@@ -24,6 +24,10 @@ class StorageRetention:
     POLL_SECONDS = 60
     BATCH_ROWS = 128
     MAX_BATCHES = 16
+    VACUUM_MAX_PAGES = 32
+    VACUUM_NORMAL_INTERVAL_SECONDS = 900.
+    VACUUM_MIN_REUSE_PAGES = 64
+    VACUUM_MAX_REUSE_PAGES = 4096
 
     def __init__(self, store, days=14):
         self.store = store
@@ -31,7 +35,11 @@ class StorageRetention:
         self.stop_event = threading.Event()
         self.thread = None
         self.lock = threading.Lock()
-        self.stats = dict(runs=0, deleted=0, errors=0, last_error=None, reclaimed_pages=0)
+        self.stats = dict(runs=0, deleted=0, errors=0, last_error=None, reclaimed_pages=0,
+                          vacuum_runs=0, vacuum_calls=0, vacuum_skips=0,
+                          vacuum_reason=None, vacuum_free_pages=None,
+                          vacuum_reuse_pages=None)
+        self._last_normal_vacuum = None
         self._known_tables = set()
         self.wake_event = threading.Event()
         self.recovery = StorageRecovery(store, self.stop_event)
@@ -40,6 +48,8 @@ class StorageRetention:
         with self.lock:
             return {**self.stats, 'history_days': self.days,
                     'batch_rows': self.BATCH_ROWS,
+                    'vacuum_normal_interval_seconds': self.VACUUM_NORMAL_INTERVAL_SECONDS,
+                    'vacuum_max_pages': self.VACUUM_MAX_PAGES,
                     'alive': bool(self.thread and self.thread.is_alive()),
                     'recovery': self.recovery.snapshot()}
 
@@ -80,6 +90,71 @@ class StorageRetention:
         else:
             cursor = c.execute(f'DELETE FROM {table} WHERE rowid IN (SELECT rowid FROM {table} WHERE {predicate} ORDER BY {order} LIMIT ?)', (*parameters, self.BATCH_ROWS))
         return max(0, cursor.rowcount)
+
+    def _vacuum_once(self, monotonic_now=None):
+        """Reuse free SQLite pages in steady state; shrink only bounded excess.
+
+        The retained free pages are already excluded from database_used_bytes.
+        A real filesystem reserve shortage bypasses the normal cooldown/reserve,
+        but WAL pressure belongs to the existing checkpoint worker. Never change
+        logical retention, page caps, journal policy or training input boundaries.
+        Called inside the existing background SQLite/maintenance scope.
+        """
+        tick = time.monotonic() if monotonic_now is None else float(monotonic_now)
+        budget = self.store.storage_budget
+        status = budget.sample()
+        reason, free_pages, reserve_pages, calls, reclaimed = None, None, None, 0, 0
+        if self.stop_event.is_set():
+            reason = 'stopping'
+        elif status.get('sample_error') or status.get('free_bytes') is None:
+            reason = 'storage_sample_unavailable'
+        elif status.get('wal_bytes', 0) >= budget.wal_limit * .5:
+            reason = 'waiting_for_checkpoint'
+        elif status.get('level') == 'blocked':
+            reason = 'hard_storage_pressure'
+        else:
+            disk_pressure = status['free_bytes'] < budget.reserve
+            with self.store.lock:
+                if not disk_pressure and getattr(self.store, '_training_input_readers', None):
+                    reason = 'active_training'
+                elif (not disk_pressure and self._last_normal_vacuum is not None
+                      and tick-self._last_normal_vacuum < self.VACUUM_NORMAL_INTERVAL_SECONDS):
+                    reason = 'normal_cooldown'
+                else:
+                    with self.store.conn() as c:
+                        if int(c.execute('PRAGMA auto_vacuum').fetchone()[0]) != 2:
+                            reason = 'not_incremental'
+                        else:
+                            before = int(c.execute('PRAGMA page_count').fetchone()[0])
+                            free_pages = int(c.execute('PRAGMA freelist_count').fetchone()[0])
+                            reserve_pages = 0 if disk_pressure else max(
+                                self.VACUUM_MIN_REUSE_PAGES,
+                                min(self.VACUUM_MAX_REUSE_PAGES, before//10))
+                            limit = min(self.VACUUM_MAX_PAGES, max(0, free_pages-reserve_pages))
+                            if limit == 0:
+                                reason = 'reuse_free_pages' if free_pages else 'no_free_pages'
+                            else:
+                                # Do not repeatedly compact small steady-state churn.
+                                # The existing page-sized PRAGMA and 32-call cap stay.
+                                reason = 'disk_reserve' if disk_pressure else 'excess_free_pages'
+                                for _ in range(limit):
+                                    if self.stop_event.is_set():
+                                        break
+                                    c.execute('PRAGMA incremental_vacuum(1)').fetchall()
+                                    calls += 1
+                                after = int(c.execute('PRAGMA page_count').fetchone()[0])
+                                reclaimed = max(0, before-after)
+                    if calls and not disk_pressure:
+                        self._last_normal_vacuum = tick
+        with self.lock:
+            self.stats['vacuum_reason'] = reason
+            self.stats['vacuum_free_pages'] = free_pages
+            self.stats['vacuum_reuse_pages'] = reserve_pages
+            self.stats['vacuum_runs'] += int(calls > 0)
+            self.stats['vacuum_skips'] += int(calls == 0)
+            self.stats['vacuum_calls'] += calls
+            self.stats['reclaimed_pages'] += reclaimed
+        return reclaimed
 
     def run_once(self, now=None):
         now = time.time() if now is None else float(now)
@@ -142,20 +217,10 @@ class StorageRetention:
                     with self.store.lock, self.store.conn() as c:
                         removed = self._delete_batch(c, table, predicate, parameters, expression, tables)
                         deleted += removed
-            with self.store.lock, self.store.conn() as c:
-                before = int(c.execute('PRAGMA page_count').fetchone()[0])
-                if int(c.execute('PRAGMA auto_vacuum').fetchone()[0]) == 2:
-                    # SQLite may reclaim one page per invocation; bound both the
-                    # number of calls and transaction size on slow storage.
-                    for _ in range(32):
-                        c.execute('PRAGMA incremental_vacuum(1)').fetchall()
-                    after = int(c.execute('PRAGMA page_count').fetchone()[0])
-                else:
-                    after = before
+            self._vacuum_once()
             with self.lock:
                 self.stats['runs'] += 1
                 self.stats['deleted'] += deleted
-                self.stats['reclaimed_pages'] += max(0, before - after)
                 self.stats['last_error'] = None
         self.store.storage_budget.sample()
         from storage_files import prune_completed

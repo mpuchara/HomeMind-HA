@@ -1,18 +1,23 @@
 {
-  "version": "0.15.23",
-  "release_date": "2026-11-25",
-  "base_version": "0.15.22",
-  "base_commit": "9625e134a69881c9eca467f5ba61bf7851852d49",
-  "release_status": "pi5-manual-validation-candidate-training-status-ram",
+  "version": "0.15.24",
+  "release_date": "2026-11-26",
+  "base_version": "0.15.23",
+  "base_commit": "0d1214d3a72b789e12d0f5448dd94748c604f0cb",
+  "release_status": "pi5-manual-validation-candidate-retention-vacuum",
+  "vacuum_storage": {
+    "scope": "bounded incremental vacuum with reusable freelist reserve, normal cooldown and disk pressure bypass",
+    "logical_retention_and_training_fences": "unchanged",
+    "validation": "pending exact-commit CI and physical Pi acceptance"
+  },
   "training_status_transport": {
     "scope": "optional private verified Linux tmpfs status mailbox with durable phase/30-second checkpoint and disk fallback",
     "durable_job_result_rollback_generation_contract": "unchanged",
-    "validation": "pending exact-commit CI, predecessor CI and physical Pi acceptance"
+    "validation": "0.15.23 exact-commit CI and ARM64 canary passed; physical Pi acceptance pending"
   },
   "context_checkpoint_storage": {
     "scope": "one guarded transaction for adaptive restart metadata, historical checkpoint and existing retention",
     "payload_and_schedule": "unchanged",
-    "validation": "pending exact-commit CI and physical Pi acceptance"
+    "validation": "0.15.22 exact-commit CI and ARM64 canary passed; physical Pi acceptance pending"
   },
   "storage_health": {
     "scope": "read-only Linux process I/O accounting, bounded RAM rate windows",

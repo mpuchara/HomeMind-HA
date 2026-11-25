@@ -1,3 +1,10 @@
+# 0.15.24 — Reuse SQLite free pages before compacting (TEST ONLY)
+
+- Routine age retention and pressure diagnostic GC keep the same tables, predicates, causal seeds, training fences and batch limits.
+- In normal operation reserve 10% of current pages (bounded to 64–4096 pages) for reuse, and reclaim at most 32 excess pages per 15 minutes. No vacuum when no eligible free pages, while normal training is active, or while WAL pressure awaits checkpoint.
+- Actual filesystem reserve pressure bypasses the normal reserve and cooldown, within the existing 32-page bound; hard pressure and unavailable samples are not bypassed.
+- Expose RAM-only counters for vacuum calls, runs, skips, reclaimed pages, observed freelist and selected policy. No schema migration, full VACUUM, retention reduction, model change or Rebuild.
+
 # 0.15.23 — RAM-first worker status transport (TEST ONLY)
 
 - On Linux with verified /dev/shm tmpfs, each supervised worker gets its own private bounded status mailbox. Parent reads the newest atomic status; existing UI cadence and watchdog progress tokens stay unchanged.
