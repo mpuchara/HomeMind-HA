@@ -1,3 +1,10 @@
+# 0.15.22 — Adaptive context checkpoint durability (TEST ONLY)
+
+- Save adaptive presence restart metadata and historical replay checkpoint in one guarded SQLite transaction, including the existing checkpoint retention operation.
+- Publish metadata cache only after successful commit. Failure leaves the previous durable model and replay checkpoint intact and allows normal retry.
+- Suppress unchanged SQL updates, including same-timestamp checkpoint retries. Room belief save, 60-second cadence, exact JSON, causal replay selection and 30-day checkpoint retention remain unchanged.
+- No changes to inference, training fences, Correct, Candidate, models, or WAL policy. No Rebuild.
+
 # 0.15.21 — Storage Health (TEST ONLY)
 
 - Read Linux process write_bytes and cancelled_write_bytes at most once per 30 seconds in the existing WAL maintenance worker. No additional worker, SQL, filesystem writes or persistent metric history.
