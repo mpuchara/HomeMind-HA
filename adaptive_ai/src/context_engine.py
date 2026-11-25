@@ -498,17 +498,23 @@ class ContextEngine:
                     self._last_saved_room_model_raw = room_raw
                     self.room_checkpoint_source = self.ROOM_MODEL_KEY
             if adaptive_changed:
-                self.store.meta_set(self.ADAPTIVE_MODEL_KEY, adaptive_raw)
-                with self.store.lock, self.store.conn() as c:
-                    c.execute(
-                        "INSERT OR REPLACE INTO adaptive_presence_checkpoints(ts,model_json) "
-                        "VALUES(?,?)",
-                        (float(now), adaptive_raw),
-                    )
-                    c.execute(
-                        "DELETE FROM adaptive_presence_checkpoints WHERE ts<?",
-                        (float(now) - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS,),
-                    )
+                persist = getattr(self.store, 'save_adaptive_presence_checkpoint', None)
+                if callable(persist):
+                    persist(self.ADAPTIVE_MODEL_KEY, adaptive_raw, now,
+                            now - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS)
+                else:
+                    # Compatibility with standalone Store-like adapters.
+                    self.store.meta_set(self.ADAPTIVE_MODEL_KEY, adaptive_raw)
+                    with self.store.lock, self.store.conn() as c:
+                        c.execute(
+                            "INSERT OR REPLACE INTO adaptive_presence_checkpoints(ts,model_json) "
+                            "VALUES(?,?)",
+                            (float(now), adaptive_raw),
+                        )
+                        c.execute(
+                            "DELETE FROM adaptive_presence_checkpoints WHERE ts<?",
+                            (float(now) - self.ADAPTIVE_CHECKPOINT_RETENTION_SECONDS,),
+                        )
                 with self.lock:
                     self._last_saved_adaptive_model_raw = adaptive_raw
             with self.lock:

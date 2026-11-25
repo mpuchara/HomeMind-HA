@@ -1,13 +1,18 @@
 {
-  "version": "0.15.21",
+  "version": "0.15.22",
   "release_date": "2026-11-25",
-  "base_version": "0.15.20",
-  "base_commit": "78c98975ae25b084fa4e455d9796e8448505e96e",
-  "release_status": "pi5-manual-validation-candidate-storage-health",
+  "base_version": "0.15.21",
+  "base_commit": "533799769b77444639262fe1bdd8164a2470bb72",
+  "release_status": "pi5-manual-validation-candidate-context-checkpoint",
+  "context_checkpoint_storage": {
+    "scope": "one guarded transaction for adaptive restart metadata, historical checkpoint and existing retention",
+    "payload_and_schedule": "unchanged",
+    "validation": "pending exact-commit CI and physical Pi acceptance"
+  },
   "storage_health": {
     "scope": "read-only Linux process I/O accounting, bounded RAM rate windows",
     "physical_sd_wear": "not measured",
-    "validation": "pending exact-commit CI and physical Pi acceptance"
+    "validation": "0.15.21 exact-commit CI and ARM64 canary passed; physical Pi acceptance pending"
   },
   "storage_wear_port": {
     "source_prs": [383, 384],

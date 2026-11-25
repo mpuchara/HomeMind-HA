@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.15.21 TEST
+# HomeMind-HA / Adaptive AI 0.15.22 TEST
+
+Adaptive presence checkpoints: one atomic commit instead of two. Latest baseline is validated 0.15.21 (`codex/storage-health-0.15.21`).
 
 Storage Health: read-only write-rate telemetry from the existing maintenance worker. Latest baseline is validated 0.15.20 (`codex/storage-wear-0.15.20`).
 

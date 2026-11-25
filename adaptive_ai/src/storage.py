@@ -1769,6 +1769,33 @@ class Store:
             with self._meta_lock:
                 self._meta_cache[key] = value
         return True
+ 
+
+    def save_adaptive_presence_checkpoint(self, key, model_json, ts, cutoff):
+        """Commit restart state and the replay checkpoint together.
+
+        Keep the exact historical JSON and time boundary. Update the metadata
+        cache only after the transaction commits, so a failed checkpoint cannot
+        publish a newer restart state or incorrectly suppress the next retry.
+        """
+        key, model_json = str(key), str(model_json)
+        with self.lock:
+            with self.conn() as c:
+                c.execute(
+                    "INSERT INTO app_meta(key,value) VALUES(?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
+                    "WHERE app_meta.value IS NOT excluded.value",
+                    (key, model_json),
+                )
+                c.execute(
+                    "INSERT INTO adaptive_presence_checkpoints(ts,model_json) VALUES(?,?) "
+                    "ON CONFLICT(ts) DO UPDATE SET model_json=excluded.model_json "
+                    "WHERE adaptive_presence_checkpoints.model_json IS NOT excluded.model_json",
+                    (float(ts), model_json),
+                )
+                c.execute("DELETE FROM adaptive_presence_checkpoints WHERE ts<?", (float(cutoff),))
+            with self._meta_lock:
+                self._meta_cache[key] = model_json
 
 
 STORE = Store(DB_PATH)
