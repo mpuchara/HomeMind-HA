@@ -7,6 +7,7 @@ from pathlib import Path
 
 from telemetry import RUNTIME_DEBUG, TELEMETRY
 from sqlite_policy import WAL_RETAIN_BYTES
+from storage_write_health import StorageWriteHealth
 
 
 class WALCheckpointWorker:
@@ -20,6 +21,7 @@ class WALCheckpointWorker:
     def __init__(self, store):
         from settings import OPTIONS
         self.store = store
+        self.write_health = StorageWriteHealth()
         self.quiesce_seconds = max(0, min(500, int(OPTIONS.get('storage_wal_quiesce_ms', 100)))) / 1000.
         budget = getattr(store, 'storage_budget', None)
         self.storage_pressure_threshold_bytes = None
@@ -90,7 +92,8 @@ class WALCheckpointWorker:
                     "reclaim_interval_seconds": self.RECLAIM_INTERVAL_SECONDS,
                     "reclaim_pressure_interval_seconds": self.RECLAIM_PRESSURE_INTERVAL_SECONDS,
                     "quiesce_ms": self.quiesce_seconds * 1000,
-                    "reclaim_mode": "TRUNCATE", "reclaim_busy_timeout_ms": 0}
+                    "reclaim_mode": "TRUNCATE", "reclaim_busy_timeout_ms": 0,
+                    "write_health": self.write_health.snapshot()}
 
     def request_recovery(self):
         """Wake existing maintenance only; never checkpoint on an inference thread."""
@@ -100,6 +103,8 @@ class WALCheckpointWorker:
 
     def sample_storage(self):
         """Worker-only filesystem sampling; debug export still reads RAM only."""
+        # Procfs sampling is throttled, read-only and never part of inference.
+        self.write_health.sample()
         trim_cache = getattr(self.store, 'trim_runtime_cache', None)
         if callable(trim_cache):
             trim_cache()
