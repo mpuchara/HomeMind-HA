@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.15.23 TEST
+# HomeMind-HA / Adaptive AI 0.15.24 TEST
+
+Retention reuses SQLite free pages; normal compaction is bounded and pressure-aware. Latest baseline is validated 0.15.23 (`codex/training-status-ram-0.15.23`).
 
 RAM-first training status transport; baseline 0.15.22 (`codex/context-checkpoint-0.15.22`). Predecessor and exact-commit CI required before installation.
 
