@@ -25,6 +25,9 @@ from settings import (
 )
 from storage_budget import StoragePressure
 from sqlite_background import is_sqlite_busy
+from training_status_transport import (
+    STATUS_ENV, StatusWriter, volatile_status_path, worker_status_path, latest_status,
+)
 
 class WorkerSQLiteBusy(RuntimeError):
     """Native transient lock failure in an isolated, unpublished child."""
@@ -1296,6 +1299,12 @@ def _run_isolated_training_attempt(history,start_ts,end_ts,job,job_path):
 
 
 def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
+    with volatile_status_path() as live_status_path:
+        return _run_isolated_training_attempt_with_status(
+            history, start_ts, end_ts, job, job_path, live_status_path)
+
+
+def _run_isolated_training_attempt_with_status(history,start_ts,end_ts,job,job_path,live_status_path):
     from storage import STORE
     sequence_chunks=job.get('sequence_chunks')
     parallel_slots = max(
@@ -1336,6 +1345,9 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
     env["ADAPTIVE_AI_DATA"] = str(DATA_DIR)
     env["ADAPTIVE_AI_TRAINING_WORKER"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env.pop(STATUS_ENV, None)
+    if live_status_path is not None:
+        env[STATUS_ENV] = str(live_status_path)
     # Tiny MLP training is vectorized in the child process. These matrices are small;
     # one BLAS thread is faster/more predictable than a thread pool and preserves CPU
     # headroom for the realtime HA parent on Raspberry Pi.
@@ -1398,13 +1410,9 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
 
     try:
         while process.poll() is None:
-            status_path = Path(job["status_path"])
-            try:
-                mtime = status_path.stat().st_mtime_ns
-            except OSError:
-                mtime = None
-            if mtime is not None and mtime != last_status_mtime:
-                worker_status = _read_json(status_path, {}) or {}
+            mtime, worker_status = latest_status(
+                job["status_path"], live_status_path, previous=last_status_mtime)
+            if worker_status is not None:
                 _apply_status(history, worker_status)
                 preparation = worker_status.get('preparation') or {}
                 token = preparation_progress_token(preparation)
@@ -1471,13 +1479,14 @@ def _run_isolated_training_attempt_impl(history,start_ts,end_ts,job,job_path):
             time.sleep(poll_seconds)
 
         return_code = process.wait(timeout=max(1.0, grace + 1.0))
-        _apply_status(history, _read_json(job["status_path"], {}))
+        _, final_status = latest_status(job["status_path"], live_status_path)
+        _apply_status(history, final_status or {})
         result = _read_json(job["result_path"], None)
 
         if cancelled:
             raise InterruptedError("Isolated training worker cancelled")
         if memory_exceeded:
-            worker_status = _read_json(job["status_path"], {}) or {}
+            worker_status = final_status or {}
             phase = str(worker_status.get("phase") or "unknown")
             progress = worker_status.get("progress")
             message = str(worker_status.get("message") or "").strip()
@@ -1875,7 +1884,7 @@ def _worker_configure_budget():
     return TRAINING_BUDGET
 
 
-def _worker_boot_status(job, message, *, stage, progress=None, **details):
+def _worker_boot_status(job, message, *, stage, progress=None, transport=None, **details):
     """Write a tiny heartbeat before HistoryManager exists.
 
     This deliberately avoids importing or serializing the runtime status graph so a
@@ -1911,10 +1920,14 @@ def _worker_boot_status(job, message, *, stage, progress=None, **details):
     if previous and previous[1]==token and now-previous[0]<1.:
         return
     job['_last_boot_status']=(now,token)
-    _atomic_json(job["status_path"], payload)
+    if transport is None:
+        _atomic_json(job["status_path"], payload)
+    else:
+        preparation = details.get('preparation') or {}
+        transport.publish(payload, ('boot', token, preparation.get('stage')))
 
 
-def _worker_status_writer(history, status_path, *, preparation_fraction=0.):
+def _worker_status_writer(history, status_path, *, preparation_fraction=0., transport=None):
     original = history.set_status
     last_write = [0., None]
 
@@ -1931,7 +1944,11 @@ def _worker_status_writer(history, status_path, *, preparation_fraction=0.):
             payload['progress']=min(.99,preparation_fraction+(1-preparation_fraction)*float(payload.get('progress') or 0.))
         payload["worker_pid"] = os.getpid()
         payload["updated_at"] = now_ts()
-        _atomic_json(status_path, payload)
+        if transport is None:
+            _atomic_json(status_path, payload)
+        else:
+            transport.publish(payload, ('training', phase, payload.get('phase_detail')),
+                              force=float(getattr(history, 'progress', 0.) or 0.) >= 1.)
         return result
 
     history.set_status = set_status
@@ -1950,8 +1967,20 @@ def worker_main(job_path):
     if job.get("training_revision") != TRAINING_REVISION:
         raise RuntimeError("isolated training revision mismatch")
 
-    _worker_boot_status(
-        job,
+    transport = StatusWriter(job["status_path"], worker_status_path(),
+                             _atomic_json, _canonical)
+    return _worker_main(job, transport)
+
+
+def _worker_main(job, transport):
+    def boot_status(message, **details):
+        return _worker_boot_status(job, message, transport=transport, **details)
+
+    def write_result(payload):
+        transport.flush()
+        _atomic_json(job["result_path"], payload)
+
+    boot_status(
         "Training worker descriptor loaded",
         stage="descriptor_validated",
     )
@@ -1972,8 +2001,7 @@ def worker_main(job_path):
     except (AttributeError, OSError):
         pass
 
-    _worker_boot_status(
-        job,
+    boot_status(
         "Importing training modules",
         stage="before_training_imports",
     )
@@ -1987,8 +2015,7 @@ def worker_main(job_path):
     worker_contract = install_training_contract()
     restore_training_contract = worker_contract["restore"]
     from history import HistoryManager
-    _worker_boot_status(
-        job,
+    boot_status(
         (
             "Training modules loaded; observation contract "
             f"policy v{worker_contract['policy_version']}/schema v{worker_contract['schema_version']}"
@@ -2002,11 +2029,11 @@ def worker_main(job_path):
         _worker_configure_budget().begin(thread_name='adaptive-ai-index-process')
         from history_recovery import prepare_generation, RecoveryUnavailable
         generation_path = str(_generation_path(job))
-        _worker_boot_status(job, 'Preparing consistent training generation', stage='history_recovery')
+        boot_status('Preparing consistent training generation', stage='history_recovery')
         agent = STORE.get_agent_config(str(job['agent_id']))
         entities = training_history_scope(job, STORE)
         def recovery_progress(**fields):
-            _worker_boot_status(job, fields.get('message', 'Recovering history'), stage='history_recovery',
+            boot_status(fields.get('message', 'Recovering history'), stage='history_recovery',
                                 progress=fields.get('progress'),phase_detail=fields.get('phase_detail'),
                                 work_done=fields.get('work_done',0),work_total=0,
                                 work_unit='selected records',preparation=fields.get('preparation'))
@@ -2025,7 +2052,7 @@ def worker_main(job_path):
                     + json.loads(STORE.meta_get('discovery_recorder_gaps_v1', '[]')),
             )
         except Exception as exc:
-            _atomic_json(job['result_path'], dict(format=RESULT_FORMAT, version=RESULT_VERSION,
+            write_result(dict(format=RESULT_FORMAT, version=RESULT_VERSION,
                 job_id=job['job_id'], ok=False, error=f'{type(exc).__name__}: {exc}',
                 error_type=type(exc).__name__, storage_pressure_reason=getattr(exc,'reason',None),
                 trace=traceback.format_exc(limit=12), **worker_sqlite_error(exc)))
@@ -2052,14 +2079,12 @@ def worker_main(job_path):
             AUTOMATION_KNOWLEDGE.by_target[agent["target_entity"]] = list(job["automation_infos"])
     from fast_local_primary import install as install_fast_local_primary
     install_fast_local_primary(STORE, engine)
-    _worker_boot_status(
-        job,
+    boot_status(
         "Compact worker context initialized",
         stage="engine_initialized",
     )
     history = HistoryManager(engine, worker_mode=True)
-    _worker_boot_status(
-        job,
+    boot_status(
         "Worker history manager initialized without global archive scan",
         stage="history_manager_initialized",
     )
@@ -2088,9 +2113,9 @@ def worker_main(job_path):
         if isinstance(seed, dict) and not seed.get("heads"):
             history._remember_training_schema(STORE.get_agent_config(aid), seed)
     if generation_report is not None:
-        _worker_status_writer(history, job["status_path"],preparation_fraction=.1)
+        _worker_status_writer(history, job["status_path"],preparation_fraction=.1, transport=transport)
     else:
-        _worker_status_writer(history, job["status_path"])
+        _worker_status_writer(history, job["status_path"], transport=transport)
 
     expected_agent = str(job["agent_fingerprint"])
 
@@ -2124,8 +2149,7 @@ def worker_main(job_path):
     }
     try:
         kwargs = dict(job.get("train_kwargs") or {})
-        _worker_boot_status(
-            job,
+        boot_status(
             "Worker ready; entering historical training",
             stage="before_train_from_archive",
             progress=kwargs.get("progress_lo"),
@@ -2349,7 +2373,7 @@ def worker_main(job_path):
             "resource_profile": dict(job.get("resource_profile") or {}),
             "elapsed_seconds": round(time.monotonic() - started, 3),
         })
-        _atomic_json(job["result_path"], result)
+        write_result(result)
         return 0
     except Exception as exc:
         result.update({
@@ -2361,7 +2385,7 @@ def worker_main(job_path):
             "training_budget": TRAINING_BUDGET.snapshot(),
             "elapsed_seconds": round(time.monotonic() - started, 3),
         })
-        _atomic_json(job["result_path"], result)
+        write_result(result)
         return 2
     finally:
         try:

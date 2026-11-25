@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.15.22 TEST
+# HomeMind-HA / Adaptive AI 0.15.23 TEST
+
+RAM-first training status transport; baseline 0.15.22 (`codex/context-checkpoint-0.15.22`). Predecessor and exact-commit CI required before installation.
 
 Adaptive presence checkpoints: one atomic commit instead of two. Latest baseline is validated 0.15.21 (`codex/storage-health-0.15.21`).
 
