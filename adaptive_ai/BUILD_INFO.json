@@ -1,13 +1,18 @@
 {
-  "version": "0.15.24",
+  "version": "0.15.25",
   "release_date": "2026-11-26",
-  "base_version": "0.15.23",
-  "base_commit": "0d1214d3a72b789e12d0f5448dd94748c604f0cb",
-  "release_status": "pi5-manual-validation-candidate-retention-vacuum",
+  "base_version": "0.15.24",
+  "base_commit": "97f1207f8c3db349b5673b0cb32fd7de5fa98fe3",
+  "release_status": "pi5-manual-validation-candidate-poll-batch",
+  "poll_batch_storage": {
+    "scope": "adaptive 128-row FIFO poll-only turn with normal 64-row fallback, bounded payload and same prune boundary",
+    "receipt_and_replay_contract": "unchanged event and received timestamps, keys, payload and protection queries",
+    "validation": "pending exact-commit CI and physical Pi acceptance"
+  },
   "vacuum_storage": {
     "scope": "bounded incremental vacuum with reusable freelist reserve, normal cooldown and disk pressure bypass",
     "logical_retention_and_training_fences": "unchanged",
-    "validation": "pending exact-commit CI and physical Pi acceptance"
+    "validation": "0.15.24 exact-commit CI and ARM64 canary passed; physical Pi acceptance pending"
   },
   "training_status_transport": {
     "scope": "optional private verified Linux tmpfs status mailbox with durable phase/30-second checkpoint and disk fallback",

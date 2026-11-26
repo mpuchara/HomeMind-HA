@@ -1,3 +1,9 @@
+# 0.15.25 — Preserve sensor receipts, coalesce eligible poll writes (TEST ONLY)
+
+- A ready FIFO prefix of 128 small REST confirmation rows from the same poll can use one native journal write instead of two 64-row turns, only when foreground is idle, no training or optional collector is active, no evidence windows are pending, and the original prune boundary is preserved.
+- Keep all receipt keys, values, event/received times, native protection calculation, journal limits, retry ordering and explicit drain behavior. Never deduplicate distinct receipt timestamps or delay a small batch to fill it.
+- Expose successful expanded poll batches/rows and maximum observed batch size in the existing RAM-only journal diagnostics. No schema, replay, model or retention change.
+
 # 0.15.24 — Reuse SQLite free pages before compacting (TEST ONLY)
 
 - Routine age retention and pressure diagnostic GC keep the same tables, predicates, causal seeds, training fences and batch limits.
