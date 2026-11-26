@@ -1,4 +1,6 @@
-# HomeMind-HA / Adaptive AI 0.15.24 TEST
+# HomeMind-HA / Adaptive AI 0.15.25 TEST
+
+Sensor receipts remain causal; eligible REST batches share one journal commit. Latest baseline is validated 0.15.24 (`codex/retention-vacuum-0.15.24`).
 
 Retention reuses SQLite free pages; normal compaction is bounded and pressure-aware. Latest baseline is validated 0.15.23 (`codex/training-status-ram-0.15.23`).
 

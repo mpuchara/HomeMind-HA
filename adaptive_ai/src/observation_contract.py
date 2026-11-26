@@ -22,6 +22,7 @@ import threading
 
 import context as context_module
 from functools import lru_cache
+from itertools import islice
 import history as history_module
 import policy as policy_module
 import replay as replay_module
@@ -2438,11 +2439,7 @@ def install(core):
                 journal_event.set()
         return row["window_id"]
 
-    def flush_observations(limit=512):
-        batch = []
-        with journal_lock:
-            while observation_rows and len(batch) < max(1, int(limit)):
-                batch.append(observation_rows.popleft())
+    def persist_observations(batch, *, expanded_poll=False):
         if not batch:
             return 0
         try:
@@ -2457,7 +2454,54 @@ def install(core):
         with journal_lock:
             observation_stats["flushed"] += len(batch)
             observation_stats["flushes"] += 1
+            observation_stats["max_batch_rows"] = max(
+                observation_stats.get("max_batch_rows", 0), len(batch))
+            if expanded_poll:
+                observation_stats["expanded_poll_batches"] = observation_stats.get("expanded_poll_batches", 0) + 1
+                observation_stats["expanded_poll_rows"] = observation_stats.get("expanded_poll_rows", 0) + len(batch)
         return len(batch)
+
+    def flush_observations(limit=512, *, expand_poll=False):
+        # Only combine two ordinary 64-row turns when doing so preserves their
+        # prune boundary. Never collapse receipts, change FIFO order, or wait
+        # for additional samples. The Store lock serializes the decision with
+        # normal journal writes; the optional non-Store collector opts out.
+        if expand_poll and len(observation_rows) >= 128:
+            from universal_history_collector import foreground_idle
+        else:
+            expand_poll = False
+        if expand_poll and store.lock.acquire(blocking=False):
+            try:
+                batch = []
+                with journal_lock:
+                    if (len(observation_rows) >= 128 and not window_rows
+                            and not getattr(store, '_training_input_readers', None)
+                            and not getattr(getattr(engine, 'history_manager', None), 'agent_jobs', None)
+                            and getattr(engine, 'universal_training_collector', None) is None
+                            and not OPTIONS.get('universal_training_collector_enabled', False)
+                            and not engine.stop_event.is_set()):
+                        if foreground_idle(engine):
+                            with journal._write_count_lock:
+                                safe_boundary = not journal._prune_pending and journal._writes % 128 < 64
+                            if safe_boundary:
+                                head = list(islice(observation_rows, 128))
+                                received = head[0]['received_time']
+                                if all(row['source'] == 'ha_poll_confirmation'
+                                       and row['received_time'] == received for row in head):
+                                    # A large state/attribute payload stays on the
+                                    # original smaller turn. Keep widened work bounded.
+                                    size = sum(sum(len(v.encode('utf-8')) if isinstance(v, str)
+                                                   else 16 for v in row.values()) for row in head)
+                                    if size <= 128 * 1024:
+                                        batch = [observation_rows.popleft() for _ in head]
+                if batch:
+                    return persist_observations(batch, expanded_poll=True)
+            finally:
+                store.lock.release()
+        with journal_lock:
+            batch = [observation_rows.popleft()
+                     for _ in range(min(len(observation_rows), max(1, int(limit))))]
+        return persist_observations(batch)
 
     def flush_windows(limit=128):
         batch = []
@@ -2506,7 +2550,8 @@ def install(core):
             pressure = None
             progressed = False
             try:
-                count = int(flush_observations(64 if max_batches is not None else 512) or 0)
+                count = int(flush_observations(64 if max_batches is not None else 512,
+                                               expand_poll=max_batches is not None) or 0)
                 totals["observations"] += count
                 progressed = progressed or bool(count)
             except StoragePressure as exc:
