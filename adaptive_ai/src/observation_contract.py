@@ -2466,6 +2466,10 @@ def install(core):
         # prune boundary. Never collapse receipts, change FIFO order, or wait
         # for additional samples. The Store lock serializes the decision with
         # normal journal writes; the optional non-Store collector opts out.
+        if expand_poll and len(observation_rows) >= 128:
+            from universal_history_collector import foreground_idle
+        else:
+            expand_poll = False
         if expand_poll and store.lock.acquire(blocking=False):
             try:
                 batch = []
@@ -2476,7 +2480,6 @@ def install(core):
                             and getattr(engine, 'universal_training_collector', None) is None
                             and not OPTIONS.get('universal_training_collector_enabled', False)
                             and not engine.stop_event.is_set()):
-                        from universal_history_collector import foreground_idle
                         if foreground_idle(engine):
                             with journal._write_count_lock:
                                 safe_boundary = not journal._prune_pending and journal._writes % 128 < 64

@@ -1,5 +1,5 @@
 """Coalesce only safe REST receipt writes; preserve the full native evidence."""
-import sqlite3
+from copy import deepcopy
 import tempfile
 import threading
 import time
@@ -48,9 +48,17 @@ class PollBatchTests(unittest.TestCase):
         with store.conn() as c:
             return [tuple(r) for r in c.execute('SELECT * FROM feature_observation_events ORDER BY event_key')]
 
+    def seed_window(self, store, stamp, event_time):
+        with store.conn() as c:
+            c.execute("INSERT INTO feature_windows VALUES('w',12,'a',?,?,?,'test',?,?)",
+                      (event_time, event_time-1, event_time+1, stamp, stamp+3600))
+            c.execute("INSERT INTO feature_window_entities VALUES('w','sensor.poll_000')")
+
     def test_exact_native_receipts_and_prune_target_against_two_old_turns(self):
         store, engine, states = self.fixture()
         stamp = time.time()
+        event_time = observation.parse_ts(states['sensor.poll_000']['last_updated'])
+        self.seed_window(store, stamp, event_time)
         self.poll(engine, stamp)
         journal = engine.feature_journal
         with patch.object(journal, 'record_batch', wraps=journal.record_batch) as writes, \
@@ -59,7 +67,14 @@ class PollBatchTests(unittest.TestCase):
             self.assertEqual(writes.call_count, 1)
             self.assertEqual(prune.call_count, 1)
             target = prune.call_args.kwargs
+            records = deepcopy(writes.call_args.args[0])
         actual = self.rows(store)
+        self.assertEqual({row['entity_id'] for row in records}, set(states))
+        self.assertTrue(all(row['received_time'] == stamp and row['event_time'] == event_time
+                            for row in records))
+        with store.conn() as c:
+            self.assertEqual(c.execute("SELECT protected_until FROM feature_observation_events "
+                                       "WHERE entity_id='sensor.poll_000'").fetchone()[0], stamp+3600)
         self.assertEqual(len(actual), 128)
         self.assertEqual(engine.feature_observation_deferred_snapshot()['observations']['expanded_poll_rows'], 128)
         # Compare with the same FIFO order and two 64-row writes (including
@@ -67,12 +82,7 @@ class PollBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             other = Store(Path(root)/'oracle.db')
             oracle = observation.FeatureJournal(other)
-            records = [journal._prepare_record(eid, states[eid],
-                event_time=observation.parse_ts(states[eid]['last_updated']),
-                received_time=stamp, source='ha_poll_confirmation',
-                event_key='poll:'+observation.hashlib.sha256(
-                    f"{eid}|{observation.parse_ts(states[eid]['last_updated']):.9f}|{stamp:.3f}".encode()).hexdigest()[:32])
-                for eid in set(states)]
+            self.seed_window(other, stamp, event_time)
             with patch.object(oracle, 'prune', wraps=oracle.prune) as prune:
                 oracle.record_batch(records[:64])
                 oracle.record_batch(records[64:])
